@@ -1,6 +1,10 @@
 schema_version: 1
 name: msa_p0_devset
-selection_status: PENDING_CLOUD_INVENTORY
+selection_status: FROZEN_PENDING_CLOUD_BUILD_AND_DB
+dataset:
+  name: CWE-Bench-Java
+  source_repository: https://github.com/iris-sast/cwe-bench-java
+  revision: afe0ebd0adc237abb46255f9cd479b1d71819136
 target_size:
   samples_min: 12
   samples_max: 20
@@ -15,5 +19,53 @@ selection_rules:
   - Existing or safely buildable CodeQL database is required.
   - Build failures remain recorded and are not silently replaced.
   - Sample identity may be known only during developer selection/evaluation.
-samples: []
-
+selection_method: First three dataset-order samples per supported CWE whose official build_info status is success; cloud build and CodeQL DB readiness must still be revalidated.
+samples:
+  - project_slug: DSpace__DSpace_CVE-2016-10726_4.4
+    repository: https://github.com/DSpace/DSpace
+    cwe_id: CWE-022
+    build_metadata_status: success
+  - project_slug: perwendel__spark_CVE-2018-9159_2.7.1
+    repository: https://github.com/perwendel/spark
+    cwe_id: CWE-022
+    build_metadata_status: success
+  - project_slug: perwendel__spark_CVE-2016-9177_2.5.1
+    repository: https://github.com/perwendel/spark
+    cwe_id: CWE-022
+    build_metadata_status: success
+  - project_slug: x-stream__xstream_CVE-2013-7285_1.4.6
+    repository: https://github.com/x-stream/xstream
+    cwe_id: CWE-078
+    build_metadata_status: success
+  - project_slug: x-stream__xstream_CVE-2020-26217_1.4.14-java7
+    repository: https://github.com/x-stream/xstream
+    cwe_id: CWE-078
+    build_metadata_status: success
+  - project_slug: x-stream__xstream_CVE-2021-21345_1.4.15
+    repository: https://github.com/x-stream/xstream
+    cwe_id: CWE-078
+    build_metadata_status: success
+  - project_slug: nahsra__antisamy_CVE-2016-10006_1.5.3
+    repository: https://github.com/nahsra/antisamy
+    cwe_id: CWE-079
+    build_metadata_status: success
+  - project_slug: nahsra__antisamy_CVE-2017-14735_1.5.6
+    repository: https://github.com/nahsra/antisamy
+    cwe_id: CWE-079
+    build_metadata_status: success
+  - project_slug: apache__jspwiki_CVE-2019-10077_2.11.0.M3
+    repository: https://github.com/apache/jspwiki
+    cwe_id: CWE-079
+    build_metadata_status: success
+  - project_slug: SpringSource__spring-security-oauth_CVE-2018-1260_2.3.2.RELEASE
+    repository: https://github.com/spring-attic/spring-security-oauth
+    cwe_id: CWE-094
+    build_metadata_status: success
+  - project_slug: apache__activemq_CVE-2019-0222_5.15.8
+    repository: https://github.com/apache/activemq
+    cwe_id: CWE-094
+    build_metadata_status: success
+  - project_slug: jmrozanec__cron-utils_CVE-2021-41269_9.1.5
+    repository: https://github.com/jmrozanec/cron-utils
+    cwe_id: CWE-094
+    build_metadata_status: success
