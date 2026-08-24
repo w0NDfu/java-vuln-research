@@ -3,7 +3,7 @@ experiment: MSA-P0-E0
 baseline:
   query_suite: codeql/java-queries:codeql-suites/java-security-extended.qls
   threads: 0
-  ram_mb: null
+  ram_mb: 4096
 semantics:
   enabled:
     - DATA_CALL
@@ -14,4 +14,3 @@ semantics:
     - COMPLEX_CONTROL
 llm:
   enabled: false
-
