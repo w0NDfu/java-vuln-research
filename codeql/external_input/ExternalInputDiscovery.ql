@@ -52,7 +52,7 @@ predicate isJaxRsInputParameter(Parameter p, string mechanism) {
   )
 }
 
-predicate isServletInputCall(MethodAccess call, string mechanism) {
+predicate isServletInputCall(MethodCall call, string mechanism) {
   exists(Method target |
     target = call.getMethod() and
     (
@@ -81,7 +81,7 @@ string parameterEntity(Parameter p) {
     p.getCallable().getName() + " parameter " + p.getName()
 }
 
-string callEntity(MethodAccess call) {
+string callEntity(MethodCall call) {
   result = call.getEnclosingCallable().getDeclaringType().getQualifiedName() + "." +
     call.getEnclosingCallable().getName() + " -> " + call.getMethod().getQualifiedName()
 }
@@ -101,7 +101,7 @@ where
     source = "STATIC"
   )
   or
-  exists(MethodAccess call |
+  exists(MethodCall call |
     isServletInputCall(call, mechanism) and
     entity = callEntity(call) and
     evidenceKind = "SERVLET_ACCESSOR_CALL" and
@@ -110,9 +110,9 @@ where
     source = "STATIC"
   )
   or
-  exists(Method wrapper, ReturnStmt ret, MethodAccess call |
+  exists(Method wrapper, ReturnStmt ret, MethodCall call |
     ret.getEnclosingCallable() = wrapper and
-    ret.getResult() = call and
+    ret.getExpr() = call and
     isServletInputCall(call, mechanism) and
     entity = returnEntity(wrapper) and
     evidenceKind = "DIRECT_RETURN_WRAPPER" and
@@ -125,7 +125,7 @@ where
     p.getCallable() = wrapper and
     ret.getEnclosingCallable() = wrapper and
     access = p.getAnAccess() and
-    ret.getResult() = access and
+    ret.getExpr() = access and
     (isSpringInputParameter(p, mechanism) or isJaxRsInputParameter(p, mechanism)) and
     entity = returnEntity(wrapper) and
     evidenceKind = "DIRECT_PARAMETER_RETURN_WRAPPER" and
@@ -134,4 +134,3 @@ where
     source = "STATIC_DERIVED"
   )
 select mechanism, entity, evidenceKind, file, line, source
-

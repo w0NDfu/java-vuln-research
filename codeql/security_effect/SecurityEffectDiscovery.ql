@@ -7,7 +7,7 @@
 
 import java
 
-predicate isFilesystemEffect(MethodAccess call, string mechanism, int criticalIndex) {
+predicate isFilesystemEffect(MethodCall call, string mechanism, int criticalIndex) {
   call.getMethod().getDeclaringType().hasQualifiedName("java.nio.file", "Files") and
   call.getMethod().getName() = [
     "newInputStream", "newOutputStream", "newBufferedReader", "newBufferedWriter",
@@ -19,7 +19,7 @@ predicate isFilesystemEffect(MethodAccess call, string mechanism, int criticalIn
   criticalIndex = 0
 }
 
-predicate isProcessEffect(MethodAccess call, string mechanism, int criticalIndex) {
+predicate isProcessEffect(MethodCall call, string mechanism, int criticalIndex) {
   call.getMethod().getDeclaringType().hasQualifiedName("java.lang", "Runtime") and
   call.getMethod().getName() = "exec" and
   mechanism = "RUNTIME_EXEC" and
@@ -31,8 +31,8 @@ predicate isProcessEffect(MethodAccess call, string mechanism, int criticalIndex
   criticalIndex = -1
 }
 
-predicate isRenderingEffect(MethodAccess call, string mechanism, int criticalIndex) {
-  exists(MethodAccess getWriter |
+predicate isRenderingEffect(MethodCall call, string mechanism, int criticalIndex) {
+  exists(MethodCall getWriter |
     call.getQualifier() = getWriter and
     getWriter.getMethod().getName() = "getWriter" and
     (
@@ -47,7 +47,7 @@ predicate isRenderingEffect(MethodAccess call, string mechanism, int criticalInd
   )
 }
 
-predicate isDynamicEvaluationEffect(MethodAccess call, string mechanism, int criticalIndex) {
+predicate isDynamicEvaluationEffect(MethodCall call, string mechanism, int criticalIndex) {
   (
     call.getMethod().getDeclaringType().hasQualifiedName("javax.script", "ScriptEngine")
     or call.getMethod().getDeclaringType().hasQualifiedName("javax.script", "AbstractScriptEngine")
@@ -63,7 +63,7 @@ predicate isDynamicEvaluationEffect(MethodAccess call, string mechanism, int cri
 }
 
 predicate isEffectCall(
-  MethodAccess call, string effectType, string mechanism, int criticalIndex
+  MethodCall call, string effectType, string mechanism, int criticalIndex
 ) {
   isFilesystemEffect(call, mechanism, criticalIndex) and effectType = "FILESYSTEM_ACCESS"
   or
@@ -75,7 +75,7 @@ predicate isEffectCall(
   effectType = "DYNAMIC_EVALUATION"
 }
 
-string callEntity(MethodAccess call) {
+string callEntity(MethodCall call) {
   result = call.getEnclosingCallable().getDeclaringType().getQualifiedName() + "." +
     call.getEnclosingCallable().getName() + " -> " + call.getMethod().getQualifiedName()
 }
@@ -88,7 +88,7 @@ string wrapperEntity(Method method, string effectType) {
 from string effectType, string mechanism, string entity, string criticalRole,
   string evidenceKind, string file, int line, string source
 where
-  exists(MethodAccess call, int criticalIndex |
+  exists(MethodCall call, int criticalIndex |
     isEffectCall(call, effectType, mechanism, criticalIndex) and
     entity = callEntity(call) and
     criticalRole =
@@ -99,7 +99,7 @@ where
     source = "STATIC"
   )
   or
-  exists(MethodAccess call, int criticalIndex, Method wrapper, Parameter p, VarAccess access |
+  exists(MethodCall call, int criticalIndex, Method wrapper, Parameter p, VarAccess access |
     isEffectCall(call, effectType, mechanism, criticalIndex) and
     criticalIndex >= 0 and
     call.getEnclosingCallable() = wrapper and
@@ -114,4 +114,3 @@ where
     source = "STATIC_DERIVED"
   )
 select effectType, mechanism, entity, criticalRole, evidenceKind, file, line, source
-
