@@ -1,3 +1,18 @@
 schema_version: 1
-projects: []
-
+projects:
+  - project: P006
+    revision: f04bbec461f2c2a6f1e2cf41770f42c64aae24a4
+    source_path: /workspace/msa-p0-devset/projects/P006
+    codeql_db_path: /workspace/msa-p0-devset/codeql-dbs/P006
+  - project: P007
+    revision: 8bebe1eb2ec1ac23e34111e9d06024d7dab7fa25
+    source_path: /workspace/msa-p0-devset/projects/P007
+    codeql_db_path: /workspace/msa-p0-devset/codeql-dbs/P007
+  - project: P010
+    revision: 97e39dde7e88aae802be98de084a382886ca4255
+    source_path: /workspace/msa-p0-devset/projects/P010
+    codeql_db_path: /workspace/msa-p0-devset/codeql-dbs/P010
+  - project: P012
+    revision: 34493c66edb490396202edad66c5f8cc5717d494
+    source_path: /workspace/msa-p0-devset/projects/P012
+    codeql_db_path: /workspace/msa-p0-devset/codeql-dbs/P012
