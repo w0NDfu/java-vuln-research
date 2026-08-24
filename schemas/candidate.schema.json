@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "candidate.schema.json",
+  "title": "Unresolved semantic relation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_id", "project", "left_anchor", "right_anchor", "relation_type", "static_evidence", "decision", "resolver", "validator_result", "analysis_outcome"],
+  "properties": {
+    "candidate_id": {"type": "string", "minLength": 1},
+    "project": {"type": "string", "minLength": 1},
+    "left_anchor": {"$ref": "#/$defs/anchor"},
+    "right_anchor": {"$ref": "#/$defs/anchor"},
+    "relation_type": {"enum": ["DATA_CALL", "LIBRARY", "STATE"]},
+    "static_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forward_distance", "backward_distance", "facts"],
+      "properties": {
+        "forward_distance": {"type": ["integer", "null"], "minimum": 0},
+        "backward_distance": {"type": ["integer", "null"], "minimum": 0},
+        "facts": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "decision": {"enum": ["UNRESOLVED", "CONFIRM", "REJECT", "UNKNOWN"]},
+    "resolver": {"type": ["string", "null"]},
+    "validator_result": {"type": ["object", "null"]},
+    "analysis_outcome": {"type": ["object", "null"]}
+  },
+  "$defs": {
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "kind"],
+      "properties": {
+        "entity": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
+

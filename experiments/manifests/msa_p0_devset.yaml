@@ -1,0 +1,19 @@
+schema_version: 1
+name: msa_p0_devset
+selection_status: PENDING_CLOUD_INVENTORY
+target_size:
+  samples_min: 12
+  samples_max: 20
+  repositories_min: 4
+  categories_min: 3
+preferred_categories:
+  - CWE-22
+  - CWE-78
+  - CWE-79
+  - CWE-94
+selection_rules:
+  - Existing or safely buildable CodeQL database is required.
+  - Build failures remain recorded and are not silently replaced.
+  - Sample identity may be known only during developer selection/evaluation.
+samples: []
+

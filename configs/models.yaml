@@ -1,0 +1,8 @@
+schema_version: 1
+enabled: false
+model_id: null
+temperature: null
+top_p: null
+random_seed: null
+reason: MSA-P0-E0 and MSA-P0-A use deterministic static analysis only.
+

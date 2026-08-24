@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "security_effect.schema.json",
+  "title": "Security effect discovery candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_id", "kind", "effect_type", "entity", "critical_roles", "confidence", "evidence", "source"],
+  "properties": {
+    "candidate_id": {"type": "string", "minLength": 1},
+    "kind": {"const": "SECURITY_EFFECT"},
+    "effect_type": {"enum": ["FILESYSTEM_ACCESS", "PROCESS_EXECUTION", "RENDERING", "DYNAMIC_EVALUATION"]},
+    "entity": {"type": "string", "minLength": 1},
+    "critical_roles": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"enum": ["HIGH", "MEDIUM", "LOW"]},
+    "evidence": {"type": "array", "items": {"type": "object"}},
+    "source": {"enum": ["STATIC", "STATIC_DERIVED"]}
+  }
+}
+

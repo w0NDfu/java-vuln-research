@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "external_input.schema.json",
+  "title": "External input discovery candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_id", "kind", "entity", "mechanism", "confidence", "evidence", "source"],
+  "properties": {
+    "candidate_id": {"type": "string", "minLength": 1},
+    "kind": {"const": "EXTERNAL_INPUT"},
+    "entity": {"type": "string", "minLength": 1},
+    "mechanism": {"type": "string", "minLength": 1},
+    "confidence": {"enum": ["HIGH", "MEDIUM", "LOW"]},
+    "evidence": {"type": "array", "items": {"type": "object"}},
+    "source": {"enum": ["STATIC", "STATIC_DERIVED"]}
+  }
+}
+

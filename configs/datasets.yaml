@@ -1,0 +1,14 @@
+schema_version: 1
+development_manifest: experiments/manifests/msa_p0_devset.yaml
+detector_manifest: experiments/frozen_configs/detector_manifest.yaml
+selection:
+  target_projects_min: 4
+  target_samples_min: 12
+  target_samples_max: 20
+  preferred_categories:
+    - CWE-22
+    - CWE-78
+    - CWE-79
+    - CWE-94
+  require_existing_or_runnable_database: true
+

@@ -1,0 +1,17 @@
+schema_version: 1
+experiment: MSA-P0-E0
+baseline:
+  query_suite: codeql/java-queries:codeql-suites/java-security-extended.qls
+  threads: 0
+  ram_mb: null
+semantics:
+  enabled:
+    - DATA_CALL
+    - LIBRARY
+    - STATE
+  disabled:
+    - PERSISTENCE
+    - COMPLEX_CONTROL
+llm:
+  enabled: false
+

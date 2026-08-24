@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+
+# Local/cloud path configs
+configs/local/
+*.local.yaml
+*.local.yml
+
+# Dataset / databases
+datasets/
+data/raw/
+codeql-databases/
+codeql-dbs/
+dataset-cache/
+model-cache/
+
+# Raw experimental outputs
+experiment-output/
+raw-results/
+logs/
+*.log
+
+# CodeQL generated
+*.bqrs
+*.sarif
+*.dbscheme
+
+# Build
+target/
+build/
+.gradle/
+dist/
+
+# Large temporary files
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# OS
+.DS_Store
+Thumbs.db
+
