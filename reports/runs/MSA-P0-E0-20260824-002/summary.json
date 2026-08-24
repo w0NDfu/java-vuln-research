@@ -1,0 +1,16 @@
+{
+  "run_id": "MSA-P0-E0-20260824-002",
+  "status": "FAILED",
+  "git_commit": "64f7a961f4bd4c3479b96fb7ef4de2f1f9fb8b9c",
+  "projects_requested": 0,
+  "projects_runnable": 0,
+  "projects_success": 0,
+  "projects_failed": 0,
+  "baseline_alerts": 0,
+  "baseline_paths": 0,
+  "new_inputs": "NOT_APPLICABLE",
+  "new_effects": "NOT_APPLICABLE",
+  "semantic_candidates": "NOT_APPLICABLE",
+  "validated_candidates": "NOT_APPLICABLE",
+  "new_strict_detections": "NOT_APPLICABLE"
+}
