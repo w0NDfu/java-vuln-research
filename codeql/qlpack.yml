@@ -1,0 +1,5 @@
+name: w0ndfu/msa-p0-a
+version: 0.0.1
+dependencies:
+  codeql/java-all: "*"
+
