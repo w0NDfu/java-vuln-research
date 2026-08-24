@@ -44,6 +44,21 @@ def generate_e0_report(
     rows = read_jsonl(baseline_path) if baseline_path.is_file() else []
     successes = [row for row in rows if row.get("status") == "SUCCESS"]
     failures = [row for row in rows if row.get("status") != "SUCCESS"]
+    no_runnable_projects = int(manifest["projects_runnable"]) == 0
+    infrastructure_failures = (
+        [
+            {
+                "project": "infrastructure",
+                "status": "FAILED",
+                "stage": "DATASET_AND_DATABASE_INVENTORY",
+                "exit_code": None,
+                "error_class": "NO_RUNNABLE_PROJECTS",
+            }
+        ]
+        if no_runnable_projects
+        else []
+    )
+    failure_records = [*failures, *infrastructure_failures]
 
     alert_count = sum(int(row.get("alert_count", 0)) for row in successes)
     path_count = sum(int(row.get("path_count", 0)) for row in successes)
@@ -67,7 +82,7 @@ def generate_e0_report(
     write_json(target / "run_manifest.json", manifest)
     write_json(target / "summary.json", summary)
     write_csv(target / "metrics.csv", METRIC_FIELDS, rows)
-    write_jsonl(target / "failures.jsonl", failures)
+    write_jsonl(target / "failures.jsonl", failure_records)
 
     inventory_dir = raw_dir / "inventory"
     dataset_inventory = inventory_dir / "dataset_inventory.csv"
@@ -79,9 +94,9 @@ def generate_e0_report(
         "\n".join(
             f"- `{row.get('project')}`: {row.get('stage', 'UNKNOWN')} / "
             f"{row.get('error_class', 'UNKNOWN')} (exit={row.get('exit_code')})"
-            for row in failures
+            for row in failure_records
         )
-        if failures
+        if failure_records
         else "- None"
     )
     report = f"""# {manifest['run_id']} — MSA-P0-E0 frozen baseline
@@ -130,8 +145,7 @@ Detector.
 
 ## Next action
 
-{('Resolve recorded execution failures and rerun the same frozen configuration.' if failures else 'Verify all eight E0 gates; only then create exp/msa-p0-a-discovery.')}
+{('Resolve recorded execution failures and rerun the same frozen configuration.' if failure_records else 'Verify all eight E0 gates; only then create exp/msa-p0-a-discovery.')}
 """
     (target / "report.md").write_text(report, encoding="utf-8")
     return summary
-
