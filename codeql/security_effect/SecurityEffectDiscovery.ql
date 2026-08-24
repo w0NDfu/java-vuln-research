@@ -80,9 +80,14 @@ string callEntity(MethodCall call) {
     call.getEnclosingCallable().getName() + " -> " + call.getMethod().getQualifiedName()
 }
 
-string wrapperEntity(Method method, string effectType) {
-  result = method.getDeclaringType().getQualifiedName() + "." + method.getName() +
-    " PROJECT_SPECIFIC_" + effectType
+string wrapperEntity(Method method) {
+  result = method.getDeclaringType().getQualifiedName() + "." + method.getName()
+}
+
+string criticalRoleFor(int criticalIndex) {
+  criticalIndex = -1 and result = "receiver"
+  or
+  criticalIndex >= 0 and result = "arg" + criticalIndex.toString()
 }
 
 from string effectType, string mechanism, string entity, string criticalRole,
@@ -91,8 +96,7 @@ where
   exists(MethodCall call, int criticalIndex |
     isEffectCall(call, effectType, mechanism, criticalIndex) and
     entity = callEntity(call) and
-    criticalRole =
-      if criticalIndex = -1 then "receiver" else "arg" + criticalIndex.toString() and
+    criticalRole = criticalRoleFor(criticalIndex) and
     evidenceKind = "DANGEROUS_PRIMITIVE_CALL" and
     file = call.getLocation().getFile().getRelativePath() and
     line = call.getLocation().getStartLine() and
@@ -106,7 +110,7 @@ where
     p.getCallable() = wrapper and
     access = p.getAnAccess() and
     call.getArgument(criticalIndex) = access and
-    entity = wrapperEntity(wrapper, effectType) and
+    entity = wrapperEntity(wrapper) + " PROJECT_SPECIFIC_" + effectType and
     criticalRole = "parameter:" + p.getName() and
     evidenceKind = "DIRECT_PARAMETER_EFFECT_WRAPPER" and
     file = call.getLocation().getFile().getRelativePath() and
