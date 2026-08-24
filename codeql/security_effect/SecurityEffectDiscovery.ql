@@ -84,10 +84,10 @@ string wrapperEntity(Method method) {
   result = method.getDeclaringType().getQualifiedName() + "." + method.getName()
 }
 
-string criticalRoleFor(int criticalIndex) {
-  criticalIndex = -1 and result = "receiver"
+predicate criticalRoleFor(int criticalIndex, string criticalRole) {
+  criticalIndex = -1 and criticalRole = "receiver"
   or
-  criticalIndex >= 0 and result = "arg" + criticalIndex.toString()
+  criticalIndex = 0 and criticalRole = "arg0"
 }
 
 from string effectType, string mechanism, string entity, string criticalRole,
@@ -96,7 +96,7 @@ where
   exists(MethodCall call, int criticalIndex |
     isEffectCall(call, effectType, mechanism, criticalIndex) and
     entity = callEntity(call) and
-    criticalRole = criticalRoleFor(criticalIndex) and
+    criticalRoleFor(criticalIndex, criticalRole) and
     evidenceKind = "DANGEROUS_PRIMITIVE_CALL" and
     file = call.getLocation().getFile().getRelativePath() and
     line = call.getLocation().getStartLine() and
