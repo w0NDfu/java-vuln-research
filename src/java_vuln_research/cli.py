@@ -13,6 +13,7 @@ from .common.inventory import inventory_codeql_databases, inventory_datasets
 from .common.io import load_yaml
 from .common.run_manifest import RunManifest
 from .discovery import DiscoveryError, run_p0a_discovery
+from .evaluation import P0AEvaluationError, evaluate_p0a
 from .preflight import PreflightError, run_preflight
 from .reporting import generate_e0_report
 
@@ -85,6 +86,17 @@ def _command_discover_p0a(args: argparse.Namespace) -> int:
         threads=args.threads,
         ram_mb=args.ram_mb,
         codeql_executable=args.codeql,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_evaluate_p0a(args: argparse.Namespace) -> int:
+    summary = evaluate_p0a(
+        detector_output_dir=args.detector_output,
+        project_info_csv=args.project_info,
+        fix_info_csv=args.fix_info,
+        output_root=args.output_root,
     )
     _json_print(summary)
     return 0 if summary["status"] == "SUCCESS" else 2
@@ -198,6 +210,13 @@ def build_parser() -> argparse.ArgumentParser:
     discover_p0a.add_argument("--codeql", default="codeql")
     discover_p0a.set_defaults(func=_command_discover_p0a)
 
+    evaluate = commands.add_parser("evaluate-p0a")
+    evaluate.add_argument("--detector-output", required=True)
+    evaluate.add_argument("--project-info", required=True)
+    evaluate.add_argument("--fix-info", required=True)
+    evaluate.add_argument("--output-root", required=True)
+    evaluate.set_defaults(func=_command_evaluate_p0a)
+
     run_e0 = commands.add_parser("run-e0")
     run_e0.add_argument("--project-root", required=True)
     run_e0.add_argument("--paths-config", required=True)
@@ -219,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
     except (
         DetectorManifestError,
         DiscoveryError,
+        P0AEvaluationError,
         PreflightError,
         KeyError,
         ValueError,
