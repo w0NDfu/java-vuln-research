@@ -98,6 +98,9 @@ string returnEntity(Method method) {
 }
 
 string wrapperEffectEntity(Method method, string effectType) {
+  effectType = [
+    "FILESYSTEM_ACCESS", "PROCESS_EXECUTION", "RENDERING", "DYNAMIC_EVALUATION"
+  ] and
   result = method.getDeclaringType().getQualifiedName() + "." + method.getName() +
     " PROJECT_SPECIFIC_" + effectType
 }
