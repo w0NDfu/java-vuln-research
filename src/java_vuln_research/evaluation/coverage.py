@@ -282,6 +282,7 @@ def evaluate_candidate_coverage(
         "projects_total": len(projects),
         "projects_with_ground_truth": len(case_by_project),
         "ground_truth_evaluable": len(cases),
+        "evaluable_vulnerabilities": len(cases),
         "file_level_covered": _count_true(cases, "file_level_covered"),
         "file_level_coverage_rate": _coverage_rate(_count_true(cases, "file_level_covered"), len(cases)),
         "method_level_covered": _count_true(method_evaluable, "method_level_covered"),

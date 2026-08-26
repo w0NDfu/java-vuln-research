@@ -23,7 +23,15 @@ if [[ -e "${output_root}" ]]; then
 fi
 
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+set +e
 bash "${PROJECT_ROOT}/scripts/run_w1_e1_paths.sh" "${endpoint_output_dir}" "${output_root}"
+detector_exit=$?
+set -e
+# A partial detector run still has frozen candidate output that the independent
+# evaluator must measure. A hard setup failure has no evaluable artifact.
+if [[ ! -f "${output_root}/candidate_paths.jsonl" || ! -f "${output_root}/detector_metrics.json" ]]; then
+  exit "${detector_exit}"
+fi
 bash "${PROJECT_ROOT}/scripts/evaluate_w1_e1.sh" \
   "${output_root}/candidate_paths.jsonl" \
   "${PROJECT_ROOT}/experiments/frozen_configs/detector_manifest.yaml" \
@@ -41,3 +49,4 @@ bash "${PROJECT_ROOT}/scripts/evaluate_w1_e1.sh" \
   --config "${PROJECT_ROOT}/configs/p0.yaml" \
   --started-at "${started_at}" \
   --command "scripts/run_w1_e1.sh ${endpoint_output_dir} ${baseline_raw_dir} ${dataset_name} ${dataset_revision} ${run_id}"
+exit "${detector_exit}"

@@ -55,6 +55,7 @@ def test_candidate_coverage_reports_method_coverage_and_baseline_miss_recovery(t
     )
 
     assert summary["ground_truth_evaluable"] == 1
+    assert summary["evaluable_vulnerabilities"] == 1
     assert summary["file_level_covered"] == 1
     assert summary["method_level_covered"] == 1
     assert summary["line_level_covered"] == "NOT_EVALUABLE"

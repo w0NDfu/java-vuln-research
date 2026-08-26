@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .common.io import read_jsonl, write_csv, write_json, write_jsonl
+from .common.contracts import load_detector_manifest
 from .common.provenance import utc_now
 from .common.run_manifest import RunManifest
 
@@ -185,6 +186,7 @@ def generate_w1_e1_report(
         round(candidate_paths / baseline_paths, 6) if baseline_paths else "NOT_EVALUABLE"
     )
     projects_runnable = int(detector["projects_runnable"])
+    manifest_projects = load_detector_manifest(detector_manifest)
     manifest_builder = RunManifest(
         run_id=run_id,
         experiment="W1-E1-CANDIDATE-PATH-COVERAGE",
@@ -217,7 +219,18 @@ def generate_w1_e1_report(
         {
             "timestamp_start": started_at,
             "timestamp_end": finished_at,
+            "start_time": started_at,
+            "end_time": finished_at,
             "wall_clock_seconds": wall_clock_seconds,
+            "experiment_id": run_id,
+            "projects": [
+                {
+                    "project_id": project["project"],
+                    "revision": project["revision"],
+                    "db_id": project["codeql_db_path"],
+                }
+                for project in manifest_projects
+            ],
             "candidate_schema_version": 1,
             "evaluator_version": "W1-E1-COVERAGE-v1",
             "detector_ground_truth_access": False,
@@ -229,6 +242,7 @@ def generate_w1_e1_report(
     summary = {
         **detector,
         "ground_truth_evaluable": coverage["ground_truth_evaluable"],
+        "evaluable_vulnerabilities": coverage["evaluable_vulnerabilities"],
         "file_level_coverage": coverage["file_level_covered"],
         "method_level_coverage": coverage["method_level_covered"],
         "line_level_coverage": coverage["line_level_covered"],
@@ -257,6 +271,7 @@ def generate_w1_e1_report(
 - Security effect candidates: `{detector['security_effect_candidates']}`
 - Static connected paths: `{detector['static_connected_paths']}`
 - Frontier candidate paths: `{detector['frontier_candidate_paths']}`
+- Frontier reasons: `{detector['frontier_reason_counts']}`
 - Candidate expansion factor: `{expansion_factor}`
 
 ## Independent coverage evaluation
