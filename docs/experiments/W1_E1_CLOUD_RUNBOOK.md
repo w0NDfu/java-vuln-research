@@ -19,12 +19,30 @@ Run these in a CloudStudio terminal:
 
 ```bash
 cd /workspace/java-vuln-research
+git status --short --branch
+git branch --show-current
 git pull --ff-only
 /workspace/tools/codeql-2.26.3/codeql version
 java -version
 mvn -version
 /workspace/tools/codeql-2.26.3/codeql query compile codeql/candidate_path/DataCallConnected.ql
 /workspace/tools/codeql-2.26.3/codeql query compile codeql/candidate_path/DataCallFrontier.ql
+```
+
+## Frozen E0 reference and a fresh E0 rerun
+
+The completed E1 reference uses the frozen E0 output at
+`/workspace/experiment-output/MSA-P0-E0-20260824-005`; do not overwrite it.
+For a fresh, separately named E0 result on the same project manifest and DBs:
+
+```bash
+cd /workspace/java-vuln-research
+CLOUD_PATHS_CONFIG=/workspace/java-vuln-research/configs/local/cloud.paths.yaml \
+CODEQL_BIN=/workspace/tools/codeql-2.26.3/codeql \
+bash scripts/run_p0.sh \
+  msa-p0-devset \
+  afe0ebd0ac237abb46255f9ccd479b1d71819136 \
+  MSA-P0-E0-YYYYMMDD-NNN
 ```
 
 ## W1-E1 execution
@@ -35,6 +53,7 @@ directory, so it cannot overwrite a frozen result.
 ```bash
 cd /workspace/java-vuln-research
 RUN_ID=W1-E1-YYYYMMDD-NNN
+CLOUD_PATHS_CONFIG=/workspace/java-vuln-research/configs/local/cloud.paths.yaml \
 W1_E1_DATASET_ROOT=/workspace/datasets/cwe-bench-java \
 CODEQL_BIN=/workspace/tools/codeql-2.26.3/codeql \
 bash scripts/run_w1_e1.sh \
@@ -43,6 +62,33 @@ bash scripts/run_w1_e1.sh \
   msa-p0-devset \
   afe0ebd0ac237abb46255f9ccd479b1d71819136 \
   "$RUN_ID"
+```
+
+The E1 wrapper executes the evaluator and report automatically. These are the
+equivalent exact standalone commands, useful only for an already persisted
+new run directory:
+
+```bash
+cd /workspace/java-vuln-research
+RUN_DIR=/workspace/experiment-output/W1-E1-YYYYMMDD-NNN
+bash scripts/evaluate_w1_e1.sh \
+  "$RUN_DIR/candidate_paths.jsonl" \
+  experiments/frozen_configs/detector_manifest.yaml \
+  /workspace/datasets/cwe-bench-java \
+  /workspace/experiment-output/MSA-P0-E0-20260824-005 \
+  "$RUN_DIR"
+
+python3 -m java_vuln_research.cli report-w1-e1 \
+  --run-id W1-E1-YYYYMMDD-NNN \
+  --raw-run-dir "$RUN_DIR" \
+  --baseline-raw-dir /workspace/experiment-output/MSA-P0-E0-20260824-005 \
+  --project-root /workspace/java-vuln-research \
+  --dataset-name msa-p0-devset \
+  --dataset-revision afe0ebd0ac237abb46255f9ccd479b1d71819136 \
+  --detector-manifest experiments/frozen_configs/detector_manifest.yaml \
+  --config configs/p0.yaml \
+  --started-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --command "manual W1-E1 report regeneration"
 ```
 
 ## Required post-run verification

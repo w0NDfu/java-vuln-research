@@ -15,9 +15,9 @@ args=(
   --config "${PROJECT_ROOT}/configs/p0.yaml"
   --dataset-name "${dataset_name}"
   --dataset-revision "${dataset_revision}"
+  --codeql "${CODEQL_BIN:-codeql}"
 )
 if [[ -n "${run_id}" ]]; then
   args+=(--run-id "${run_id}")
 fi
 "${PYTHON_BIN}" -m java_vuln_research.cli "${args[@]}"
-
