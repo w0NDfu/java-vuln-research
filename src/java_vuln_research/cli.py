@@ -19,6 +19,7 @@ from .evaluation import (
     evaluate_candidate_coverage,
     evaluate_p0a,
 )
+from .frontier import CandidatePathRunError, run_w1_e1_paths
 from .preflight import PreflightError, run_preflight
 from .reporting import generate_e0_report
 
@@ -118,6 +119,20 @@ def _command_evaluate_w1_e1(args: argparse.Namespace) -> int:
     )
     _json_print(summary)
     return 0
+
+
+def _command_run_w1_e1_paths(args: argparse.Namespace) -> int:
+    summary = run_w1_e1_paths(
+        detector_manifest=args.detector_manifest,
+        endpoint_output_dir=args.endpoint_output_dir,
+        query_root=args.query_root,
+        output_root=args.output_root,
+        threads=args.threads,
+        ram_mb=args.ram_mb,
+        codeql_executable=args.codeql,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
 
 
 def _command_run_e0(args: argparse.Namespace) -> int:
@@ -244,6 +259,16 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_w1_e1.add_argument("--output-root", required=True)
     evaluate_w1_e1.set_defaults(func=_command_evaluate_w1_e1)
 
+    candidate_paths = commands.add_parser("run-w1-e1-paths")
+    candidate_paths.add_argument("--detector-manifest", required=True)
+    candidate_paths.add_argument("--endpoint-output-dir", required=True)
+    candidate_paths.add_argument("--query-root", required=True)
+    candidate_paths.add_argument("--output-root", required=True)
+    candidate_paths.add_argument("--threads", type=int, default=0)
+    candidate_paths.add_argument("--ram-mb", type=int)
+    candidate_paths.add_argument("--codeql", default="codeql")
+    candidate_paths.set_defaults(func=_command_run_w1_e1_paths)
+
     run_e0 = commands.add_parser("run-e0")
     run_e0.add_argument("--project-root", required=True)
     run_e0.add_argument("--paths-config", required=True)
@@ -265,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     except (
         DetectorManifestError,
         CandidateCoverageError,
+        CandidatePathRunError,
         DiscoveryError,
         P0AEvaluationError,
         PreflightError,
