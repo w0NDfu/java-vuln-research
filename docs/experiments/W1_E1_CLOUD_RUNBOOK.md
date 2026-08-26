@@ -25,11 +25,8 @@ git pull --ff-only
 /workspace/tools/codeql-2.26.3/codeql version
 java -version
 mvn -version
-for query in \
-  AnalysisAnchors InputForward EffectBackward DataCallConnected DataCallFrontier
-do
-  /workspace/tools/codeql-2.26.3/codeql query compile "codeql/candidate_path/${query}.ql"
-done
+CODEQL_BIN=/workspace/tools/codeql-2.26.3/codeql \
+bash scripts/compile_w1_e1_queries.sh
 ```
 
 Before a dataset run, execute the three Java/CodeQL controls. Toy A must
