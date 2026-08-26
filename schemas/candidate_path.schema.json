@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "candidate_path.schema.json",
+  "title": "Work1 candidate vulnerability path",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_path_id", "project_id", "input_candidate_id", "effect_candidate_id", "input_entity", "effect_entity", "input_discovery_route", "effect_discovery_route", "path_nodes", "path_edges", "semantic_mechanisms", "unresolved_relations", "path_status", "candidate_type_hypothesis", "evidence_refs", "source_locations", "provenance", "schema_version", "detector_commit"],
+  "properties": {
+    "candidate_path_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "input_candidate_id": {"type": "string", "minLength": 1},
+    "effect_candidate_id": {"type": "string", "minLength": 1},
+    "input_entity": {"type": "string", "minLength": 1},
+    "effect_entity": {"type": "string", "minLength": 1},
+    "input_discovery_route": {"enum": ["ROUTE_A", "ROUTE_B", "ROUTE_C"]},
+    "effect_discovery_route": {"enum": ["ROUTE_A", "ROUTE_B", "ROUTE_C"]},
+    "path_nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}},
+    "path_edges": {"type": "array", "items": {"$ref": "#/$defs/edge"}},
+    "semantic_mechanisms": {"type": "array", "minItems": 1, "items": {"enum": ["DATA", "CALL", "WRAPPER", "LIBRARY", "FIELD", "STATE", "FRAMEWORK", "LLM_PROPOSAL"]}},
+    "unresolved_relations": {"type": "array", "items": {"type": "object"}},
+    "path_status": {"enum": ["COMPLETE_STATIC", "PARTIAL_STATIC", "FRONTIER_GAP"]},
+    "frontier_nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}},
+    "frontier_reason": {"enum": ["FIELD_STATE_UNKNOWN", "LIBRARY_WRAPPER_UNKNOWN", "FRAMEWORK_UNKNOWN", "OTHER", null]},
+    "candidate_type_hypothesis": {"type": "string", "minLength": 1},
+    "evidence_refs": {"type": "array", "items": {"type": "object"}},
+    "source_locations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/location"}},
+    "provenance": {"type": "object"},
+    "schema_version": {"const": 1},
+    "detector_commit": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "location": {"type": "object", "additionalProperties": false, "required": ["file", "line"], "properties": {"file": {"type": "string", "minLength": 1}, "line": {"type": "integer", "minimum": 1}}},
+    "node": {"type": "object", "additionalProperties": false, "required": ["node_id", "entity", "kind", "location"], "properties": {"node_id": {"type": "string", "minLength": 1}, "entity": {"type": "string", "minLength": 1}, "kind": {"type": "string", "minLength": 1}, "location": {"$ref": "#/$defs/location"}}},
+    "edge": {"type": "object", "additionalProperties": false, "required": ["from_node_id", "to_node_id", "mechanism", "evidence"], "properties": {"from_node_id": {"type": "string", "minLength": 1}, "to_node_id": {"type": "string", "minLength": 1}, "mechanism": {"enum": ["DATA", "CALL", "WRAPPER", "LIBRARY", "FIELD", "STATE", "FRAMEWORK", "LLM_PROPOSAL"]}, "evidence": {"type": "object"}}}
+  }
+}
