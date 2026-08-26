@@ -11,7 +11,9 @@
 - Frozen E0 baseline artifact:
   `/workspace/experiment-output/MSA-P0-E0-20260824-005`
 - Dataset: `msa-p0-devset` at revision
-  `afe0ebd0ac237abb46255f9ccd479b1d71819136`
+  `afe0ebd0adc237abb46255f9cd479b1d71819136`
+- Expanded frozen manifest:
+  `/workspace/java-vuln-research/experiments/frozen_configs/w1_e1_dev8_manifest.yaml`
 
 ## Preflight
 
@@ -51,8 +53,26 @@ CLOUD_PATHS_CONFIG=/workspace/java-vuln-research/configs/local/cloud.paths.yaml 
 CODEQL_BIN=/workspace/tools/codeql-2.26.3/codeql \
 bash scripts/run_p0.sh \
   msa-p0-devset \
-  afe0ebd0ac237abb46255f9ccd479b1d71819136 \
+  afe0ebd0adc237abb46255f9ccd479b1d71819136 \
   MSA-P0-E0-YYYYMMDD-NNN
+```
+
+For the frozen eight-project W1-E1 cohort, pass the manifest explicitly:
+
+```bash
+DEV8_MANIFEST=/workspace/java-vuln-research/experiments/frozen_configs/w1_e1_dev8_manifest.yaml
+CODEQL_BIN=/workspace/tools/codeql-2.26.3/codeql \
+bash scripts/run_p0a.sh \
+  /workspace/experiment-output/W1-E1-DEV8-P0A-YYYYMMDD-NNN \
+  "$DEV8_MANIFEST"
+
+CLOUD_PATHS_CONFIG=/workspace/java-vuln-research/configs/local/cloud.paths.yaml \
+CODEQL_BIN=/workspace/tools/codeql-2.26.3/codeql \
+bash scripts/run_p0.sh \
+  msa-p0-devset \
+  afe0ebd0adc237abb46255f9cd479b1d71819136 \
+  W1-E1-DEV8-E0-YYYYMMDD-NNN \
+  "$DEV8_MANIFEST"
 ```
 
 ## W1-E1 execution
@@ -70,11 +90,27 @@ bash scripts/run_w1_e1.sh \
   /workspace/experiment-output/MSA-P0-A-20260824-001 \
   /workspace/experiment-output/MSA-P0-E0-20260824-005 \
   msa-p0-devset \
-  afe0ebd0ac237abb46255f9ccd479b1d71819136 \
+  afe0ebd0adc237abb46255f9ccd479b1d71819136 \
   "$RUN_ID"
 run_exit=$?
 printf 'W1-E1 exit_code=%s\n' "$run_exit"
 test "$run_exit" -eq 0
+```
+
+The expanded run uses its freshly persisted Dev8 discovery and E0 outputs:
+
+```bash
+DEV8_MANIFEST=/workspace/java-vuln-research/experiments/frozen_configs/w1_e1_dev8_manifest.yaml
+CLOUD_PATHS_CONFIG=/workspace/java-vuln-research/configs/local/cloud.paths.yaml \
+W1_E1_DATASET_ROOT=/workspace/datasets/cwe-bench-java \
+CODEQL_BIN=/workspace/tools/codeql-2.26.3/codeql \
+bash scripts/run_w1_e1.sh \
+  /workspace/experiment-output/W1-E1-DEV8-P0A-YYYYMMDD-NNN \
+  /workspace/experiment-output/W1-E1-DEV8-E0-YYYYMMDD-NNN \
+  msa-p0-devset \
+  afe0ebd0adc237abb46255f9cd479b1d71819136 \
+  W1-E1-YYYYMMDD-NNN \
+  "$DEV8_MANIFEST"
 ```
 
 The E1 wrapper executes the evaluator and report automatically. These are the
@@ -123,7 +159,8 @@ cat "$RUN_DIR/run_manifest.json"
 cat "$RUN_DIR/summary.md"
 ```
 
-The detector must report `status: SUCCESS`, four runnable projects, and
+The detector must report `status: SUCCESS`, the project count in the selected
+manifest (four for the engineering cohort or eight for Dev8), and
 `detector_ground_truth_access: false` in the manifest. The evaluator may
 report zero coverage; that is a result, not a failure, if all required files
 exist and the manifest exit code is zero.
