@@ -13,7 +13,12 @@ from .common.inventory import inventory_codeql_databases, inventory_datasets
 from .common.io import load_yaml
 from .common.run_manifest import RunManifest
 from .discovery import DiscoveryError, run_p0a_discovery
-from .evaluation import P0AEvaluationError, evaluate_p0a
+from .evaluation import (
+    CandidateCoverageError,
+    P0AEvaluationError,
+    evaluate_candidate_coverage,
+    evaluate_p0a,
+)
 from .preflight import PreflightError, run_preflight
 from .reporting import generate_e0_report
 
@@ -100,6 +105,19 @@ def _command_evaluate_p0a(args: argparse.Namespace) -> int:
     )
     _json_print(summary)
     return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_evaluate_w1_e1(args: argparse.Namespace) -> int:
+    summary = evaluate_candidate_coverage(
+        candidate_paths_file=args.candidate_paths,
+        detector_manifest=args.detector_manifest,
+        project_info_csv=args.project_info,
+        fix_info_csv=args.fix_info,
+        baseline_raw_dir=args.baseline_raw_dir,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0
 
 
 def _command_run_e0(args: argparse.Namespace) -> int:
@@ -217,6 +235,15 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--output-root", required=True)
     evaluate.set_defaults(func=_command_evaluate_p0a)
 
+    evaluate_w1_e1 = commands.add_parser("evaluate-w1-e1")
+    evaluate_w1_e1.add_argument("--candidate-paths", required=True)
+    evaluate_w1_e1.add_argument("--detector-manifest", required=True)
+    evaluate_w1_e1.add_argument("--project-info", required=True)
+    evaluate_w1_e1.add_argument("--fix-info", required=True)
+    evaluate_w1_e1.add_argument("--baseline-raw-dir", required=True)
+    evaluate_w1_e1.add_argument("--output-root", required=True)
+    evaluate_w1_e1.set_defaults(func=_command_evaluate_w1_e1)
+
     run_e0 = commands.add_parser("run-e0")
     run_e0.add_argument("--project-root", required=True)
     run_e0.add_argument("--paths-config", required=True)
@@ -237,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         return int(args.func(args))
     except (
         DetectorManifestError,
+        CandidateCoverageError,
         DiscoveryError,
         P0AEvaluationError,
         PreflightError,
