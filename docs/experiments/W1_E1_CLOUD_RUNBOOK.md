@@ -62,6 +62,9 @@ bash scripts/run_w1_e1.sh \
   msa-p0-devset \
   afe0ebd0ac237abb46255f9ccd479b1d71819136 \
   "$RUN_ID"
+run_exit=$?
+printf 'W1-E1 exit_code=%s\n' "$run_exit"
+test "$run_exit" -eq 0
 ```
 
 The E1 wrapper executes the evaluator and report automatically. These are the
@@ -95,6 +98,8 @@ python3 -m java_vuln_research.cli report-w1-e1 \
 
 ```bash
 RUN_DIR=/workspace/experiment-output/W1-E1-YYYYMMDD-NNN
+ls -la "$RUN_DIR"
+ls -la "$RUN_DIR/logs"
 cat "$RUN_DIR/detector_metrics.json"
 cat "$RUN_DIR/project_status.jsonl"
 cat "$RUN_DIR/coverage_metrics.json"
