@@ -1,45 +1,47 @@
-# W1-E1 Dev16 验证集选择审计
+# W1-E1 Dev16 Selection Freeze
 
-## 冻结信息
+- branch: `exp/w1-e1-candidate-path-coverage`
+- selection_frozen: true
+- detector_started: false
+- freeze_scope: W1-E1 validation cohort only; no detector, evaluator, attribution, or ground-truth result was used for selection.
+- selection_signals: repository identity, pinned revision, Java/build metadata, CodeQL database availability, and CWE category only for diversity.
+- final_total_projects: 18
+- dev8_baseline_projects: P006, P007, P010, P012, D001, D002, D003, D004
+- successful_validation_projects: V001, V004, V005, V007, V009, V011, V021, V022, V023, V025
 
-- 分支：exp/w1-e1-candidate-path-coverage
-- 选择冻结时间：2026-08-26（云端 CloudStudio）
-- 清单：experiments/frozen_configs/w1_e1_dev16_manifest.yaml
-- 目标规模：16 个项目；Dev8 的 8 个项目保持不变，新增验证 8 个项目。
-- 选择信号：仓库身份、固定 revision、Java/JDK 与构建元数据、Maven/Gradle 元数据、框架/库身份，以及 CWE 类别仅用于类别多样性。
-- 明确未使用：漏洞文件、漏洞方法/行、修复提交内容、GT 标签、CVE 描述或漏洞路径。
+## Final validation cohort
 
-## 选择规则
-
-1. 先排除 Dev8 已覆盖的同一仓库（允许同仓库不同版本的情况不作为新增仓库，以避免项目身份重复）。
-2. 在 cwe-bench-java/data/project_info.csv 与 build_info.csv 的公开元数据池中，优先选择 build_info.status=success、可在云端 JDK/Maven 环境复现、且具有独立仓库身份的项目。
-3. 新增集合覆盖 CWE-022、CWE-079、CWE-094 三类，优先小型或中型 Maven 工程，降低构建资源偏差。
-4. 在 CodeQL 数据库可解析、revision 校验通过后，才允许进入最终运行清单；这些是工程可用性门槛，不是结果驱动替换。
-
-## 已冻结项目
-
-| ID | 仓库 | revision | Java/构建元数据 | CWE 类别 |
+| ID | Repository/tag | Revision | CWE category | CodeQL status |
 |---|---|---|---|---|
-| V001 | square/retrofit | 7158698314daa138e993fac6a590ed19d78a8599 | JDK8u202 / Maven 3.5.0 | CWE-022 |
-| V002 | dromara/hutool | 7687720c5125b29386d3bb9c7c2931da79664b73 | JDK8u202 / Maven 3.5.0 | CWE-022 |
-| V003 | apache/tika | 38ff2a986af24ee255f1f91d654ea402f4016696 | JDK8u202 / Maven 3.5.0 | CWE-022 |
-| V004 | codehaus-plexus/plexus-archiver | b9f9a425865eb47fb3665b3144ee4ca11f402704 | JDK8u202 / Maven 3.5.0 | CWE-022 |
-| V005 | iris-sast/zip4j | d87ffa2d64ffb3a0a1cf0c7a69c7b19d7015bfde | JDK8u202 / Maven 3.5.0 | CWE-022 |
-| V006 | rhuss/jolokia | 10727cab59a8fc2ae053bec6b2f26f48f1c4245c | JDK8u202 / Maven 3.5.0 | CWE-079 |
-| V007 | jstachio/jstachio | 9ce20009d6bf726086fc528fceb174933077bff4 | JDK17 / Maven 3.5.0 | CWE-079 |
-| V008 | apache/struts | b3a9d82d5830ef9cd7811cfa3f86a373ae52fada | JDK8u202 / Maven 3.5.0 | CWE-094 |
+| V001 | square/retrofit @ 7158698 | 7158698314daa138e993fac6a590ed19d78a8599 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V004 | codehaus-plexus/plexus-archiver @ b9f9a42 | b9f9a425865eb47fb3665b3144ee4ca11f402704 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V005 | iris-sast/zip4j @ d87ffa2 | d87ffa2d64ffb3a0a1cf0c7a69c7b19d7015bfde | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V007 | jstachio/jstachio @ 9ce2000 | 9ce20009d6bf726086fc528fceb174933077bff4 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V009 | apache/commons-io @ 2ae025f | 2ae025fe5c4a7d2046c53072b0898e37a079fe62 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V011 | OWASP/json-sanitizer @ fc612ab | fc612ab374de73d03864d56fb87b6a103b234489 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V021 | whitesource/CureKit @ v1.1.3 | 7b275a67a5992165deb186b2b3f7764ddd62d26 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V022 | ESAPI/esapi-java-legacy @ 2.2.3.1 | 2e8694c6beb3bbdb2645b882eba72ce41bc63242 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V023 | vert-x3/vertx-web @ 3.9.3 | 2146b7240096e25b40bb1acc083fa7ec79330989 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
+| V025 | apache/shiro @ shiro-root-1.11.0 | adb56c88521e0eeca710b2df17f6b3aeda85e4f35 | CWE-022 | DB_EXIT=0, RESOLVE_EXIT=0 |
 
-## 既有 Dev8（不变）
+## Excluded predeclared candidates
 
-Dev8 的 P006/P007/P010/P012 与 D001–D004 逐字复用 w1_e1_dev8_manifest.yaml，不重新选择、不改 revision、不改数据库。
+All exclusions use only an allowed operational reason.
 
-## 预声明替换与排除政策
+- V002 dromara/hutool: `BUILD_FAILURE` (Beetl/Enjoy artifacts unavailable)
+- V003 apache/tika: `BUILD_FAILURE` (Apache CXF 3.0.16 artifacts unavailable)
+- V006 rhuss/jolokia: `BUILD_FAILURE`
+- V008 apache/struts: `BUILD_FAILURE`
+- V010 apache/commons-text: `BUILD_FAILURE`
+- V012 jenkinsci/docker-commons-plugin: `BUILD_FAILURE`
+- V013 codecentric/spring-boot-admin: `BUILD_FAILURE`
+- V014 cbeust/testng: `BUILD_FAILURE`
+- V015 apache/jspwiki: `BUILD_FAILURE`
+- V016 kubernetes-client/java: `BUILD_FAILURE` (CodeQL tracer process exit 137)
+- V017 undertow-io/undertow: `BUILD_FAILURE` (unavailable checkstyle artifact)
+- V018 apache/karaf: `BUILD_FAILURE` (dependency resolution)
+- V019 apache/james-project: `BUILD_FAILURE`
+- V020 jlangch/venice: `BUILD_FAILURE` (no root Maven POM)
+- V024 apache/mina-sshd: `BUILD_FAILURE` (import-maven-plugin execution failure)
 
-- 只有在运行前的工程审计阶段发现 DB_NOT_AVAILABLE、BUILD_FAILURE、DUPLICATE_REPOSITORY、UNSUPPORTED_BUILD、VERSION_MISMATCH 或 SCOPE_LIMIT 时才可替换；替换必须来自同一预审计元数据池，并在本文件和 manifest 中留下时间戳、原项目、原因和替代项目。
-- 运行开始后禁止任何替换，禁止结果驱动的项目增删。
-- 不因候选输入数、FW/BW 数量、frontier 数量或覆盖率改变集合。
-- 未进入清单的候选只记录上述六类排除原因，不记录漏洞标签或位置。
-
-## 方法与隔离声明
-
-Dev16 仅扩展项目覆盖面，不改变 W1-E1 的 Candidate→AnalysisAnchor、FW/BW Base Data/Call、STATIC_CONNECTED、STRUCTURAL_FRONTIER、既有归因和独立 evaluator 语义。检测运行的 manifest 不包含漏洞位置或 GT 字段。
+No vulnerability file, method, line, fix, CVE description, ground-truth label, or path was used to select or exclude a project.

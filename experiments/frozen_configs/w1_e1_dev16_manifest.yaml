@@ -36,14 +36,6 @@ projects:
     revision: 7158698314daa138e993fac6a590ed19d78a8599
     source_path: /workspace/w1-e1-dev16/projects/V001
     codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V001
-  - project: V002
-    revision: 7687720c5125b29386d3bb9c7c2931da79664b73
-    source_path: /workspace/w1-e1-dev16/projects/V002
-    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V002
-  - project: V003
-    revision: 38ff2a986af24ee255f1f91d654ea402f4016696
-    source_path: /workspace/w1-e1-dev16/projects/V003
-    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V003
   - project: V004
     revision: b9f9a425865eb47fb3665b3144ee4ca11f402704
     source_path: /workspace/w1-e1-dev16/projects/V004
@@ -52,15 +44,31 @@ projects:
     revision: d87ffa2d64ffb3a0a1cf0c7a69c7b19d7015bfde
     source_path: /workspace/w1-e1-dev16/projects/V005
     codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V005
-  - project: V006
-    revision: 10727cab59a8fc2ae053bec6b2f26f48f1c4245c
-    source_path: /workspace/w1-e1-dev16/projects/V006
-    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V006
   - project: V007
     revision: 9ce20009d6bf726086fc528fceb174933077bff4
     source_path: /workspace/w1-e1-dev16/projects/V007
     codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V007
-  - project: V008
-    revision: b3a9d82d5830ef9cd7811cfa3f86a373ae52fada
-    source_path: /workspace/w1-e1-dev16/projects/V008
-    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V008
+  - project: V021
+    revision: 7b275a67a5992165deb186b2b3f7764ddd62d26
+    source_path: /workspace/w1-e1-dev16/projects/V021
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V021
+  - project: V022
+    revision: 2e8694c6beb3bbdb2645b882eba72ce41bc63242
+    source_path: /workspace/w1-e1-dev16/projects/V022
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V022
+  - project: V023
+    revision: 2146b7240096e25b40bb1acc083fa7ec79330989
+    source_path: /workspace/w1-e1-dev16/projects/V023
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V023
+  - project: V025
+    revision: adb56c88521e0eeca710b2df17f6b3aeda85e4f35
+    source_path: /workspace/w1-e1-dev16/projects/V025
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V025
+  - project: V009
+    revision: 2ae025fe5c4a7d2046c53072b0898e37a079fe62
+    source_path: /workspace/w1-e1-dev16/projects/V009
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V009
+  - project: V011
+    revision: fc612ab374de73d03864d56fb87b6a103b234489
+    source_path: /workspace/w1-e1-dev16/projects/V011
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V011
