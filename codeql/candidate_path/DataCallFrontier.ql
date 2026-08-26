@@ -2,6 +2,7 @@
  * @name W1-E1 structural frontier diagnostic
  * @description Emits structurally adjacent one-sided frontiers without adding a propagation edge.
  * @kind table
+ * @id java/w1-e1-structural-frontier-diagnostic
  */
 import java
 import semmle.code.java.dataflow.DataFlow

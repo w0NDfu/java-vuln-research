@@ -20,7 +20,7 @@ mkdir -p "${output_root}" "${classes_root}"
 "${codeql_bin}" database create "${database_root}" \
   --language=java \
   --source-root="${fixture_root}" \
-  --command="javac -d '${classes_root}' '${fixture_root}/src/org/springframework/web/bind/annotation/RequestParam.java' '${fixture_root}/src/toy/ToyCases.java'"
+  --command="javac -d ${classes_root} ${fixture_root}/src/org/springframework/web/bind/annotation/RequestParam.java ${fixture_root}/src/toy/ToyCases.java"
 
 fixture_revision="$(git -C "${PROJECT_ROOT}" rev-parse HEAD)"
 sed \

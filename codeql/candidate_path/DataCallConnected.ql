@@ -2,7 +2,6 @@
  * @name W1-E1 data/call candidate path
  * @description Emits only interprocedural CodeQL dataflow paths between frozen P0-A anchors.
  * @kind table
- * @problem.severity recommendation
  * @id java/w1-e1-data-call-candidate-path
  */
 import java
