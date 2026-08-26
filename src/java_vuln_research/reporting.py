@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .common.io import read_jsonl, write_csv, write_json, write_jsonl
+from .common.provenance import utc_now
+from .common.run_manifest import RunManifest
 
 
 METRIC_FIELDS = [
@@ -148,4 +151,129 @@ Detector.
 {('Resolve recorded execution failures and rerun the same frozen configuration.' if failure_records else 'Verify all eight E0 gates; only then create exp/msa-p0-a-discovery.')}
 """
     (target / "report.md").write_text(report, encoding="utf-8")
+    return summary
+
+
+def generate_w1_e1_report(
+    *,
+    run_id: str,
+    raw_run_dir: str | Path,
+    baseline_raw_dir: str | Path,
+    project_root: str | Path,
+    dataset_name: str,
+    dataset_revision: str,
+    detector_manifest: str | Path,
+    config: str | Path,
+    started_at: str,
+    command: str,
+) -> dict[str, Any]:
+    """Merge already-frozen detector and evaluator outputs into a W1-E1 report."""
+
+    raw_dir = Path(raw_run_dir)
+    detector = json.loads((raw_dir / "detector_metrics.json").read_text(encoding="utf-8"))
+    coverage = json.loads((raw_dir / "coverage_metrics.json").read_text(encoding="utf-8"))
+    baseline_rows = read_jsonl(
+        Path(baseline_raw_dir) / "baseline" / "baseline_output.jsonl"
+    )
+    baseline_paths = sum(
+        int(row.get("path_count", 0))
+        for row in baseline_rows
+        if row.get("status") == "SUCCESS"
+    )
+    candidate_paths = int(detector["candidate_paths_total"])
+    expansion_factor: float | str = (
+        round(candidate_paths / baseline_paths, 6) if baseline_paths else "NOT_EVALUABLE"
+    )
+    projects_runnable = int(detector["projects_runnable"])
+    manifest_builder = RunManifest(
+        run_id=run_id,
+        experiment="W1-E1-CANDIDATE-PATH-COVERAGE",
+        project_root=Path(project_root),
+        dataset_name=dataset_name,
+        dataset_revision=dataset_revision,
+        config_paths=[Path(config), Path(detector_manifest)],
+        semantic_rule_paths=[Path(project_root) / "codeql" / "candidate_path"],
+        prompt_paths=[],
+    )
+    manifest = manifest_builder.finish(
+        raw_dir / "run_manifest.json",
+        projects_requested=int(detector["projects_total"]),
+        projects_runnable=projects_runnable,
+        projects_build_failed="NOT_APPLICABLE",
+        status=str(detector["status"]),
+    )
+    finished_at = utc_now()
+    try:
+        wall_clock_seconds: float | str = round(
+            (
+                datetime.fromisoformat(finished_at.replace("Z", "+00:00"))
+                - datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            ).total_seconds(),
+            3,
+        )
+    except ValueError:
+        wall_clock_seconds = "NOT_AVAILABLE"
+    manifest.update(
+        {
+            "timestamp_start": started_at,
+            "timestamp_end": finished_at,
+            "wall_clock_seconds": wall_clock_seconds,
+            "candidate_schema_version": 1,
+            "evaluator_version": "W1-E1-COVERAGE-v1",
+            "detector_ground_truth_access": False,
+            "command": command,
+            "exit_code": 0 if detector["status"] == "SUCCESS" else 2,
+        }
+    )
+    write_json(raw_dir / "run_manifest.json", manifest)
+    summary = {
+        **detector,
+        "ground_truth_evaluable": coverage["ground_truth_evaluable"],
+        "file_level_coverage": coverage["file_level_covered"],
+        "method_level_coverage": coverage["method_level_covered"],
+        "line_level_coverage": coverage["line_level_covered"],
+        "baseline_coverage": coverage["baseline_coverage"],
+        "e1_coverage": coverage["e1_coverage"],
+        "baseline_miss_recovered": coverage["baseline_miss_recovered"],
+        "recovered_case_ids": coverage["recovered_case_ids"],
+        "candidate_expansion_factor": expansion_factor,
+        "runtime_seconds": manifest["wall_clock_seconds"],
+        "peak_memory": "NOT_AVAILABLE",
+        "run_id": run_id,
+        "detector_ground_truth_access": False,
+    }
+    write_json(raw_dir / "metrics.json", summary)
+    report = f"""# {run_id} — W1-E1 Candidate Path Coverage
+
+## Status
+
+- Status: `{detector['status']}`
+- Commit: `{manifest['git_commit']}`
+- Projects runnable: `{projects_runnable}` / `{detector['projects_total']}`
+
+## Candidate-path output
+
+- External input candidates: `{detector['external_input_candidates']}`
+- Security effect candidates: `{detector['security_effect_candidates']}`
+- Static connected paths: `{detector['static_connected_paths']}`
+- Frontier candidate paths: `{detector['frontier_candidate_paths']}`
+- Candidate expansion factor: `{expansion_factor}`
+
+## Independent coverage evaluation
+
+- Ground-truth evaluable cases: `{coverage['ground_truth_evaluable']}`
+- File-level coverage: `{coverage['file_level_covered']}`
+- Method-level coverage: `{coverage['method_level_covered']}`
+- Line-level coverage: `{coverage['line_level_covered']}`
+- E0 coverage: `{coverage['baseline_coverage']}`
+- W1-E1 coverage: `{coverage['e1_coverage']}`
+- Baseline-miss recovery: `{coverage['baseline_miss_recovered']}`
+
+## Boundary
+
+The detector persisted `candidate_paths.jsonl` before the evaluator read
+ground-truth files. `candidate_type_hypothesis` remains a hypothesis; this run
+does not confirm vulnerabilities or CWE verdicts.
+"""
+    (raw_dir / "summary.md").write_text(report, encoding="utf-8")
     return summary

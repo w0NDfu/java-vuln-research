@@ -21,7 +21,7 @@ from .evaluation import (
 )
 from .frontier import CandidatePathRunError, run_w1_e1_paths
 from .preflight import PreflightError, run_preflight
-from .reporting import generate_e0_report
+from .reporting import generate_e0_report, generate_w1_e1_report
 
 
 def _run_id() -> str:
@@ -130,6 +130,23 @@ def _command_run_w1_e1_paths(args: argparse.Namespace) -> int:
         threads=args.threads,
         ram_mb=args.ram_mb,
         codeql_executable=args.codeql,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_report_w1_e1(args: argparse.Namespace) -> int:
+    summary = generate_w1_e1_report(
+        run_id=args.run_id,
+        raw_run_dir=args.raw_run_dir,
+        baseline_raw_dir=args.baseline_raw_dir,
+        project_root=args.project_root,
+        dataset_name=args.dataset_name,
+        dataset_revision=args.dataset_revision,
+        detector_manifest=args.detector_manifest,
+        config=args.config,
+        started_at=args.started_at,
+        command=args.command,
     )
     _json_print(summary)
     return 0 if summary["status"] == "SUCCESS" else 2
@@ -268,6 +285,19 @@ def build_parser() -> argparse.ArgumentParser:
     candidate_paths.add_argument("--ram-mb", type=int)
     candidate_paths.add_argument("--codeql", default="codeql")
     candidate_paths.set_defaults(func=_command_run_w1_e1_paths)
+
+    report_w1_e1 = commands.add_parser("report-w1-e1")
+    report_w1_e1.add_argument("--run-id", required=True)
+    report_w1_e1.add_argument("--raw-run-dir", required=True)
+    report_w1_e1.add_argument("--baseline-raw-dir", required=True)
+    report_w1_e1.add_argument("--project-root", required=True)
+    report_w1_e1.add_argument("--dataset-name", required=True)
+    report_w1_e1.add_argument("--dataset-revision", required=True)
+    report_w1_e1.add_argument("--detector-manifest", required=True)
+    report_w1_e1.add_argument("--config", required=True)
+    report_w1_e1.add_argument("--started-at", required=True)
+    report_w1_e1.add_argument("--command", required=True)
+    report_w1_e1.set_defaults(func=_command_report_w1_e1)
 
     run_e0 = commands.add_parser("run-e0")
     run_e0.add_argument("--project-root", required=True)

@@ -302,6 +302,7 @@ def evaluate_candidate_coverage(
         "detector_ground_truth_access": False,
     }
     target = Path(output_root)
+    write_json(target / "coverage_metrics.json", summary)
     write_json(target / "metrics.json", summary)
     write_jsonl(target / "coverage_cases.jsonl", cases)
     write_jsonl(target / "baseline_miss_recovery.jsonl", recoveries)

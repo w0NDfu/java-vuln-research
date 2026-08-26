@@ -320,5 +320,6 @@ def run_w1_e1_paths(*, detector_manifest: str | Path, endpoint_output_dir: str |
     successes = sum(1 for row in statuses if row["status"] == "SUCCESS")
     per_project = {row["project_id"]: row.get("static_connected_paths", 0) + row.get("frontier_candidate_paths", 0) for row in statuses if row["status"] == "SUCCESS"}
     summary = {"status": "SUCCESS" if successes == len(statuses) and statuses else "PARTIAL" if successes else "FAILED", "projects_total": len(statuses), "projects_runnable": successes, "external_input_candidates": len(external), "security_effect_candidates": len(effects), "candidate_paths_total": len(all_paths), "static_connected_paths": sum(1 for row in all_paths if row["path_status"] == "COMPLETE_STATIC"), "frontier_candidate_paths": sum(1 for row in all_paths if row["path_status"] == "FRONTIER_GAP"), "candidate_paths_per_project": per_project, "codeql_query_time": round(total_query_time, 3), "error_count": len(statuses) - successes, "unknown_count": sum(int(row.get("unmapped_query_results", 0)) for row in statuses)}
+    write_json(output / "detector_metrics.json", summary)
     write_json(output / "metrics.json", summary)
     return summary
