@@ -17,9 +17,10 @@ from .evaluation import (
     CandidateCoverageError,
     P0AEvaluationError,
     evaluate_candidate_coverage,
+    evaluate_e0_sanity,
     evaluate_p0a,
 )
-from .frontier import CandidatePathRunError, run_w1_e1_paths
+from .frontier import AnalysisAnchorError, CandidatePathRunError, run_w1_e1_paths
 from .preflight import PreflightError, run_preflight
 from .reporting import generate_e0_report, generate_w1_e1_report
 
@@ -119,6 +120,18 @@ def _command_evaluate_w1_e1(args: argparse.Namespace) -> int:
     )
     _json_print(summary)
     return 0
+
+
+def _command_sanity_e0(args: argparse.Namespace) -> int:
+    summary = evaluate_e0_sanity(
+        detector_manifest=args.detector_manifest,
+        project_info_csv=args.project_info,
+        fix_info_csv=args.fix_info,
+        baseline_raw_dir=args.baseline_raw_dir,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
 
 
 def _command_run_w1_e1_paths(args: argparse.Namespace) -> int:
@@ -276,6 +289,14 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_w1_e1.add_argument("--output-root", required=True)
     evaluate_w1_e1.set_defaults(func=_command_evaluate_w1_e1)
 
+    sanity_e0 = commands.add_parser("sanity-e0-evaluator")
+    sanity_e0.add_argument("--detector-manifest", required=True)
+    sanity_e0.add_argument("--project-info", required=True)
+    sanity_e0.add_argument("--fix-info", required=True)
+    sanity_e0.add_argument("--baseline-raw-dir", required=True)
+    sanity_e0.add_argument("--output-root", required=True)
+    sanity_e0.set_defaults(func=_command_sanity_e0)
+
     candidate_paths = commands.add_parser("run-w1-e1-paths")
     candidate_paths.add_argument("--detector-manifest", required=True)
     candidate_paths.add_argument("--endpoint-output-dir", required=True)
@@ -321,6 +342,7 @@ def main(argv: list[str] | None = None) -> int:
         DetectorManifestError,
         CandidateCoverageError,
         CandidatePathRunError,
+        AnalysisAnchorError,
         DiscoveryError,
         P0AEvaluationError,
         PreflightError,

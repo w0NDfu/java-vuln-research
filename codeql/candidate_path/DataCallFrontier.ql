@@ -1,35 +1,31 @@
 /**
- * @name W1-E1 data/call frontier candidate
- * @description Emits direct caller-to-callee endpoint pairs without a solved dataflow path.
+ * @name W1-E1 structural frontier diagnostic
+ * @description Emits structurally adjacent one-sided frontiers without adding a propagation edge.
  * @kind table
  */
 import java
 import semmle.code.java.dataflow.DataFlow
-import semmle.code.java.dataflow.TaintTracking
 import candidate_path.EndpointCandidates
 
-module W1E1FrontierConfig implements DataFlow::ConfigSig {
-  predicate isSource(DataFlow::Node source) {
-    exists(string file, int line | externalInputNode(source, file, line))
-  }
-
-  predicate isSink(DataFlow::Node sink) {
-    exists(string file, int line | securityEffectNode(sink, file, line))
-  }
-}
-
-module W1E1FrontierFlow = TaintTracking::Global<W1E1FrontierConfig>;
-
-from DataFlow::Node source, DataFlow::Node sink,
-  Callable caller, Callable callee, MethodCall call,
-  string sourceFile, int sourceLine, string effectFile, int effectLine
+from DataFlow::Node input, DataFlow::Node fw, DataFlow::Node bw, DataFlow::Node effect,
+  string inputEntity, string inputFile, int inputLine,
+  string iak, string ivr, string imi, string ici, int iai, string iaf, int ial, string imr,
+  string effectEntity, string effectFile, int effectLine,
+  string eak, string evr, string emi, string eci, int eai, string eaf, int eal, string emr,
+  string fwKind, string fwEntity, string fwFile, int fwLine, string fwMethod,
+  string bwKind, string bwEntity, string bwFile, int bwLine, string bwMethod,
+  int distance, string reason
 where
-  externalInputNode(source, sourceFile, sourceLine) and
-  securityEffectNode(sink, effectFile, effectLine) and
-  inputCallable(source, caller) and
-  effectCallable(sink, callee) and
-  call.getEnclosingCallable() = caller and
-  call.getMethod() = callee and
-  not W1E1FrontierFlow::flow(source, sink)
-select sourceFile, sourceLine, effectFile, effectLine,
-  call.getLocation().getFile().getRelativePath(), call.getLocation().getStartLine(), "OTHER"
+  externalInputAnalysisAnchor(input, inputEntity, inputFile, inputLine,
+    iak, ivr, imi, ici, iai, iaf, ial, imr) and
+  securityEffectAnalysisAnchor(effect, effectEntity, effectFile, effectLine,
+    eak, evr, emi, eci, eai, eaf, eal, emr) and
+  analysisNodeInfo(fw, fwKind, fwEntity, fwFile, fwLine, fwMethod) and
+  analysisNodeInfo(bw, bwKind, bwEntity, bwFile, bwLine, bwMethod) and
+  input != fw and bw != effect and fw != bw and
+  W1E1ForwardFlow::flow(input, fw) and W1E1BackwardFlow::flow(bw, effect) and
+  structuralRelation(fw, bw, distance, reason) and
+  not W1E1ConnectedFlow::flow(input, effect)
+select inputEntity, inputFile, inputLine, effectEntity, effectFile, effectLine,
+  fwKind, fwEntity, fwFile, fwLine, fwMethod,
+  bwKind, bwEntity, bwFile, bwLine, bwMethod, distance, reason

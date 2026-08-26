@@ -7,25 +7,17 @@
  */
 import java
 import semmle.code.java.dataflow.DataFlow
-import semmle.code.java.dataflow.TaintTracking
 import candidate_path.EndpointCandidates
 
-module W1E1DataCallConfig implements DataFlow::ConfigSig {
-  predicate isSource(DataFlow::Node source) {
-    exists(string file, int line | externalInputNode(source, file, line))
-  }
-
-  predicate isSink(DataFlow::Node sink) {
-    exists(string file, int line | securityEffectNode(sink, file, line))
-  }
-}
-
-module W1E1DataCallFlow = TaintTracking::Global<W1E1DataCallConfig>;
-
 from DataFlow::Node source, DataFlow::Node sink,
-  string sourceFile, int sourceLine, string effectFile, int effectLine
+  string sourceEntity, string sourceFile, int sourceLine,
+  string sak, string svr, string smi, string sci, int sai, string saf, int sal, string smr,
+  string effectEntity, string effectFile, int effectLine,
+  string eak, string evr, string emi, string eci, int eai, string eaf, int eal, string emr
 where
-  W1E1DataCallFlow::flow(source, sink) and
-  externalInputNode(source, sourceFile, sourceLine) and
-  securityEffectNode(sink, effectFile, effectLine)
-select sourceFile, sourceLine, effectFile, effectLine
+  externalInputAnalysisAnchor(source, sourceEntity, sourceFile, sourceLine,
+    sak, svr, smi, sci, sai, saf, sal, smr) and
+  securityEffectAnalysisAnchor(sink, effectEntity, effectFile, effectLine,
+    eak, evr, emi, eci, eai, eaf, eal, emr) and
+  W1E1ConnectedFlow::flow(source, sink)
+select sourceEntity, sourceFile, sourceLine, effectEntity, effectFile, effectLine

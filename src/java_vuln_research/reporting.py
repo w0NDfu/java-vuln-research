@@ -173,6 +173,8 @@ def generate_w1_e1_report(
     raw_dir = Path(raw_run_dir)
     detector = json.loads((raw_dir / "detector_metrics.json").read_text(encoding="utf-8"))
     coverage = json.loads((raw_dir / "coverage_metrics.json").read_text(encoding="utf-8"))
+    sanity_path = raw_dir / "e0_evaluator_sanity.json"
+    sanity = json.loads(sanity_path.read_text(encoding="utf-8")) if sanity_path.is_file() else {}
     baseline_rows = read_jsonl(
         Path(baseline_raw_dir) / "baseline" / "baseline_output.jsonl"
     )
@@ -231,8 +233,10 @@ def generate_w1_e1_report(
                 }
                 for project in manifest_projects
             ],
-            "candidate_schema_version": 1,
-            "evaluator_version": "W1-E1-COVERAGE-v1",
+            "candidate_schema_version": 2,
+            "analysis_anchor_schema_version": 1,
+            "structural_frontier_schema_version": 1,
+            "evaluator_version": "W1-E1-COVERAGE-v2",
             "detector_ground_truth_access": False,
             "command": command,
             "exit_code": 0 if detector["status"] == "SUCCESS" else 2,
@@ -255,6 +259,8 @@ def generate_w1_e1_report(
         "peak_memory": "NOT_AVAILABLE",
         "run_id": run_id,
         "detector_ground_truth_access": False,
+        "e0_evaluator_sanity": sanity,
+        "scientific_method_changed": detector.get("scientific_method_changed", "NO"),
     }
     write_json(raw_dir / "metrics.json", summary)
     report = f"""# {run_id} — W1-E1 Candidate Path Coverage
@@ -269,9 +275,15 @@ def generate_w1_e1_report(
 
 - External input candidates: `{detector['external_input_candidates']}`
 - Security effect candidates: `{detector['security_effect_candidates']}`
+- Input anchors mappable: `{detector.get('input_anchor_mappable', 'NOT_AVAILABLE')}`
+- FW-active inputs: `{detector.get('fw_active_inputs', 'NOT_AVAILABLE')}`
+- Effect anchors mappable: `{detector.get('effect_anchor_mappable', 'NOT_AVAILABLE')}`
+- BW-active effects: `{detector.get('bw_active_effects', 'NOT_AVAILABLE')}`
 - Static connected paths: `{detector['static_connected_paths']}`
 - Frontier candidate paths: `{detector['frontier_candidate_paths']}`
+- Structural frontier diagnostics: `{detector.get('structural_frontier_count', 0)}`
 - Frontier reasons: `{detector['frontier_reason_counts']}`
+- Failure taxonomy: `{detector.get('failure_taxonomy_counts', {})}`
 - Candidate expansion factor: `{expansion_factor}`
 
 ## Independent coverage evaluation
@@ -283,6 +295,18 @@ def generate_w1_e1_report(
 - E0 coverage: `{coverage['baseline_coverage']}`
 - W1-E1 coverage: `{coverage['e1_coverage']}`
 - Baseline-miss recovery: `{coverage['baseline_miss_recovered']}`
+
+## E0 evaluator sanity
+
+- Native paths parsed: `{sanity.get('native_path_count', 'NOT_AVAILABLE')}`
+- Same-file locations: `{sanity.get('same_file_count', 'NOT_AVAILABLE')}`
+- Same-method locations: `{sanity.get('same_method_count_if_available', 'NOT_AVAILABLE')}`
+- Exact-line overlaps: `{sanity.get('exact_line_overlap_count', 'NOT_AVAILABLE')}`
+- Revision mismatches: `{sanity.get('revision_mismatch_count', 'NOT_AVAILABLE')}`
+
+## Scientific-method boundary
+
+- `scientific_method_changed = {detector.get('scientific_method_changed', 'NO')}`
 
 ## Boundary
 

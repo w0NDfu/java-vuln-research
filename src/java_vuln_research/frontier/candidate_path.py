@@ -4,8 +4,10 @@ import hashlib
 import json
 from typing import Any, Iterable, Mapping
 
+from .analysis_anchor import analysis_anchor_view
 
-SCHEMA_VERSION = 1
+
+SCHEMA_VERSION = 2
 ROUTE_BY_SOURCE = {"STATIC": "ROUTE_A", "STATIC_DERIVED": "ROUTE_A"}
 SUPPORTED_MECHANISMS = frozenset({"DATA", "CALL"})
 PATH_STATUSES = frozenset({"COMPLETE_STATIC", "PARTIAL_STATIC", "FRONTIER_GAP"})
@@ -85,7 +87,7 @@ def _path_id(material: Mapping[str, Any]) -> str:
     return "path-" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
 
 
-def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any], effect_candidate: Mapping[str, Any], intermediate_nodes: Iterable[Mapping[str, Any]], edges: Iterable[Mapping[str, Any]], path_status: str, detector_commit: str, unresolved_relations: Iterable[Mapping[str, Any]] = (), frontier_nodes: Iterable[Mapping[str, Any]] = (), frontier_reason: str | None = None, candidate_type_hypothesis: str = "UNKNOWN", provenance: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any], effect_candidate: Mapping[str, Any], input_analysis_anchor: Mapping[str, Any], effect_analysis_anchor: Mapping[str, Any], intermediate_nodes: Iterable[Mapping[str, Any]], edges: Iterable[Mapping[str, Any]], path_status: str, detector_commit: str, unresolved_relations: Iterable[Mapping[str, Any]] = (), frontier_nodes: Iterable[Mapping[str, Any]] = (), frontier_reason: str | None = None, candidate_type_hypothesis: str = "UNKNOWN", provenance: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Build an immutable Work1 path without asserting a vulnerability verdict."""
     if not project_id or not detector_commit:
         raise CandidatePathError("project_id and detector_commit are required")
@@ -95,6 +97,12 @@ def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any],
         raise CandidatePathError("FRONTIER_GAP requires a known frontier_reason")
     if path_status != "FRONTIER_GAP" and frontier_reason is not None:
         raise CandidatePathError("only FRONTIER_GAP may have a frontier_reason")
+    if input_analysis_anchor.get("mapping_status") != "MAPPED" or effect_analysis_anchor.get("mapping_status") != "MAPPED":
+        raise CandidatePathError("candidate path endpoints require mapped analysis anchors")
+    if str(input_analysis_anchor.get("candidate_id")) != str(input_candidate.get("candidate_id")):
+        raise CandidatePathError("input analysis anchor candidate_id mismatch")
+    if str(effect_analysis_anchor.get("candidate_id")) != str(effect_candidate.get("candidate_id")):
+        raise CandidatePathError("effect analysis anchor candidate_id mismatch")
     input_node, effect_node = endpoint_node(input_candidate, side="input"), endpoint_node(effect_candidate, side="effect")
     nodes = _normalise_nodes([input_node, *intermediate_nodes, effect_node])
     path_edges = _normalise_edges(edges, {node["node_id"] for node in nodes})
@@ -114,12 +122,15 @@ def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any],
     for node in nodes[1:-1]:
         if node["location"] not in source_locations:
             source_locations.append(node["location"])
-    identity = {"project_id": project_id, "input_candidate_id": str(input_candidate["candidate_id"]), "effect_candidate_id": str(effect_candidate["candidate_id"]), "path_nodes": nodes, "path_edges": path_edges, "path_status": path_status, "frontier_nodes": normalised_frontier, "frontier_reason": frontier_reason}
+    input_anchor_view = analysis_anchor_view(input_analysis_anchor)
+    effect_anchor_view = analysis_anchor_view(effect_analysis_anchor)
+    identity = {"project_id": project_id, "input_candidate_id": str(input_candidate["candidate_id"]), "effect_candidate_id": str(effect_candidate["candidate_id"]), "input_analysis_anchor": input_anchor_view, "effect_analysis_anchor": effect_anchor_view, "path_nodes": nodes, "path_edges": path_edges, "path_status": path_status, "frontier_nodes": normalised_frontier, "frontier_reason": frontier_reason}
     return {
         "candidate_path_id": _path_id(identity), "project_id": project_id,
         "input_candidate_id": str(input_candidate["candidate_id"]), "effect_candidate_id": str(effect_candidate["candidate_id"]),
         "input_entity": str(input_candidate["entity"]), "effect_entity": str(effect_candidate["entity"]),
         "input_discovery_route": discovery_route(input_candidate), "effect_discovery_route": discovery_route(effect_candidate),
+        "input_analysis_anchor": input_anchor_view, "effect_analysis_anchor": effect_anchor_view,
         "path_nodes": nodes, "path_edges": path_edges, "semantic_mechanisms": mechanisms,
         "unresolved_relations": [dict(item) for item in unresolved_relations], "path_status": path_status,
         "frontier_nodes": normalised_frontier, "frontier_reason": frontier_reason,

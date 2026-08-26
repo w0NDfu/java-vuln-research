@@ -25,8 +25,21 @@ git pull --ff-only
 /workspace/tools/codeql-2.26.3/codeql version
 java -version
 mvn -version
-/workspace/tools/codeql-2.26.3/codeql query compile codeql/candidate_path/DataCallConnected.ql
-/workspace/tools/codeql-2.26.3/codeql query compile codeql/candidate_path/DataCallFrontier.ql
+for query in \
+  AnalysisAnchors InputForward EffectBackward DataCallConnected DataCallFrontier
+do
+  /workspace/tools/codeql-2.26.3/codeql query compile "codeql/candidate_path/${query}.ql"
+done
+```
+
+Before a dataset run, execute the three Java/CodeQL controls. Toy A must
+produce a static connection, Toy B must stay disconnected, and Toy C must
+produce a diagnostic-only structural frontier:
+
+```bash
+CODEQL_BIN=/workspace/tools/codeql-2.26.3/codeql \
+bash scripts/run_w1_e1_toy.sh \
+  /workspace/experiment-output/W1-E1-TOY-YYYYMMDD-NNN
 ```
 
 ## Frozen E0 reference and a fresh E0 rerun
@@ -101,8 +114,14 @@ RUN_DIR=/workspace/experiment-output/W1-E1-YYYYMMDD-NNN
 ls -la "$RUN_DIR"
 ls -la "$RUN_DIR/logs"
 cat "$RUN_DIR/detector_metrics.json"
+cat "$RUN_DIR/analysis_anchors.jsonl"
+cat "$RUN_DIR/input_forward_funnel.jsonl"
+cat "$RUN_DIR/effect_backward_funnel.jsonl"
+cat "$RUN_DIR/structural_frontiers.jsonl"
+cat "$RUN_DIR/candidate_diagnostics.jsonl"
 cat "$RUN_DIR/project_status.jsonl"
 cat "$RUN_DIR/coverage_metrics.json"
+cat "$RUN_DIR/e0_evaluator_sanity.json"
 cat "$RUN_DIR/run_manifest.json"
 cat "$RUN_DIR/summary.md"
 ```
@@ -112,9 +131,12 @@ The detector must report `status: SUCCESS`, four runnable projects, and
 report zero coverage; that is a result, not a failure, if all required files
 exist and the manifest exit code is zero.
 
-## Completed reference run
+## Historical pre-interface reference run
 
 `W1-E1-20260826-003` completed in CloudStudio at
 `/workspace/experiment-output/W1-E1-20260826-003` with exit code 0.
 It used commit `9fec1cb`, completed all four frozen projects, ran 50.378
 seconds of CodeQL query time, and preserved detector/ground-truth isolation.
+Its zero-path result predates the explicit AnalysisAnchor and one-sided
+FW/BW funnel diagnostics, so it is an implementation baseline rather than a
+scientific conclusion.

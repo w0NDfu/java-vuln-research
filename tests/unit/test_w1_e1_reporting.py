@@ -48,5 +48,6 @@ def test_w1_e1_report_merges_detector_and_evaluator_outputs(tmp_path) -> None:
     assert summary["baseline_miss_recovered"] == 1
     persisted = json.loads((raw / "run_manifest.json").read_text(encoding="utf-8"))
     assert persisted["detector_ground_truth_access"] is False
-    assert persisted["candidate_schema_version"] == 1
+    assert persisted["candidate_schema_version"] == 2
+    assert persisted["analysis_anchor_schema_version"] == 1
     assert persisted["projects"] == [{"project_id": "P001", "revision": "abc", "db_id": "/db/P001"}]

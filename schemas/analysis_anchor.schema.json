@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analysis_anchor.schema.json",
+  "title": "W1-E1 candidate analysis anchor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_id", "project_id", "candidate_kind", "candidate_evidence_location", "anchor_kind", "value_role", "method_identity", "call_identity", "argument_index", "location", "mapping_status", "mapping_reason", "query_status", "schema_version"],
+  "properties": {
+    "candidate_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "candidate_kind": {"enum": ["EXTERNAL_INPUT", "SECURITY_EFFECT"]},
+    "candidate_evidence_location": {"$ref": "#/$defs/location"},
+    "anchor_kind": {"anyOf": [{"$ref": "#/$defs/anchor_kind"}, {"type": "null"}]},
+    "value_role": {"anyOf": [{"$ref": "#/$defs/anchor_kind"}, {"type": "null"}]},
+    "method_identity": {"type": ["string", "null"]},
+    "call_identity": {"type": ["string", "null"]},
+    "argument_index": {"type": ["integer", "null"], "minimum": 0},
+    "location": {"anyOf": [{"$ref": "#/$defs/location"}, {"type": "null"}]},
+    "mapping_status": {"enum": ["MAPPED", "UNMAPPABLE", "ADAPTER_ERROR"]},
+    "mapping_reason": {"type": "string", "minLength": 1},
+    "query_status": {"enum": ["SUCCESS", "QUERY_ERROR"]},
+    "schema_version": {"const": 1}
+  },
+  "$defs": {
+    "anchor_kind": {"enum": ["CALL_RESULT", "METHOD_RETURN", "PARAMETER", "CALLBACK_PARAMETER", "FIELD", "RECEIVER", "CALL_ARGUMENT", "CONSTRUCTOR_ARGUMENT", "METHOD_PARAMETER"]},
+    "location": {"type": "object", "additionalProperties": false, "required": ["file", "line"], "properties": {"file": {"type": "string", "minLength": 1}, "line": {"type": "integer", "minimum": 1}}}
+  }
+}

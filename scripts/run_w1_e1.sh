@@ -7,11 +7,13 @@ baseline_raw_dir="${2:?usage: run_w1_e1.sh P0A_ENDPOINT_OUTPUT E0_RAW_RUN DATASE
 dataset_name="${3:?usage: run_w1_e1.sh P0A_ENDPOINT_OUTPUT E0_RAW_RUN DATASET_NAME DATASET_REVISION [RUN_ID]}"
 dataset_revision="${4:?usage: run_w1_e1.sh P0A_ENDPOINT_OUTPUT E0_RAW_RUN DATASET_NAME DATASET_REVISION [RUN_ID]}"
 run_id="${5:-W1-E1-$(date -u +%Y%m%d-%H%M%S)}"
+detector_manifest="${6:-${PROJECT_ROOT}/experiments/frozen_configs/detector_manifest.yaml}"
 
 require_file "${PATHS_CONFIG}"
 require_file "${endpoint_output_dir}/external_inputs.jsonl"
 require_file "${endpoint_output_dir}/security_effects.jsonl"
 require_file "${baseline_raw_dir}/baseline/baseline_output.jsonl"
+require_file "${detector_manifest}"
 dataset_root="${W1_E1_DATASET_ROOT:-$(yaml_value "${PATHS_CONFIG}" dataset_root)}"
 output_base="$(yaml_value "${PATHS_CONFIG}" experiment_output_root)"
 require_value "dataset_root" "${dataset_root}"
@@ -24,7 +26,7 @@ fi
 
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 set +e
-bash "${PROJECT_ROOT}/scripts/run_w1_e1_paths.sh" "${endpoint_output_dir}" "${output_root}"
+bash "${PROJECT_ROOT}/scripts/run_w1_e1_paths.sh" "${endpoint_output_dir}" "${output_root}" "${detector_manifest}"
 detector_exit=$?
 set -e
 # A partial detector run still has frozen candidate output that the independent
@@ -34,7 +36,12 @@ if [[ ! -f "${output_root}/candidate_paths.jsonl" || ! -f "${output_root}/detect
 fi
 bash "${PROJECT_ROOT}/scripts/evaluate_w1_e1.sh" \
   "${output_root}/candidate_paths.jsonl" \
-  "${PROJECT_ROOT}/experiments/frozen_configs/detector_manifest.yaml" \
+  "${detector_manifest}" \
+  "${dataset_root}" \
+  "${baseline_raw_dir}" \
+  "${output_root}"
+bash "${PROJECT_ROOT}/scripts/sanity_e0_evaluator.sh" \
+  "${detector_manifest}" \
   "${dataset_root}" \
   "${baseline_raw_dir}" \
   "${output_root}"
@@ -45,8 +52,8 @@ bash "${PROJECT_ROOT}/scripts/evaluate_w1_e1.sh" \
   --project-root "${PROJECT_ROOT}" \
   --dataset-name "${dataset_name}" \
   --dataset-revision "${dataset_revision}" \
-  --detector-manifest "${PROJECT_ROOT}/experiments/frozen_configs/detector_manifest.yaml" \
+  --detector-manifest "${detector_manifest}" \
   --config "${PROJECT_ROOT}/configs/p0.yaml" \
   --started-at "${started_at}" \
-  --command "scripts/run_w1_e1.sh ${endpoint_output_dir} ${baseline_raw_dir} ${dataset_name} ${dataset_revision} ${run_id}"
+  --command "scripts/run_w1_e1.sh ${endpoint_output_dir} ${baseline_raw_dir} ${dataset_name} ${dataset_revision} ${run_id} ${detector_manifest}"
 exit "${detector_exit}"

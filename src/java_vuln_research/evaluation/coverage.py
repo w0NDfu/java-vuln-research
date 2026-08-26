@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping
 
 from ..common.contracts import load_detector_manifest
 from ..common.io import read_jsonl, write_json, write_jsonl
+from ..common.paths import same_program_file
 
 
 NOT_EVALUABLE = "NOT_EVALUABLE"
@@ -34,17 +35,8 @@ def _read_csv(path: str | Path, required: set[str]) -> list[dict[str, str]]:
         return [dict(row) for row in reader]
 
 
-def _normalise_path(value: str) -> str:
-    return value.replace("\\", "/").lstrip("./").lower()
-
-
 def _same_file(left: str, right: str) -> bool:
-    left_path, right_path = _normalise_path(left), _normalise_path(right)
-    return bool(left_path and right_path) and (
-        left_path == right_path
-        or left_path.endswith("/" + right_path)
-        or right_path.endswith("/" + left_path)
-    )
+    return same_program_file(left, right)
 
 
 def _optional_int(value: str | None, *, field: str) -> int | None:
