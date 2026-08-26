@@ -8,21 +8,19 @@ import semmle.code.java.dataflow.DataFlow
 import semmle.code.java.dataflow.TaintTracking
 import candidate_path.EndpointCandidates
 
-class W1E1FrontierConfig extends TaintTracking::Configuration {
-  W1E1FrontierConfig() { this = "W1E1FrontierConfig" }
-
-  override predicate isSource(DataFlow::Node source) {
+module W1E1FrontierConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) {
     exists(string file, int line | externalInputNode(source, file, line))
   }
 
-  override predicate isSink(DataFlow::Node sink) {
+  predicate isSink(DataFlow::Node sink) {
     exists(string file, int line | securityEffectNode(sink, file, line))
   }
 }
 
 module W1E1FrontierFlow = TaintTracking::Global<W1E1FrontierConfig>;
 
-from W1E1FrontierConfig config, DataFlow::Node source, DataFlow::Node sink,
+from DataFlow::Node source, DataFlow::Node sink,
   Callable caller, Callable callee, MethodCall call,
   string sourceFile, int sourceLine, string effectFile, int effectLine
 where

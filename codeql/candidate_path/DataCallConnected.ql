@@ -10,14 +10,12 @@ import semmle.code.java.dataflow.DataFlow
 import semmle.code.java.dataflow.TaintTracking
 import candidate_path.EndpointCandidates
 
-class W1E1DataCallConfig extends TaintTracking::Configuration {
-  W1E1DataCallConfig() { this = "W1E1DataCallConfig" }
-
-  override predicate isSource(DataFlow::Node source) {
+module W1E1DataCallConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) {
     exists(string file, int line | externalInputNode(source, file, line))
   }
 
-  override predicate isSink(DataFlow::Node sink) {
+  predicate isSink(DataFlow::Node sink) {
     exists(string file, int line | securityEffectNode(sink, file, line))
   }
 }
