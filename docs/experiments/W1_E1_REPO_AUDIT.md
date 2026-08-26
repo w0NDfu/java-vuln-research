@@ -7,9 +7,9 @@
 ## Scope and evidence boundary
 
 This audit is limited to the checked-out Git repository plus read-only
-CloudStudio UI state.  Raw experiment outputs are intentionally ignored by
-Git.  The audit does not treat an untracked raw-output path as proven merely
-because it is expected by a script.
+CloudStudio UI state. Raw experiment outputs are intentionally ignored by
+Git. CloudStudio terminal verification on 2026-08-26 establishes the raw
+artifact locations recorded below; it does not add those raw files to Git.
 
 ## Answers required before W1-E1
 
@@ -28,13 +28,14 @@ because it is expected by a script.
    `external_inputs.jsonl`, `security_effects.jsonl`, `project_status.jsonl`,
    and `summary.json` below the caller-supplied P0-A output root. These raw
    files are excluded by `.gitignore` (`experiment-output/`, `raw-results/`,
-   `*.bqrs`, and logs). No tracked report or manifest points to the exact
-   historical raw directory, so the repository alone cannot prove its current
-   CloudStudio path. The visible CloudStudio workspace has
-   `/workspace/experiment-output`, but a CloudStudio security challenge
-   prevented terminal inspection during this audit. Treat the historical
-   61/22 count as **externally unverified until its summary is read again**;
-   never regenerate candidates merely to reproduce the number.
+   `*.bqrs`, and logs). CloudStudio verification established the frozen P0-A
+   directory as `/workspace/experiment-output/MSA-P0-A-20260824-001`: its
+   summary reports 4 successful projects, 61 external inputs, and 22
+   security effects. The frozen E0 directory is
+   `/workspace/experiment-output/MSA-P0-E0-20260824-005`; its baseline
+   output reports 85 alerts and 59 paths across the same four projects.
+   These raw directories remain immutable inputs; W1-E1 must not regenerate
+   or overwrite them.
 4. **Stable entity identity:** yes for candidate identity within a frozen
    discovery run. `discovery.runner._candidate_id` hashes the project and
    decoded deterministic CodeQL row. Each candidate also retains project,
@@ -61,9 +62,9 @@ because it is expected by a script.
    builder, and import-boundary test can be reused. No reusable bidirectional
    Data/Call path extractor exists yet.
 9. **Known blockers:**
-   - Historical P0-A raw candidate JSONL is not represented by a tracked
-     artifact pointer; exact Cloud path and counts require a later read-only
-     CloudStudio terminal check.
+   - Historical P0-A and E0 raw JSONL/SARIF are not represented by a tracked
+     artifact pointer. Their verified CloudStudio locations are recorded in
+     this audit and the runbook, but remain environment-specific.
    - No Candidate Path IR, Data/Call query, coverage matcher, or frontier
      report exists.
    - E0 raw SARIF is ignored, so a W1-E1 evaluator must accept the E0 raw run
