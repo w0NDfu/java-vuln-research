@@ -1,0 +1,66 @@
+schema_version: 1
+projects:
+  - project: P006
+    revision: f04bbec461f2c2a6f1e2cf41770f42c64aae24a4
+    source_path: /workspace/msa-p0-devset/projects/P006
+    codeql_db_path: /workspace/msa-p0-devset/codeql-dbs/P006
+  - project: P007
+    revision: 8bebe1eb2ec1ac23e34111e9d06024d7dab7fa25
+    source_path: /workspace/msa-p0-devset/projects/P007
+    codeql_db_path: /workspace/msa-p0-devset/codeql-dbs/P007
+  - project: P010
+    revision: 97e39dde7e88aae802be98de084a382886ca4255
+    source_path: /workspace/msa-p0-devset/projects/P010
+    codeql_db_path: /workspace/msa-p0-devset/codeql-dbs/P010
+  - project: P012
+    revision: 34493c66edb490396202edad66c5f8cc5717d494
+    source_path: /workspace/msa-p0-devset/projects/P012
+    codeql_db_path: /workspace/msa-p0-devset/codeql-dbs/P012
+  - project: D001
+    revision: ce57dfb949ed183405f75dee8cf3262b45c9b3b5
+    source_path: /workspace/w1-e1-dev8/projects/D001
+    codeql_db_path: /workspace/w1-e1-dev8/codeql-dbs/D001
+  - project: D002
+    revision: 5316c0d0f057daaf556c3907c20df975f7bf8a8a
+    source_path: /workspace/w1-e1-dev8/projects/D002
+    codeql_db_path: /workspace/w1-e1-dev8/codeql-dbs/D002
+  - project: D003
+    revision: 768c6e417a75e7732fc591bee844e5e81af56a7d
+    source_path: /workspace/w1-e1-dev8/projects/D003
+    codeql_db_path: /workspace/w1-e1-dev8/codeql-dbs/D003
+  - project: D004
+    revision: d03f6987b793fac71ab89a31d7aa633c366c5289
+    source_path: /workspace/w1-e1-dev8/projects/D004
+    codeql_db_path: /workspace/w1-e1-dev8/codeql-dbs/D004
+  - project: V001
+    revision: 7158698314daa138e993fac6a590ed19d78a8599
+    source_path: /workspace/w1-e1-dev16/projects/V001
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V001
+  - project: V002
+    revision: 7687720c5125b29386d3bb9c7c2931da79664b73
+    source_path: /workspace/w1-e1-dev16/projects/V002
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V002
+  - project: V003
+    revision: 38ff2a986af24ee255f1f91d654ea402f4016696
+    source_path: /workspace/w1-e1-dev16/projects/V003
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V003
+  - project: V004
+    revision: b9f9a425865eb47fb3665b3144ee4ca11f402704
+    source_path: /workspace/w1-e1-dev16/projects/V004
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V004
+  - project: V005
+    revision: d87ffa2d64ffb3a0a1cf0c7a69c7b19d7015bfde
+    source_path: /workspace/w1-e1-dev16/projects/V005
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V005
+  - project: V006
+    revision: 10727cab59a8fc2ae053bec6b2f26f48f1c4245c
+    source_path: /workspace/w1-e1-dev16/projects/V006
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V006
+  - project: V007
+    revision: 9ce20009d6bf726086fc528fceb174933077bff4
+    source_path: /workspace/w1-e1-dev16/projects/V007
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V007
+  - project: V008
+    revision: b3a9d82d5830ef9cd7811cfa3f86a373ae52fada
+    source_path: /workspace/w1-e1-dev16/projects/V008
+    codeql_db_path: /workspace/w1-e1-dev16/codeql-dbs/V008
