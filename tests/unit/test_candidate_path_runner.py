@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from java_vuln_research.frontier.runner import (
+    connected_paths_from_rows,
     connected_paths_from_sarif,
     frontier_paths_from_rows,
 )
@@ -69,6 +70,29 @@ def test_connected_sarif_paths_keep_existing_endpoint_ids(tmp_path) -> None:
     assert paths[0]["effect_candidate_id"] == "eff-1"
     assert paths[0]["path_status"] == "COMPLETE_STATIC"
     assert paths[0]["semantic_mechanisms"] == ["DATA"]
+
+
+def test_connected_rows_keep_only_codeql_proven_endpoint_ids() -> None:
+    paths, unmapped = connected_paths_from_rows(
+        project_id="P001",
+        rows=[
+            {
+                "source_file": "src/A.java",
+                "source_line": "10",
+                "effect_file": "src/B.java",
+                "effect_line": "30",
+            }
+        ],
+        inputs=[_endpoint("ext-1", "EXTERNAL_INPUT", "src/A.java", 10)],
+        effects=[_endpoint("eff-1", "SECURITY_EFFECT", "src/B.java", 30)],
+        detector_commit="commit-1",
+    )
+
+    assert unmapped == 0
+    assert len(paths) == 1
+    assert paths[0]["path_status"] == "COMPLETE_STATIC"
+    assert paths[0]["semantic_mechanisms"] == ["DATA"]
+    assert paths[0]["provenance"]["analysis_mode"] == "CODEQL_GLOBAL_TAINT_FLOW"
 
 
 def test_frontier_rows_are_not_claimed_as_static_dataflow() -> None:

@@ -24,6 +24,7 @@ FRONTIER_COLUMNS = (
     "call_line",
     "frontier_reason",
 )
+CONNECTED_COLUMNS = ("source_file", "source_line", "effect_file", "effect_line")
 
 
 class CandidatePathRunError(RuntimeError):
@@ -228,8 +229,52 @@ def frontier_paths_from_rows(
     return paths, unmapped
 
 
-def _run_connected_query(*, codeql: str, database: Path, query: Path, output: Path, log: Path, threads: int, ram_mb: int | None) -> float:
-    command = [codeql, "database", "analyze", str(database), str(query), "--format=sarif-latest", f"--output={output}", f"--threads={threads}"]
+def connected_paths_from_rows(
+    *,
+    project_id: str,
+    rows: Iterable[Mapping[str, str]],
+    inputs: Iterable[Mapping[str, Any]],
+    effects: Iterable[Mapping[str, Any]],
+    detector_commit: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """Map CodeQL-proven global taint flows without inventing path-graph nodes."""
+    input_index, effect_index = _endpoint_index(inputs), _endpoint_index(effects)
+    paths: list[dict[str, Any]] = []
+    unmapped = 0
+    for row in rows:
+        input_candidate = _unique_match(input_index, {"file": row["source_file"], "line": int(row["source_line"])})
+        effect_candidate = _unique_match(effect_index, {"file": row["effect_file"], "line": int(row["effect_line"])})
+        if input_candidate is None or effect_candidate is None:
+            unmapped += 1
+            continue
+        edges = [{
+            "from_node_id": f"input:{input_candidate['candidate_id']}",
+            "to_node_id": f"effect:{effect_candidate['candidate_id']}",
+            "mechanism": "DATA",
+            "evidence": {"kind": "CODEQL_GLOBAL_TAINT_FLOW"},
+        }]
+        try:
+            paths.append(build_candidate_path(
+                project_id=project_id,
+                input_candidate=input_candidate,
+                effect_candidate=effect_candidate,
+                intermediate_nodes=[],
+                edges=edges,
+                path_status="COMPLETE_STATIC",
+                detector_commit=detector_commit,
+                provenance={
+                    "query": "candidate_path/DataCallConnected.ql",
+                    "analysis_mode": "CODEQL_GLOBAL_TAINT_FLOW",
+                    "path_graph": "UNAVAILABLE_IN_PACK_VERSION",
+                },
+            ))
+        except CandidatePathError as error:
+            raise CandidatePathRunError(str(error)) from error
+    return paths, unmapped
+
+
+def _run_connected_query(*, codeql: str, database: Path, query: Path, output: Path, log: Path, threads: int, ram_mb: int | None) -> tuple[list[dict[str, str]], float]:
+    command = [codeql, "query", "run", str(query), f"--database={database}", f"--output={output}", f"--threads={threads}"]
     if ram_mb is not None:
         command.append(f"--ram={ram_mb}")
     started = time.monotonic()
@@ -237,9 +282,10 @@ def _run_connected_query(*, codeql: str, database: Path, query: Path, output: Pa
     log.write_text(completed.stdout or "", encoding="utf-8")
     if completed.returncode != 0:
         raise CandidatePathRunError(f"connected query failed with exit code {completed.returncode}")
-    if not output.is_file():
-        raise CandidatePathRunError("connected query did not create SARIF")
-    return time.monotonic() - started
+    decoded = subprocess.run([codeql, "bqrs", "decode", "--format=csv", "--no-titles", str(output)], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if decoded.returncode != 0:
+        raise CandidatePathRunError(f"connected BQRS decode failed with exit code {decoded.returncode}")
+    return _decode_csv(decoded.stdout, CONNECTED_COLUMNS), time.monotonic() - started
 
 
 def _run_frontier_query(*, codeql: str, database: Path, query: Path, output: Path, log: Path, threads: int, ram_mb: int | None) -> tuple[list[dict[str, str]], float]:
@@ -297,9 +343,10 @@ def run_w1_e1_paths(*, detector_manifest: str | Path, endpoint_output_dir: str |
             status.update(status="SUCCESS", static_connected_paths=0, frontier_candidate_paths=0, unmapped_query_results=0, stage="NO_ANCHOR_PAIR")
         else:
             try:
-                connected_sarif = bqrs_dir / f"{project_id}.connected.sarif"
-                total_query_time += _run_connected_query(codeql=codeql, database=database, query=connected_query, output=connected_sarif, log=logs_dir / f"{project_id}.connected.codeql.log", threads=threads, ram_mb=ram_mb)
-                connected, unmapped_connected = connected_paths_from_sarif(project_id=project_id, sarif_file=connected_sarif, inputs=project_inputs, effects=project_effects, detector_commit=detector_commit)
+                connected_bqrs = bqrs_dir / f"{project_id}.connected.bqrs"
+                connected_rows, connected_time = _run_connected_query(codeql=codeql, database=database, query=connected_query, output=connected_bqrs, log=logs_dir / f"{project_id}.connected.codeql.log", threads=threads, ram_mb=ram_mb)
+                total_query_time += connected_time
+                connected, unmapped_connected = connected_paths_from_rows(project_id=project_id, rows=connected_rows, inputs=project_inputs, effects=project_effects, detector_commit=detector_commit)
                 frontier_bqrs = bqrs_dir / f"{project_id}.frontier.bqrs"
                 frontier_rows, frontier_time = _run_frontier_query(codeql=codeql, database=database, query=frontier_query, output=frontier_bqrs, log=logs_dir / f"{project_id}.frontier.codeql.log", threads=threads, ram_mb=ram_mb)
                 total_query_time += frontier_time
