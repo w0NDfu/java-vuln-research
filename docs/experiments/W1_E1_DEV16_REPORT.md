@@ -7,7 +7,8 @@
 - 选择说明：docs/experiments/W1_E1_DEV16_SELECTION.md
 - 运行手册：docs/experiments/W1_E1_DEV16_RUNBOOK.md
 - 云端分支：exp/w1-e1-candidate-path-coverage
-- 云端 HEAD：8996d094ad06123c95024d60b27aee5838a0f8bd
+- 冻结基线 HEAD：8996d094ad06123c95024d60b27aee5838a0f8bd
+- 报告提交 HEAD：85ae87c9217dcb8ec676eff4318bf3fb81ac64e4
 - 规模：18 个项目（Dev8 基线 8 个，新增验证 10 个）。
 - 项目状态：18/18 SUCCESS，unknown_count=0。
 - 云端环境：CodeQL CLI 2.26.3；Java 17.0.10；按同一 W1 语义重新建库并运行。
