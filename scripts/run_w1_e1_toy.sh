@@ -38,17 +38,38 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+endpoint_root = root.parent / "p0a"
+
+def read_jsonl(path):
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
 metrics = json.loads((root / "detector_metrics.json").read_text(encoding="utf-8"))
-diagnostics = [json.loads(line) for line in (root / "candidate_diagnostics.jsonl").read_text(encoding="utf-8").splitlines() if line]
+paths = read_jsonl(root / "candidate_paths.jsonl")
+frontiers = read_jsonl(root / "structural_frontiers.jsonl")
+candidates = read_jsonl(endpoint_root / "external_inputs.jsonl") + read_jsonl(endpoint_root / "security_effects.jsonl")
+entity_by_id = {row["candidate_id"]: row["entity"] for row in candidates}
+
+connected_pairs = [
+    (entity_by_id[row["input_candidate_id"]], entity_by_id[row["effect_candidate_id"]])
+    for row in paths
+]
+frontier_pairs = [
+    (entity_by_id[row["input_candidate_id"]], entity_by_id[row["effect_candidate_id"]])
+    for row in frontiers
+]
 
 checks = {
     "inputs_mappable": metrics["input_anchor_mappable"] >= 3,
     "effects_mappable": metrics["effect_anchor_mappable"] >= 3,
     "forward_active": metrics["fw_active_inputs"] >= 2,
     "backward_active": metrics["bw_active_effects"] >= 2,
-    "toy_a_connected": metrics["static_candidate_paths"] >= 1,
-    "toy_b_disconnected": any(row["classification"] in {"EMPTY_FW", "EMPTY_BW", "DIFFERENT_CALL_REGION"} for row in diagnostics),
-    "toy_c_structural": metrics["structural_frontier_count"] >= 1,
+    "toy_a_connected": any("ToyCases.connected" in left and "ToyCases.connected" in right for left, right in connected_pairs),
+    "toy_b_disconnected": not any("ToyCases.disconnected" in left and "ToyCases.disconnected" in right for left, right in connected_pairs),
+    "toy_c_structural": any("ToyCases.structural" in left and "ToyCases.structural" in right for left, right in frontier_pairs),
+    "frontiers_diagnostic_only": bool(frontiers) and all(
+        row["diagnostic_only"] is True and row["adds_propagation_edge"] is False
+        for row in frontiers
+    ),
 }
 failed = [name for name, passed in checks.items() if not passed]
 print(json.dumps({"checks": checks, "metrics": metrics}, ensure_ascii=False, indent=2))
