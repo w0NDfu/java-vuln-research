@@ -8,7 +8,6 @@
 import java
 import semmle.code.java.dataflow.DataFlow
 import semmle.code.java.dataflow.TaintTracking
-import DataFlow::PathGraph
 import candidate_path.EndpointCandidates
 
 class W1E1DataCallConfig extends TaintTracking::Configuration {
@@ -23,9 +22,11 @@ class W1E1DataCallConfig extends TaintTracking::Configuration {
   }
 }
 
-from W1E1DataCallConfig config, DataFlow::PathNode source, DataFlow::PathNode sink
-where config.hasFlowPath(source, sink)
-select sink.getNode(), source, sink,
+module W1E1DataCallFlow = TaintTracking::Global<W1E1DataCallConfig>;
+
+from DataFlow::Node source, DataFlow::Node sink
+where W1E1DataCallFlow::flow(source, sink)
+select sink.asExpr(), source.asExpr(), sink.asExpr(),
   "W1-E1 data/call candidate path from $@ to $@.",
-  source.getNode(), "external input candidate",
-  sink.getNode(), "security effect candidate"
+  source.asExpr(), "external input candidate",
+  sink.asExpr(), "security effect candidate"

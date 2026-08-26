@@ -20,6 +20,8 @@ class W1E1FrontierConfig extends TaintTracking::Configuration {
   }
 }
 
+module W1E1FrontierFlow = TaintTracking::Global<W1E1FrontierConfig>;
+
 from W1E1FrontierConfig config, DataFlow::Node source, DataFlow::Node sink,
   Callable caller, Callable callee, MethodCall call,
   string sourceFile, int sourceLine, string effectFile, int effectLine
@@ -30,6 +32,6 @@ where
   effectCallable(sink, callee) and
   call.getEnclosingCallable() = caller and
   call.getMethod() = callee and
-  not config.hasFlow(source, sink)
+  not W1E1FrontierFlow::flow(source, sink)
 select sourceFile, sourceLine, effectFile, effectLine,
   call.getLocation().getFile().getRelativePath(), call.getLocation().getStartLine(), "OTHER"
