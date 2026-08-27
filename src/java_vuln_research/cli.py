@@ -16,12 +16,15 @@ from .discovery import DiscoveryError, run_p0a_discovery
 from .evaluation import (
     CandidateCoverageError,
     P0AEvaluationError,
+    RouteBEvaluationError,
     evaluate_candidate_coverage,
     evaluate_e0_sanity,
     evaluate_p0a,
+    evaluate_p0_b_route_b,
 )
 from .frontier import AnalysisAnchorError, CandidatePathRunError, run_w1_e1_paths
 from .native_pool import evaluate_native_pool, run_p0_a1_native_pool
+from .route_b_detector import RouteBError, run_p0_b_route_b
 from .preflight import PreflightError, run_preflight
 from .reporting import generate_e0_report, generate_w1_e1_report
 
@@ -171,6 +174,35 @@ def _command_evaluate_native_pool(args: argparse.Namespace) -> int:
     )
     _json_print(summary)
     return 0
+
+
+def _command_run_p0_b_route_b(args: argparse.Namespace) -> int:
+    summary = run_p0_b_route_b(
+        detector_manifest=args.detector_manifest,
+        native_pool_path=args.native_pool,
+        query_root=args.query_root,
+        output_root=args.output_root,
+        project_root=args.project_root,
+        run_id=args.run_id,
+        threads=args.threads,
+        ram_mb=args.ram_mb,
+        codeql_executable=args.codeql,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_evaluate_p0_b_route_b(args: argparse.Namespace) -> int:
+    summary = evaluate_p0_b_route_b(
+        native_pool_path=args.native_pool,
+        unified_pool_path=args.unified_pool,
+        detector_manifest=args.detector_manifest,
+        project_info_csv=args.project_info,
+        fix_info_csv=args.fix_info,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
 
 
 def _command_report_w1_e1(args: argparse.Namespace) -> int:
@@ -348,6 +380,27 @@ def build_parser() -> argparse.ArgumentParser:
     native_eval.add_argument("--output-root", required=True)
     native_eval.set_defaults(func=_command_evaluate_native_pool)
 
+    route_b = commands.add_parser("run-p0-b-route-b")
+    route_b.add_argument("--detector-manifest", required=True)
+    route_b.add_argument("--native-pool", required=True)
+    route_b.add_argument("--query-root", required=True)
+    route_b.add_argument("--output-root", required=True)
+    route_b.add_argument("--project-root", required=True)
+    route_b.add_argument("--run-id", required=True)
+    route_b.add_argument("--threads", type=int, default=0)
+    route_b.add_argument("--ram-mb", type=int)
+    route_b.add_argument("--codeql", default="codeql")
+    route_b.set_defaults(func=_command_run_p0_b_route_b)
+
+    route_b_eval = commands.add_parser("evaluate-p0-b-route-b")
+    route_b_eval.add_argument("--native-pool", required=True)
+    route_b_eval.add_argument("--unified-pool", required=True)
+    route_b_eval.add_argument("--detector-manifest", required=True)
+    route_b_eval.add_argument("--project-info", required=True)
+    route_b_eval.add_argument("--fix-info", required=True)
+    route_b_eval.add_argument("--output-root", required=True)
+    route_b_eval.set_defaults(func=_command_evaluate_p0_b_route_b)
+
     report_w1_e1 = commands.add_parser("report-w1-e1")
     report_w1_e1.add_argument("--run-id", required=True)
     report_w1_e1.add_argument("--raw-run-dir", required=True)
@@ -386,6 +439,8 @@ def main(argv: list[str] | None = None) -> int:
         AnalysisAnchorError,
         DiscoveryError,
         P0AEvaluationError,
+        RouteBEvaluationError,
+        RouteBError,
         PreflightError,
         KeyError,
         ValueError,

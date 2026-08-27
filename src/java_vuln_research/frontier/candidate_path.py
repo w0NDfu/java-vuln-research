@@ -130,7 +130,8 @@ def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any],
     identity = {"project_id": project_id, "input_candidate_id": str(input_candidate["candidate_id"]), "effect_candidate_id": str(effect_candidate["candidate_id"]), "input_analysis_anchor": input_anchor_view, "effect_analysis_anchor": effect_anchor_view, "path_nodes": nodes, "path_edges": path_edges, "path_status": path_status, "frontier_nodes": normalised_frontier, "frontier_reason": frontier_reason}
     route = discovery_route_override or discovery_route(input_candidate)
     effect_route = discovery_route_override or discovery_route(effect_candidate)
-    if route not in {"ROUTE_A", "ROUTE_B", "ROUTE_C", "CODEQL_NATIVE"} or effect_route not in {"ROUTE_A", "ROUTE_B", "ROUTE_C", "CODEQL_NATIVE"}:
+    supported_routes = {"ROUTE_A", "ROUTE_B", "ROUTE_B_STATIC", "ROUTE_C", "CODEQL_NATIVE"}
+    if route not in supported_routes or effect_route not in supported_routes:
         raise CandidatePathError("unsupported discovery route")
     native_fields = {
         "path_origin": path_origin,
