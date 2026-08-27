@@ -55,6 +55,23 @@ def test_security_effect_preserves_critical_parameter_role() -> None:
 
     candidate = security_effect_candidate(project="P002", revision="def", row=row)
 
+    assert {
+        "candidate_id",
+        "project_id",
+        "effect_type",
+        "entity",
+        "callee_identity",
+        "method_identity",
+        "call_identity",
+        "critical_role",
+        "argument_index",
+        "anchor_kind",
+        "location",
+        "discovery_route",
+        "evidence_kind",
+        "primitive_rule_id",
+        "provenance",
+    } <= set(candidate)
     assert candidate["effect_type"] == "PROCESS_EXECUTION"
     assert candidate["critical_roles"] == ["parameter:command"]
     assert candidate["source"] == "STATIC_DERIVED"
@@ -62,6 +79,10 @@ def test_security_effect_preserves_critical_parameter_role() -> None:
     assert candidate["critical_role"] == "parameter:command"
     assert candidate["callee_identity"] == "java.lang.Runtime.exec/1"
     assert candidate["method_identity"] == "demo.CommandService.run/1"
+    assert candidate["call_identity"] == (
+        "java.lang.Runtime.exec/1@src/main/java/demo/CommandService.java:21"
+    )
+    assert candidate["evidence_kind"] == "DIRECT_PARAMETER_EFFECT_WRAPPER"
     assert candidate["argument_index"] == 0
     assert candidate["anchor_kind"] == "CALL_ARGUMENT"
     assert candidate["location"] == {
@@ -84,4 +105,3 @@ def test_deduplicate_candidates_is_stable_and_sorted() -> None:
         {"candidate_id": "ext-a", "value": 1},
         {"candidate_id": "ext-b", "value": 2},
     ]
-

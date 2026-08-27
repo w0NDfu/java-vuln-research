@@ -85,7 +85,7 @@ This directly repairs the frozen 59-versus-62 discrepancy and the inconsistent B
 
 ### 6.1 Fixture contract
 
-The JDK-only taxonomy fixture includes, for each newly added family:
+The isolated taxonomy fixture uses JDK APIs plus a minimal local Jakarta servlet interface stub. For each newly added or adjusted family it includes:
 
 - a positive correctly typed API use;
 - a same-name method on an unrelated type, which must not match;
@@ -97,13 +97,16 @@ The contract test checks shared-model use, effect-type enumeration, type/signatu
 
 Executed in CloudStudio:
 
-    python -m pytest -q tests/unit/test_discovery.py tests/unit/test_w1_e1_attribution.py tests/unit/test_security_effect_taxonomy_contract.py
-    16 passed in 0.17s
-
-Full unit suite:
-
     python -m pytest -q tests/unit
-    41 passed in 4.61s
+    42 passed in 4.51s
+
+Executable CodeQL taxonomy/AnalysisAnchor contract against an isolated, non-benchmark Java fixture database:
+
+    CODEQL_BIN=/workspace/tools/codeql/codeql \
+      python -m pytest -q tests/integration/test_security_effect_taxonomy_codeql.py
+    1 passed in 71.46s
+
+The executable contract observed the expected typed JDK/Jakarta calls for regex evaluation, deserialization, filesystem receiver access, cryptographic configuration, network output, redirect, and response-header output. It asserted the exact effect_type, primitive_rule_id, argument index, critical role, and AnalysisAnchor kind; every same-name call on the unrelated fixture types was absent.
 
 Python compilation:
 
@@ -123,7 +126,7 @@ CodeQL query-plan compilation:
 
 SecurityEffectDiscovery.ql was compiled again after adding its stable query id and completed successfully without the prior table-query metadata warning. git diff --check also passed.
 
-No CodeQL database query and no 18-project W1-E1 rerun were executed.
+Only the isolated toy fixture database was created and queried. No frozen project CodeQL database was queried and no 18-project W1-E1 rerun was executed.
 
 ## 7. Next-stage rerun
 
