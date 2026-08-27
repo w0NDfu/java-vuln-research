@@ -109,30 +109,88 @@ A looser effect audit classified the 437 E0 terminals as:
 
 The 81 TRUE_MISSING paths occur in D001, D003, D004, and P006. At rule-family level they are log injection 9, path injection 48, polynomial ReDoS 12, and regex injection 12. This is an aggregate post-hoc diagnosis, not a detector rule list.
 
-### 4.2 E0 sink-space distribution
+### 4.2 E0 semantic-space distribution
 
-| E0 rule family | Paths | Unique terminal sites |
-|---|---:|---:|
-| log injection | 118 | 41 |
-| path injection | 97 | 23 |
-| sensitive log | 85 | 39 |
-| user-controlled bypass | 39 | 8 |
-| polynomial ReDoS | 23 | 6 |
-| potentially weak crypto algorithm | 15 | 5 |
-| regex injection | 12 | 3 |
-| unvalidated redirect | 12 | 4 |
-| unsafe deserialization | 7 | 2 |
-| HTTP response splitting | 6 | 2 |
-| local temp information disclosure | 4 | 3 |
-| SSRF | 4 | 1 |
-| weak crypto algorithm | 4 | 1 |
-| CSRF-unprotected request | 3 | 1 |
-| XSS | 3 | 1 |
-| XXE | 3 | 1 |
-| trust-boundary violation | 2 | 1 |
-| **Total** | **437** | **120** |
+The audit keeps four grains separate. The 437 path rows contain 142 rule-scoped sink identities, because one physical callsite may be reported by more than one rule. Removing rule_id from the identity gives 120 global sink identities and 120 global callsites, distributed over 9 projects.
 
-## 5. Coverage judgment
+| rule_id | Neutral family | Paths | Rule-scoped sink identities / callsites | Projects | Callee/API family observed at the terminal | CALLSITE | EFFECT_TYPE | TRUE_MISSING |
+|---|---|---:|---:|---:|---|---:|---:|---:|
+| `java/log-injection` | log injection | 118 | 41 | 5 | SLF4J/Log4j/JUL-style logging calls | 1 | 108 | 9 |
+| `java/path-injection` | path injection | 97 | 23 | 4 | file/path constructors, streams and resource/file operations | 4 | 45 | 48 |
+| `java/sensitive-log` | sensitive data in logs | 85 | 39 | 3 | logging calls with data-bearing arguments | 0 | 85 | 0 |
+| `java/user-controlled-bypass` | user-controlled security bypass | 39 | 8 | 3 | authorization/policy decisions and security-sensitive branches | 0 | 39 | 0 |
+| `java/polynomial-redos` | polynomial ReDoS | 23 | 6 | 5 | regex compilation/evaluation APIs | 0 | 11 | 12 |
+| `java/potentially-weak-cryptographic-algorithm` | potentially weak crypto configuration | 15 | 5 | 1 | JCA/JCE algorithm factory calls | 0 | 15 | 0 |
+| `java/regex-injection` | regex injection | 12 | 3 | 3 | Pattern/String regex APIs | 0 | 0 | 12 |
+| `java/unvalidated-url-redirection` | unvalidated redirect | 12 | 4 | 2 | servlet redirect APIs | 0 | 12 | 0 |
+| `java/unsafe-deserialization` | unsafe deserialization | 7 | 2 | 1 | object/XML deserialization readers | 0 | 7 | 0 |
+| `java/http-response-splitting` | HTTP response splitting | 6 | 2 | 2 | servlet response header APIs | 2 | 4 | 0 |
+| `java/local-temp-file-or-directory-information-disclosure` | local temporary resource disclosure | 4 | 3 | 2 | temporary-file/directory construction and access | 0 | 4 | 0 |
+| `java/ssrf` | server-side request forgery | 4 | 1 | 1 | URL/HTTP client request APIs | 0 | 4 | 0 |
+| `java/weak-cryptographic-algorithm` | weak crypto configuration | 4 | 1 | 1 | JCA/JCE algorithm factory calls | 0 | 4 | 0 |
+| `java/csrf-unprotected-request-type` | CSRF-unprotected request | 3 | 1 | 1 | request-handler/policy semantics | 0 | 3 | 0 |
+| `java/xss` | cross-site scripting | 3 | 1 | 1 | response rendering/output APIs | 3 | 0 | 0 |
+| `java/xxe` | XML external entity handling | 3 | 1 | 1 | XML parser/factory configuration | 0 | 3 | 0 |
+| `java/trust-boundary-violation` | trust-boundary violation | 2 | 1 | 1 | session/state boundary operations | 0 | 2 | 0 |
+| **Total** |  | **437** | **142 rule-scoped / 120 global** | **9 global** |  | **10** | **346** | **81** |
+
+The mismatch columns are a post-hoc decomposition of the frozen identity audit. They do not assert that a newly modeled family now covers every E0 callsite. In particular, `COVERED_BY_EXISTING_PRIMITIVE` below means that the refactored generic taxonomy has a suitable primitive family; exact callsite coverage remains a rerun question.
+
+### 4.3 Cross-project distribution
+
+| project_id | E0 paths | Global sink identities / callsites | Rule families |
+|---|---:|---:|---:|
+| D001 | 57 | 14 | 2 |
+| D002 | 55 | 14 | 2 |
+| D003 | 8 | 2 | 2 |
+| D004 | 8 | 2 | 2 |
+| P006 | 8 | 2 | 2 |
+| P010 | 51 | 30 | 5 |
+| V009 | 8 | 3 | 2 |
+| V022 | 136 | 24 | 11 |
+| V025 | 106 | 29 | 9 |
+| **Total** | **437** | **120** | **17 distinct globally** |
+
+The distribution is not a single-project anomaly: 9 projects and 17 rule families contribute terminals. V022 and V025 account for 242 paths, but every reported family is evaluated through the same generic taxonomy rather than a project-specific exception.
+
+## 5. Taxonomy gap matrix
+
+This matrix classifies semantic families, not individual vulnerable locations. It was produced after detector freeze and is used only to decide whether a generic primitive family exists. It does not encode any project, CVE, file, method, line, patch, or GT location.
+
+| E0 family | Audit class | Generic rationale / current boundary |
+|---|---|---|
+| log injection | `EFFECT_FAMILY_MISSING` | No logging SecurityEffect family; overload and placeholder roles need a generic logging model. |
+| path injection | `TAXONOMY_EXISTS_BUT_PRIMITIVE_MISSING` | FILESYSTEM_ACCESS exists, but constructors/stream and broader path-consuming APIs are not yet modeled. |
+| sensitive log | `EFFECT_FAMILY_MISSING` | Same missing logging family, with a distinct data-sensitivity interpretation outside a bare callee name. |
+| user-controlled bypass | `OUT_OF_CURRENT_WORK1_SCOPE` | Primarily authorization/control-policy semantics, not a single terminal call primitive. |
+| polynomial ReDoS | `COVERED_BY_EXISTING_PRIMITIVE` | REGEX_EVALUATION models Pattern and String regex evaluation with an explicit critical value. |
+| potentially weak crypto | `COVERED_BY_EXISTING_PRIMITIVE` | CRYPTOGRAPHIC_CONFIGURATION models JCA/JCE getInstance algorithm argument 0. |
+| regex injection | `COVERED_BY_EXISTING_PRIMITIVE` | REGEX_EVALUATION covers typed Pattern/String regex APIs. |
+| unvalidated redirect | `COVERED_BY_EXISTING_PRIMITIVE` | RENDERING includes HttpServletResponse.sendRedirect argument 0. |
+| unsafe deserialization | `COVERED_BY_EXISTING_PRIMITIVE` | DESERIALIZATION includes typed ObjectInputStream/XMLDecoder receiver effects. |
+| HTTP response splitting | `COVERED_BY_EXISTING_PRIMITIVE` | RENDERING includes typed setHeader/addHeader value argument 1. |
+| local temporary resource disclosure | `TAXONOMY_EXISTS_BUT_PRIMITIVE_MISSING` | FILESYSTEM_ACCESS exists, but constructor/lifecycle identity is intentionally deferred. |
+| SSRF | `COVERED_BY_EXISTING_PRIMITIVE` | NETWORK_OUTPUT covers URL/URLConnection, Java HttpClient and Spring RestOperations families. |
+| weak crypto | `COVERED_BY_EXISTING_PRIMITIVE` | CRYPTOGRAPHIC_CONFIGURATION models the algorithm/transformation argument. |
+| CSRF-unprotected request | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires request-handler and policy/control-flow semantics. |
+| XSS | `CALLSITE_ROLE_MISMATCH` | A RENDERING family exists, but the frozen near matches are different callsites/roles, not identical effects. |
+| XXE | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires parser factory/object-state configuration rather than the current terminal-call contract. |
+| trust-boundary violation | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires session/state-boundary semantics. |
+
+Class coverage across the requested vocabulary:
+
+| Class | Families |
+|---|---:|
+| `COVERED_BY_EXISTING_PRIMITIVE` | 8 |
+| `TAXONOMY_EXISTS_BUT_PRIMITIVE_MISSING` | 2 |
+| `EFFECT_FAMILY_MISSING` | 2 |
+| `CALLSITE_ROLE_MISMATCH` | 1 |
+| `OUT_OF_CURRENT_WORK1_SCOPE` | 4 |
+| `UNKNOWN` | 0 |
+
+No family is left UNKNOWN at this semantic granularity. That does not eliminate callsite-level uncertainty: only a new Route A rerun can measure the exact post-refactor candidate coverage.
+
+## 6. Coverage judgment
 
 The frozen run exposed two foundation-level Route A issues:
 
@@ -143,7 +201,7 @@ It does not yet prove a Route B path-construction deficit. Route A endpoint cove
 
 The evidence gives some support for future Wrapper/Library work because many missed effects are library-call families and wrappers, but that is not tested here. It does not currently support Field/State as the next move: the frozen artifacts lack the component/distance/state evidence required for that claim.
 
-## 6. Audit conclusion
+## 7. Audit conclusion
 
 - E1 still had foundation implementation problems in the frozen run: **YES**.
 - Those problems are identifiable without changing GT or rerunning CodeQL: **YES**.

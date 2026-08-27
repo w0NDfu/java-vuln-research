@@ -1,5 +1,6 @@
 package toy;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.beans.XMLDecoder;
 import java.io.File;
 import java.io.IOException;
@@ -46,12 +47,20 @@ final class SecurityEffectCases {
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    void positiveRendering(
+            HttpServletResponse response, String location, String headerValue) {
+        response.sendRedirect(location);
+        response.setHeader("X-Test", headerValue);
+    }
+
     void negativeSameNames(String value) {
         FakePattern.compile(value);
         new FakeReader().readObject();
         new FakeClient().send(value);
         new FakeFile().exists();
         FakeCipher.getInstance(value);
+        new FakeResponse().sendRedirect(value);
+        new FakeResponse().setHeader("X-Test", value);
     }
 
     static final class FakePattern {
@@ -72,5 +81,10 @@ final class SecurityEffectCases {
 
     static final class FakeCipher {
         static void getInstance(String value) {}
+    }
+
+    static final class FakeResponse {
+        void sendRedirect(String location) {}
+        void setHeader(String name, String value) {}
     }
 }

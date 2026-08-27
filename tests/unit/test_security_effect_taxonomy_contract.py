@@ -16,6 +16,13 @@ FIXTURE = (
     / "toy"
     / "SecurityEffectCases.java"
 )
+CONTRACT_QUERY = (
+    ROOT
+    / "codeql"
+    / "tests"
+    / "security_effect"
+    / "SecurityEffectContractTest.ql"
+)
 
 
 def test_discovery_and_endpoint_mapping_share_one_taxonomy() -> None:
@@ -70,6 +77,8 @@ def test_fixture_contains_positive_and_same_name_wrong_type_cases() -> None:
         "client.send(request",
         "MessageDigest.getInstance(algorithm)",
         "new File(path).exists()",
+        "response.sendRedirect(location)",
+        'response.setHeader("X-Test", headerValue)',
     ):
         assert positive in fixture
 
@@ -79,5 +88,17 @@ def test_fixture_contains_positive_and_same_name_wrong_type_cases() -> None:
         "new FakeClient().send(value)",
         "new FakeFile().exists()",
         "FakeCipher.getInstance(value)",
+        "new FakeResponse().sendRedirect(value)",
+        'new FakeResponse().setHeader("X-Test", value)',
     ):
         assert negative in fixture
+
+
+def test_executable_contract_query_checks_analysis_anchor_metadata() -> None:
+    query = CONTRACT_QUERY.read_text(encoding="utf-8")
+
+    assert "securityEffectCall(" in query
+    assert "securityEffectAnalysisAnchor(" in query
+    assert "mappedCallIdentity = seCallIdentity(call)" in query
+    assert "argumentIndex = criticalIndex" in query
+    assert 'mappingReason = "SECURITY_CRITICAL_CALL_VALUE"' in query

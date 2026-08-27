@@ -60,9 +60,10 @@ Identity responsibilities are centralized:
 - callee_identity describes the resolved called method;
 - method_identity describes the enclosing method;
 - call_identity describes the concrete callsite;
-- critical_role states ARGUMENT or RECEIVER;
+- critical_role is `arg0`, `arg1`, or `receiver` for direct primitives, and
+  `parameter:<name>` for a direct one-hop wrapper;
 - argument_index is the zero-based critical argument, or -1 for receiver;
-- anchor_kind is ARGUMENT or QUALIFIER;
+- anchor_kind is `CALL_ARGUMENT`, `RECEIVER`, or `METHOD_PARAMETER`;
 - primitive_rule_id identifies the generic model rule;
 - provenance records direct primitive versus one-hop wrapper discovery.
 
