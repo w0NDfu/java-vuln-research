@@ -144,7 +144,6 @@ predicate routeBEffectCandidate(
   DataFlow::Node node, MethodCall call, string reason, string effectCategory,
   string evidenceKind, string confidence, string valueRole, int argumentIndex
 ) {
-  call.fromSource() and
   sensitiveAbstraction(call.getMethod(), reason, effectCategory, evidenceKind, confidence) and
   (
     exists(Expr arg |
