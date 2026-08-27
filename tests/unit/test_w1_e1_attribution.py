@@ -153,6 +153,47 @@ def test_287_raw_frontiers_have_stable_aggregate(tmp_path: Path) -> None:
     assert summary["frontier_primary_reason"][0]["count"] == 287
 
 
+
+
+def test_effect_aggregation_uses_unique_candidate_id_not_frontier_rows(tmp_path: Path) -> None:
+    run, p0a = _fixture(tmp_path)
+    base = json.loads((run / "structural_frontiers.jsonl").read_text().splitlines()[0])
+    _write_jsonl(
+        run / "structural_frontiers.jsonl",
+        [
+            {**base, "structural_frontier_id": "f1", "input_candidate_id": "in1"},
+            {**base, "structural_frontier_id": "f2", "input_candidate_id": "in2"},
+            {**base, "structural_frontier_id": "f3", "input_candidate_id": "in3"},
+        ],
+    )
+    summary = analyze(run, tmp_path / "out", p0a)
+
+    assert summary["raw_frontier_count"] == 3
+    assert summary["security_effect_candidate_count"] == 1
+    assert summary["frontier_by_effect_type"] == [
+        {"effect_type": "PROCESS_EXECUTION", "count": 1, "percentage": 100.0}
+    ]
+
+
+def test_bw_aggregation_deduplicates_candidate_and_ors_activity(tmp_path: Path) -> None:
+    run, p0a = _fixture(tmp_path)
+    rows = [
+        json.loads(line)
+        for line in (run / "effect_backward_funnel.jsonl").read_text().splitlines()
+    ]
+    active = {
+        **rows[0],
+        "reachable_node_count": 2,
+        "funnel_status": "ACTIVE",
+    }
+    _write_jsonl(run / "effect_backward_funnel.jsonl", [rows[0], active])
+    summary = analyze(run, tmp_path / "out", p0a)
+
+    assert summary["bw_active_count"] == 1
+    assert summary["bw_inactive_count"] == 0
+    assert summary["bw_by_effect_type"][0]["total_candidates"] == 1
+    assert summary["bw_by_effect_type"][0]["bw_active"] == 1
+
 def csv_rows(path: Path):
     import csv
 

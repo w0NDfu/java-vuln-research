@@ -246,6 +246,33 @@ def _aggregate(rows: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
     ]
 
 
+def _deduplicate_candidate_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse downstream rows to one record per stable candidate_id.
+
+    Activity is monotone: if any downstream row for a candidate is active, the
+    candidate is active.  This keeps candidate inventory statistics independent
+    from the number of input/effect pairs or frontier nodes.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        candidate_id = str(row.get("candidate_id") or "")
+        if not candidate_id:
+            continue
+        current = by_id.get(candidate_id)
+        if current is None:
+            by_id[candidate_id] = dict(row)
+            continue
+        if str(current.get("effect_type")) != str(row.get("effect_type")):
+            raise ValueError(f"candidate {candidate_id} has conflicting effect_type values")
+        if bool(row.get("bw_active")) and not bool(current.get("bw_active")):
+            by_id[candidate_id] = dict(row)
+        else:
+            current["bw_active"] = bool(current.get("bw_active")) or bool(row.get("bw_active"))
+            if row.get("mapping_status") in {"MAPPED", "SUCCESS"}:
+                current["mapping_status"] = row["mapping_status"]
+    return [by_id[candidate_id] for candidate_id in sorted(by_id)]
+
+
 def _dedup_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     node_pairs = {
         (
@@ -352,12 +379,16 @@ def analyze(run_dir: Path, output_dir: Path, p0a_dir: Path | None = None) -> dic
     bw_raw, bw_issues = load_jsonl(run_dir / "effect_backward_funnel.jsonl")
     issues = frontier_issues + bw_issues
     frontier_rows = [_frontier_row(row, effect_map, input_map) for row in frontier_raw]
-    bw_rows = [_bw_case(row, effect_map) for row in bw_raw]
+    bw_rows = _deduplicate_candidate_rows([_bw_case(row, effect_map) for row in bw_raw])
+    candidate_effect_rows = [
+        {"candidate_id": candidate_id, "effect_type": str(row.get("effect_type") or "UNKNOWN")}
+        for candidate_id, row in sorted(effect_map.items())
+    ]
     primary = _aggregate(frontier_rows, "frontier_reason")
     likely = _aggregate(frontier_rows, "likely_class")
     distances = _aggregate(frontier_rows, "distance_bucket")
     mechanisms = _aggregate(frontier_rows, "input_mechanism")
-    effects = _aggregate(frontier_rows, "effect_type")
+    effects = _aggregate(candidate_effect_rows, "effect_type")
     dedup = _dedup_summary(frontier_rows)
     projects: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in frontier_rows:
@@ -408,6 +439,8 @@ def analyze(run_dir: Path, output_dir: Path, p0a_dir: Path | None = None) -> dic
         "output_dir": str(output_dir),
         "p0a_dir": str(p0a_dir) if p0a_dir else None,
         "raw_frontier_count": len(frontier_rows),
+        "security_effect_candidate_count": len(candidate_effect_rows),
+        "candidate_aggregation_contract": "one row per unique candidate_id; bw_active is logical OR",
         "deduplicated_frontier_count": dedup["unique_frontier_node_pair_count"],
         "top_frontier_reason": primary[0]["frontier_reason"] if primary else "UNKNOWN",
         "top_likely_semantic_class": likely[0]["likely_class"] if likely else "UNKNOWN_STRUCTURAL",
@@ -455,8 +488,7 @@ rerun, no scientific method change, no semantic edge, no LLM, and no Route B.
 
 ## 2. Frozen W1-E1 facts
 
-8/8 projects; 114 ExternalInput; 78 FW-active; 23 SecurityEffect; 5 BW-active;
-287 structural frontiers; 0 static connected paths.
+SecurityEffect inventory is aggregated at unique candidate_id grain; downstream frontier and BW rows do not multiply candidates.
 
 ## 3. Frontier taxonomy
 

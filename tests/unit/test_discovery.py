@@ -45,6 +45,12 @@ def test_security_effect_preserves_critical_parameter_role() -> None:
         "file": "src/main/java/demo/CommandService.java",
         "line": "21",
         "source": "STATIC_DERIVED",
+        "primitive_rule_id": "JDK_RUNTIME_EXEC_ARG0",
+        "callee_identity": "java.lang.Runtime.exec/1",
+        "method_identity": "demo.CommandService.run/1",
+        "call_identity": "java.lang.Runtime.exec/1@src/main/java/demo/CommandService.java:21",
+        "argument_index": "0",
+        "anchor_kind": "CALL_ARGUMENT",
     }
 
     candidate = security_effect_candidate(project="P002", revision="def", row=row)
@@ -52,6 +58,19 @@ def test_security_effect_preserves_critical_parameter_role() -> None:
     assert candidate["effect_type"] == "PROCESS_EXECUTION"
     assert candidate["critical_roles"] == ["parameter:command"]
     assert candidate["source"] == "STATIC_DERIVED"
+    assert candidate["project_id"] == "P002"
+    assert candidate["critical_role"] == "parameter:command"
+    assert candidate["callee_identity"] == "java.lang.Runtime.exec/1"
+    assert candidate["method_identity"] == "demo.CommandService.run/1"
+    assert candidate["argument_index"] == 0
+    assert candidate["anchor_kind"] == "CALL_ARGUMENT"
+    assert candidate["location"] == {
+        "file": "src/main/java/demo/CommandService.java",
+        "line": 21,
+    }
+    assert candidate["discovery_route"] == "ROUTE_A"
+    assert candidate["primitive_rule_id"] == "JDK_RUNTIME_EXEC_ARG0"
+    assert candidate["provenance"]["revision"] == "def"
 
 
 def test_deduplicate_candidates_is_stable_and_sorted() -> None:
