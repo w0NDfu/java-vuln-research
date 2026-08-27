@@ -16,15 +16,28 @@ Frozen headline counts:
 | STATIC_CONNECTED candidate paths | 0 |
 | E0 baseline paths | 437 |
 
-## 2. SecurityEffect aggregation audit
+## 2. Frozen Route A taxonomy inventory
 
-### 2.1 Why 59 became 62
+The frozen detector had four project-agnostic effect types. Discovery matched resolved `MethodCall` declaring types and method names, then emitted direct primitive candidates (`STATIC`) plus a one-hop direct-parameter wrapper (`STATIC_DERIVED`) when the critical argument was exactly a wrapper parameter. Result values were not treated as effects. Receiver primitives were direct-only because the wrapper adapter requires a non-negative critical argument index.
+
+| effect_type | Frozen primitive API/signature family | Critical value role | Wrapper support | Discovery mechanism |
+|---|---|---|---|---|
+| `FILESYSTEM_ACCESS` | static `java.nio.file.Files` read/write/copy/move/delete/create families | argument 0 | direct-parameter wrapper | typed call + exact method-name allowlist |
+| `PROCESS_EXECUTION` | `java.lang.Runtime.exec(...)`; `java.lang.ProcessBuilder.start()` | command argument 0; builder receiver | `Runtime.exec` argument only | typed call + exact method name |
+| `RENDERING` | servlet response `getWriter/getOutputStream` followed by `write/print/println/printf/append` | body argument 0 | direct-parameter wrapper | typed response accessor + typed output call |
+| `DYNAMIC_EVALUATION` | `javax.script.ScriptEngine/AbstractScriptEngine.eval(...)`; Spring `ExpressionParser.parseExpression(...)` | expression argument 0 | direct-parameter wrapper | typed call + exact method name |
+
+The frozen implementation duplicated these semantics between discovery and AnalysisAnchor extraction. The refactor centralizes both consumers in `SecurityEffectModels.qll`, retains the four types, and adds only the high-confidence generic families classified in section 6.
+
+## 3. SecurityEffect aggregation audit
+
+### 3.1 Why 59 became 62
 
 The detector emitted 59 unique SecurityEffect candidate identities. The earlier effect-type table was built after joining candidates to downstream frontier/diagnostic rows. A candidate can appear more than once after that join, so the table counted attribution rows rather than candidates. The three extra rows are repeated downstream representations, not three additional SecurityEffect candidates.
 
 The same grain error affected the BW-active breakdown: filtering joined rows by BW state does not guarantee one row per candidate. Candidate-level statistics must first collapse by candidate_id; BW-active is the logical OR of all rows for the same candidate.
 
-### 2.2 Correct unique-candidate statistics
+### 3.2 Correct unique-candidate statistics
 
 All SecurityEffect candidates, deduplicated by candidate_id:
 
@@ -50,7 +63,7 @@ Structural-frontier participation has a different denominator: 287 raw frontier 
 
 Candidate aggregation contract: every candidate-level table is keyed by unique candidate_id. Per-project, effect-type, mechanism, BW-active, and funnel totals are projections of that deduplicated relation. Pair- and frontier-level tables must name their own grain explicitly.
 
-## 3. Input–Effect pair funnel
+## 4. Input–Effect pair funnel
 
 The frozen classifier works at candidate level, not Cartesian input/effect-pair level. Its exact mutually exclusive result is:
 
@@ -71,7 +84,7 @@ The requested labels DIFFERENT_CALL_COMPONENT and SAME_COMPONENT_BUT_FAR cannot 
 
 Splitting 132 between those two labels would require a new CodeQL query or a detector rerun, both outside this audit. The report intentionally does not infer a split.
 
-### 3.1 Why the added ten projects produced zero frontier
+### 4.1 Why the added ten projects produced zero frontier
 
 All 287 frontier rows still come from P010. They consist of 222 CALL_ADJACENT, 29 NEAR_CALL_REGION, and 36 SAME_METHOD rows; inputs are Servlet Parameter (185) and Parameter Values (102), and effects are RENDERING only.
 
@@ -82,11 +95,11 @@ A frontier exists only when both sides have persisted reachable nodes and satisf
 
 Because component membership and longer distance were not persisted, the offline audit cannot say how much of cause 2 is disconnected component versus same component but farther away. The scientifically valid conclusion is zero qualifying stored relation, not zero possible program path.
 
-## 4. E0 post-hoc endpoint audit
+## 5. E0 post-hoc endpoint audit
 
 E0 is used only after detector freeze as an independent sink-space audit. It did not choose projects, methods, files, lines, patches, CVEs, or candidate identities, and it is not fed back into individual detector exceptions.
 
-### 4.1 Strict endpoint identity
+### 5.1 Strict endpoint identity
 
 Across 437 E0 paths:
 
@@ -109,7 +122,7 @@ A looser effect audit classified the 437 E0 terminals as:
 
 The 81 TRUE_MISSING paths occur in D001, D003, D004, and P006. At rule-family level they are log injection 9, path injection 48, polynomial ReDoS 12, and regex injection 12. This is an aggregate post-hoc diagnosis, not a detector rule list.
 
-### 4.2 E0 semantic-space distribution
+### 5.2 E0 semantic-space distribution
 
 The audit keeps four grains separate. The 437 path rows contain 142 rule-scoped sink identities, because one physical callsite may be reported by more than one rule. Removing rule_id from the identity gives 120 global sink identities and 120 global callsites, distributed over 9 projects.
 
@@ -136,7 +149,9 @@ The audit keeps four grains separate. The 437 path rows contain 142 rule-scoped 
 
 The mismatch columns are a post-hoc decomposition of the frozen identity audit. They do not assert that a newly modeled family now covers every E0 callsite. In particular, `COVERED_BY_EXISTING_PRIMITIVE` below means that the refactored generic taxonomy has a suitable primitive family; exact callsite coverage remains a rerun question.
 
-### 4.3 Cross-project distribution
+Of the 346 `EFFECT_TYPE_MISMATCH` paths, logging injection (108), sensitive logging (85), path injection (45), and user-controlled bypass (39) contribute 277, or 80.1%. The 81 `TRUE_MISSING_EFFECT_CANDIDATE` paths are path injection (48), polynomial ReDoS (12), regex injection (12), and log injection (9). Thus the dominant mismatch is not one missing call name: it spans missing logging semantics, incomplete filesystem primitives, policy semantics, and regex families.
+
+### 5.3 Cross-project distribution
 
 | project_id | E0 paths | Global sink identities / callsites | Rule families |
 |---|---:|---:|---:|
@@ -153,29 +168,29 @@ The mismatch columns are a post-hoc decomposition of the frozen identity audit. 
 
 The distribution is not a single-project anomaly: 9 projects and 17 rule families contribute terminals. V022 and V025 account for 242 paths, but every reported family is evaluated through the same generic taxonomy rather than a project-specific exception.
 
-## 5. Taxonomy gap matrix
+## 6. Taxonomy gap matrix
 
 This matrix classifies semantic families, not individual vulnerable locations. It was produced after detector freeze and is used only to decide whether a generic primitive family exists. It does not encode any project, CVE, file, method, line, patch, or GT location.
 
-| E0 family | Audit class | Generic rationale / current boundary |
-|---|---|---|
-| log injection | `EFFECT_FAMILY_MISSING` | No logging SecurityEffect family; overload and placeholder roles need a generic logging model. |
-| path injection | `TAXONOMY_EXISTS_BUT_PRIMITIVE_MISSING` | FILESYSTEM_ACCESS exists, but constructors/stream and broader path-consuming APIs are not yet modeled. |
-| sensitive log | `EFFECT_FAMILY_MISSING` | Same missing logging family, with a distinct data-sensitivity interpretation outside a bare callee name. |
-| user-controlled bypass | `OUT_OF_CURRENT_WORK1_SCOPE` | Primarily authorization/control-policy semantics, not a single terminal call primitive. |
-| polynomial ReDoS | `COVERED_BY_EXISTING_PRIMITIVE` | REGEX_EVALUATION models Pattern and String regex evaluation with an explicit critical value. |
-| potentially weak crypto | `COVERED_BY_EXISTING_PRIMITIVE` | CRYPTOGRAPHIC_CONFIGURATION models JCA/JCE getInstance algorithm argument 0. |
-| regex injection | `COVERED_BY_EXISTING_PRIMITIVE` | REGEX_EVALUATION covers typed Pattern/String regex APIs. |
-| unvalidated redirect | `COVERED_BY_EXISTING_PRIMITIVE` | RENDERING includes HttpServletResponse.sendRedirect argument 0. |
-| unsafe deserialization | `COVERED_BY_EXISTING_PRIMITIVE` | DESERIALIZATION includes typed ObjectInputStream/XMLDecoder receiver effects. |
-| HTTP response splitting | `COVERED_BY_EXISTING_PRIMITIVE` | RENDERING includes typed setHeader/addHeader value argument 1. |
-| local temporary resource disclosure | `TAXONOMY_EXISTS_BUT_PRIMITIVE_MISSING` | FILESYSTEM_ACCESS exists, but constructor/lifecycle identity is intentionally deferred. |
-| SSRF | `COVERED_BY_EXISTING_PRIMITIVE` | NETWORK_OUTPUT covers URL/URLConnection, Java HttpClient and Spring RestOperations families. |
-| weak crypto | `COVERED_BY_EXISTING_PRIMITIVE` | CRYPTOGRAPHIC_CONFIGURATION models the algorithm/transformation argument. |
-| CSRF-unprotected request | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires request-handler and policy/control-flow semantics. |
-| XSS | `CALLSITE_ROLE_MISMATCH` | A RENDERING family exists, but the frozen near matches are different callsites/roles, not identical effects. |
-| XXE | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires parser factory/object-state configuration rather than the current terminal-call contract. |
-| trust-boundary violation | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires session/state-boundary semantics. |
+| E0 family | Neutral effect concept | Audit class | Generic rationale / current boundary |
+|---|---|---|---|
+| log injection | `LOGGING` | `EFFECT_FAMILY_MISSING` | No logging SecurityEffect family; overload and placeholder roles need a generic logging model. |
+| path injection | `PATH_SENSITIVE_OPERATION` / `FILESYSTEM_ACCESS` | `TAXONOMY_EXISTS_BUT_PRIMITIVE_MISSING` | FILESYSTEM_ACCESS exists, but constructors/stream and broader path-consuming APIs are not yet modeled. |
+| sensitive log | `LOGGING` | `EFFECT_FAMILY_MISSING` | Same missing logging family, with a distinct data-sensitivity interpretation outside a bare callee name. |
+| user-controlled bypass | `OTHER_POLICY_EFFECT` | `OUT_OF_CURRENT_WORK1_SCOPE` | Primarily authorization/control-policy semantics, not a single terminal call primitive. |
+| polynomial ReDoS | `REGEX_EVALUATION` | `COVERED_BY_EXISTING_PRIMITIVE` | REGEX_EVALUATION models Pattern and String regex evaluation with an explicit critical value. |
+| potentially weak crypto | `CRYPTOGRAPHIC_CONFIGURATION` | `COVERED_BY_EXISTING_PRIMITIVE` | CRYPTOGRAPHIC_CONFIGURATION models JCA/JCE getInstance algorithm argument 0. |
+| regex injection | `REGEX_EVALUATION` | `COVERED_BY_EXISTING_PRIMITIVE` | REGEX_EVALUATION covers typed Pattern/String regex APIs. |
+| unvalidated redirect | `RENDERING` / `RESPONSE_OUTPUT` | `COVERED_BY_EXISTING_PRIMITIVE` | RENDERING includes HttpServletResponse.sendRedirect argument 0. |
+| unsafe deserialization | `DESERIALIZATION` | `COVERED_BY_EXISTING_PRIMITIVE` | DESERIALIZATION includes typed ObjectInputStream/XMLDecoder receiver effects. |
+| HTTP response splitting | `RENDERING` / `RESPONSE_OUTPUT` | `COVERED_BY_EXISTING_PRIMITIVE` | RENDERING includes typed setHeader/addHeader value argument 1. |
+| local temporary resource disclosure | `FILESYSTEM_ACCESS` | `TAXONOMY_EXISTS_BUT_PRIMITIVE_MISSING` | FILESYSTEM_ACCESS exists, but constructor/lifecycle identity is intentionally deferred. |
+| SSRF | `NETWORK_OUTPUT` | `COVERED_BY_EXISTING_PRIMITIVE` | NETWORK_OUTPUT covers URL/URLConnection, Java HttpClient and Spring RestOperations families. |
+| weak crypto | `CRYPTOGRAPHIC_CONFIGURATION` | `COVERED_BY_EXISTING_PRIMITIVE` | CRYPTOGRAPHIC_CONFIGURATION models the algorithm/transformation argument. |
+| CSRF-unprotected request | `OTHER_POLICY_EFFECT` | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires request-handler and policy/control-flow semantics. |
+| XSS | `RENDERING` / `RESPONSE_OUTPUT` | `CALLSITE_ROLE_MISMATCH` | A RENDERING family exists, but the frozen near matches are different callsites/roles, not identical effects. |
+| XXE | `DESERIALIZATION` / parser state | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires parser factory/object-state configuration rather than the current terminal-call contract. |
+| trust-boundary violation | `OTHER_STATE_EFFECT` | `OUT_OF_CURRENT_WORK1_SCOPE` | Requires session/state-boundary semantics. |
 
 Class coverage across the requested vocabulary:
 
@@ -190,7 +205,7 @@ Class coverage across the requested vocabulary:
 
 No family is left UNKNOWN at this semantic granularity. That does not eliminate callsite-level uncertainty: only a new Route A rerun can measure the exact post-refactor candidate coverage.
 
-## 6. Coverage judgment
+## 7. Coverage judgment
 
 The frozen run exposed two foundation-level Route A issues:
 
@@ -201,7 +216,7 @@ It does not yet prove a Route B path-construction deficit. Route A endpoint cove
 
 The evidence gives some support for future Wrapper/Library work because many missed effects are library-call families and wrappers, but that is not tested here. It does not currently support Field/State as the next move: the frozen artifacts lack the component/distance/state evidence required for that claim.
 
-## 7. Audit conclusion
+## 8. Audit conclusion
 
 - E1 still had foundation implementation problems in the frozen run: **YES**.
 - Those problems are identifiable without changing GT or rerunning CodeQL: **YES**.
