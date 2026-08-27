@@ -23,6 +23,12 @@ EFFECT_COLUMNS = (
     "file",
     "line",
     "source",
+    "primitive_rule_id",
+    "callee_identity",
+    "method_identity",
+    "call_identity",
+    "argument_index",
+    "anchor_kind",
 )
 
 
@@ -61,20 +67,45 @@ def external_candidate(
 def security_effect_candidate(
     *, project: str, revision: str, row: dict[str, str]
 ) -> dict[str, Any]:
+    argument_index = int(row["argument_index"])
+    location = {"file": row["file"], "line": int(row["line"])}
     evidence = {
         "project": project,
         "revision": revision,
         "mechanism": row["mechanism"],
         "kind": row["evidence_kind"],
-        "file": row["file"],
-        "line": int(row["line"]),
+        **location,
+        "primitive_rule_id": row["primitive_rule_id"],
+        "callee_identity": row["callee_identity"],
+        "method_identity": row["method_identity"],
+        "call_identity": row["call_identity"],
+        "argument_index": argument_index,
+        "anchor_kind": row["anchor_kind"],
     }
     return {
         "candidate_id": _candidate_id("eff", project, row),
+        "project_id": project,
         "kind": "SECURITY_EFFECT",
         "effect_type": row["effect_type"],
         "entity": row["entity"],
+        "callee_identity": row["callee_identity"],
+        "method_identity": row["method_identity"],
+        "call_identity": row["call_identity"],
+        "critical_role": row["critical_role"],
         "critical_roles": [row["critical_role"]],
+        "argument_index": argument_index,
+        "anchor_kind": row["anchor_kind"],
+        "location": location,
+        "discovery_route": "ROUTE_A",
+        "evidence_kind": row["evidence_kind"],
+        "primitive_rule_id": row["primitive_rule_id"],
+        "provenance": {
+            "project": project,
+            "revision": revision,
+            "source": row["source"],
+            "mechanism": row["mechanism"],
+        },
+        "mechanism": row["mechanism"],
         "confidence": "HIGH",
         "evidence": [evidence],
         "source": row["source"],

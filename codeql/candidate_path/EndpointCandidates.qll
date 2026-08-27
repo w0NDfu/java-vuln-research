@@ -2,6 +2,7 @@
 import java
 import semmle.code.java.dataflow.DataFlow
 import semmle.code.java.dataflow.TaintTracking
+import security_effect.SecurityEffectModels
 
 predicate isSpringInputParameter(Parameter p) {
   exists(Annotation a |
@@ -33,50 +34,6 @@ predicate isServletInputCall(MethodCall call) {
   )
 }
 
-predicate isFilesystemEffect(MethodCall call, int criticalIndex) {
-  call.getMethod().getDeclaringType().hasQualifiedName("java.nio.file", "Files") and
-  call.getMethod().getName() = [
-    "newInputStream", "newOutputStream", "newBufferedReader", "newBufferedWriter",
-    "readAllBytes", "readAllLines", "readString", "write", "writeString", "copy", "move",
-    "delete", "deleteIfExists", "createFile", "createDirectory", "createDirectories",
-    "createTempFile", "createTempDirectory"
-  ] and criticalIndex = 0
-}
-
-predicate isProcessEffect(MethodCall call, int criticalIndex) {
-  call.getMethod().getDeclaringType().hasQualifiedName("java.lang", "Runtime") and
-  call.getMethod().getName() = "exec" and criticalIndex = 0
-  or
-  call.getMethod().getDeclaringType().hasQualifiedName("java.lang", "ProcessBuilder") and
-  call.getMethod().getName() = "start" and criticalIndex = -1
-}
-
-predicate isRenderingEffect(MethodCall call, int criticalIndex) {
-  exists(MethodCall getWriter |
-    call.getQualifier() = getWriter and getWriter.getMethod().getName() = "getWriter" and
-    getWriter.getMethod().getDeclaringType().hasQualifiedName(
-      ["javax.servlet", "jakarta.servlet", "javax.servlet.http", "jakarta.servlet.http"],
-      ["ServletResponse", "HttpServletResponse"]
-    ) and
-    call.getMethod().getName() = ["write", "print", "println", "printf", "append"] and
-    criticalIndex = 0
-  )
-}
-
-predicate isDynamicEvaluationEffect(MethodCall call, int criticalIndex) {
-  call.getMethod().getDeclaringType().hasQualifiedName(
-    "javax.script", ["ScriptEngine", "AbstractScriptEngine"]
-  ) and call.getMethod().getName() = "eval" and criticalIndex = 0
-  or
-  call.getMethod().getDeclaringType().hasQualifiedName(
-    "org.springframework.expression", "ExpressionParser"
-  ) and call.getMethod().getName() = "parseExpression" and criticalIndex = 0
-}
-
-predicate isEffectCall(MethodCall call, int criticalIndex) {
-  isFilesystemEffect(call, criticalIndex) or isProcessEffect(call, criticalIndex) or
-  isRenderingEffect(call, criticalIndex) or isDynamicEvaluationEffect(call, criticalIndex)
-}
 
 string callableIdentity(Callable callable) {
   result = callable.getDeclaringType().getQualifiedName() + "." + callable.getName() +
@@ -98,9 +55,7 @@ string returnEntity(Method method) {
 }
 
 string wrapperEffectEntity(Method method, string effectType) {
-  effectType = [
-    "FILESYSTEM_ACCESS", "PROCESS_EXECUTION", "RENDERING", "DYNAMIC_EVALUATION"
-  ] and
+  securityEffectType(effectType) and
   result = method.getDeclaringType().getQualifiedName() + "." + method.getName() +
     " PROJECT_SPECIFIC_" + effectType
 }
@@ -111,12 +66,6 @@ string callIdentity(MethodCall call) {
     call.getLocation().getStartLine().toString()
 }
 
-predicate effectTypeFor(MethodCall call, string effectType, int criticalIndex) {
-  isFilesystemEffect(call, criticalIndex) and effectType = "FILESYSTEM_ACCESS"
-  or isProcessEffect(call, criticalIndex) and effectType = "PROCESS_EXECUTION"
-  or isRenderingEffect(call, criticalIndex) and effectType = "RENDERING"
-  or isDynamicEvaluationEffect(call, criticalIndex) and effectType = "DYNAMIC_EVALUATION"
-}
 
 predicate externalInputAnalysisAnchor(
   DataFlow::Node node, string candidateEntity, string candidateFile, int candidateLine,
@@ -175,8 +124,8 @@ predicate securityEffectAnalysisAnchor(
   string anchorKind, string valueRole, string methodIdentity, string mappedCallIdentity,
   int argumentIndex, string anchorFile, int anchorLine, string mappingReason
 ) {
-  exists(MethodCall call, int criticalIndex |
-    isEffectCall(call, criticalIndex) and
+  exists(MethodCall call, int criticalIndex, string effectType, string primitiveRuleId, string mechanism |
+    securityEffectCall(call, effectType, primitiveRuleId, mechanism, criticalIndex) and
     (
       criticalIndex >= 0 and node.asExpr() = call.getArgument(criticalIndex) and
       anchorKind = "CALL_ARGUMENT" and valueRole = "CALL_ARGUMENT" and argumentIndex = criticalIndex
@@ -184,25 +133,25 @@ predicate securityEffectAnalysisAnchor(
       criticalIndex = -1 and node.asExpr() = call.getQualifier() and
       anchorKind = "RECEIVER" and valueRole = "RECEIVER" and argumentIndex = -1
     ) and
-    candidateEntity = callEntity(call) and
+    candidateEntity = seCallEntity(call) and
     candidateFile = call.getLocation().getFile().getRelativePath() and
     candidateLine = call.getLocation().getStartLine() and
-    methodIdentity = callableIdentity(call.getEnclosingCallable()) and
-    mappedCallIdentity = callIdentity(call) and
+    methodIdentity = seCallableIdentity(call.getEnclosingCallable()) and
+    mappedCallIdentity = seCallIdentity(call) and
     anchorFile = node.asExpr().getLocation().getFile().getRelativePath() and
     anchorLine = node.asExpr().getLocation().getStartLine() and
     mappingReason = "SECURITY_CRITICAL_CALL_VALUE"
   )
   or
-  exists(MethodCall call, int criticalIndex, string effectType, Method wrapper, Parameter p, VarAccess access |
-    effectTypeFor(call, effectType, criticalIndex) and criticalIndex >= 0 and
+  exists(MethodCall call, int criticalIndex, string effectType, string primitiveRuleId, string mechanism, Method wrapper, Parameter p, VarAccess access |
+    securityEffectCall(call, effectType, primitiveRuleId, mechanism, criticalIndex) and criticalIndex >= 0 and
     call.getEnclosingCallable() = wrapper and p.getCallable() = wrapper and
     access = p.getAnAccess() and call.getArgument(criticalIndex) = access and node.asParameter() = p and
     candidateEntity = wrapperEffectEntity(wrapper, effectType) and
     candidateFile = call.getLocation().getFile().getRelativePath() and
     candidateLine = call.getLocation().getStartLine() and
     anchorKind = "METHOD_PARAMETER" and valueRole = "METHOD_PARAMETER" and
-    methodIdentity = callableIdentity(wrapper) and mappedCallIdentity = callIdentity(call) and
+    methodIdentity = seCallableIdentity(wrapper) and mappedCallIdentity = seCallIdentity(call) and
     argumentIndex = p.getPosition() and anchorFile = p.getLocation().getFile().getRelativePath() and
     anchorLine = p.getLocation().getStartLine() and
     mappingReason = "DIRECT_EFFECT_WRAPPER_PARAMETER_VALUE"

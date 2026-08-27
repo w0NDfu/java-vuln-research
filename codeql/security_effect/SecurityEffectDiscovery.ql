@@ -1,110 +1,39 @@
 /**
  * @name MSA P0-A security effect discovery
- * @description Emits deterministic high-confidence security-effect primitives
- *              and one-hop wrappers whose parameter directly reaches a critical role.
+ * @description Emits deterministic, generic SecurityEffect primitives and direct wrappers.
  * @kind table
+ * @id w1-e1/security-effect-discovery
  */
 
 import java
-
-predicate isFilesystemEffect(MethodCall call, string mechanism, int criticalIndex) {
-  call.getMethod().getDeclaringType().hasQualifiedName("java.nio.file", "Files") and
-  call.getMethod().getName() = [
-    "newInputStream", "newOutputStream", "newBufferedReader", "newBufferedWriter",
-    "readAllBytes", "readAllLines", "readString", "write", "writeString", "copy", "move",
-    "delete", "deleteIfExists", "createFile", "createDirectory", "createDirectories",
-    "createTempFile", "createTempDirectory"
-  ] and
-  mechanism = "JAVA_NIO_FILES_" + call.getMethod().getName() and
-  criticalIndex = 0
-}
-
-predicate isProcessEffect(MethodCall call, string mechanism, int criticalIndex) {
-  call.getMethod().getDeclaringType().hasQualifiedName("java.lang", "Runtime") and
-  call.getMethod().getName() = "exec" and
-  mechanism = "RUNTIME_EXEC" and
-  criticalIndex = 0
-  or
-  call.getMethod().getDeclaringType().hasQualifiedName("java.lang", "ProcessBuilder") and
-  call.getMethod().getName() = "start" and
-  mechanism = "PROCESS_BUILDER_START" and
-  criticalIndex = -1
-}
-
-predicate isRenderingEffect(MethodCall call, string mechanism, int criticalIndex) {
-  exists(MethodCall getWriter |
-    call.getQualifier() = getWriter and
-    getWriter.getMethod().getName() = "getWriter" and
-    (
-      getWriter.getMethod().getDeclaringType().hasQualifiedName("javax.servlet", "ServletResponse")
-      or getWriter.getMethod().getDeclaringType().hasQualifiedName("jakarta.servlet", "ServletResponse")
-      or getWriter.getMethod().getDeclaringType().hasQualifiedName("javax.servlet.http", "HttpServletResponse")
-      or getWriter.getMethod().getDeclaringType().hasQualifiedName("jakarta.servlet.http", "HttpServletResponse")
-    ) and
-    call.getMethod().getName() = ["write", "print", "println", "printf", "append"] and
-    mechanism = "SERVLET_RESPONSE_WRITER_" + call.getMethod().getName() and
-    criticalIndex = 0
-  )
-}
-
-predicate isDynamicEvaluationEffect(MethodCall call, string mechanism, int criticalIndex) {
-  (
-    call.getMethod().getDeclaringType().hasQualifiedName("javax.script", "ScriptEngine")
-    or call.getMethod().getDeclaringType().hasQualifiedName("javax.script", "AbstractScriptEngine")
-  ) and
-  call.getMethod().getName() = "eval" and
-  mechanism = "SCRIPT_ENGINE_EVAL" and
-  criticalIndex = 0
-  or
-  call.getMethod().getDeclaringType().hasQualifiedName("org.springframework.expression", "ExpressionParser") and
-  call.getMethod().getName() = "parseExpression" and
-  mechanism = "SPRING_EXPRESSION_PARSE" and
-  criticalIndex = 0
-}
-
-predicate isEffectCall(
-  MethodCall call, string effectType, string mechanism, int criticalIndex
-) {
-  isFilesystemEffect(call, mechanism, criticalIndex) and effectType = "FILESYSTEM_ACCESS"
-  or
-  isProcessEffect(call, mechanism, criticalIndex) and effectType = "PROCESS_EXECUTION"
-  or
-  isRenderingEffect(call, mechanism, criticalIndex) and effectType = "RENDERING"
-  or
-  isDynamicEvaluationEffect(call, mechanism, criticalIndex) and
-  effectType = "DYNAMIC_EVALUATION"
-}
-
-string callEntity(MethodCall call) {
-  result = call.getEnclosingCallable().getDeclaringType().getQualifiedName() + "." +
-    call.getEnclosingCallable().getName() + " -> " + call.getMethod().getQualifiedName()
-}
+import security_effect.SecurityEffectModels
 
 string wrapperEntity(Method method) {
   result = method.getDeclaringType().getQualifiedName() + "." + method.getName()
 }
 
-predicate criticalRoleFor(int criticalIndex, string criticalRole) {
-  criticalIndex = -1 and criticalRole = "receiver"
-  or
-  criticalIndex = 0 and criticalRole = "arg0"
-}
-
 from string effectType, string mechanism, string entity, string criticalRole,
-  string evidenceKind, string file, int line, string source
+  string evidenceKind, string file, int line, string source, string primitiveRuleId,
+  string calleeIdentity, string methodIdentity, string callIdentity, int argumentIndex,
+  string anchorKind
 where
   exists(MethodCall call, int criticalIndex |
-    isEffectCall(call, effectType, mechanism, criticalIndex) and
-    entity = callEntity(call) and
-    criticalRoleFor(criticalIndex, criticalRole) and
+    securityEffectCall(call, effectType, primitiveRuleId, mechanism, criticalIndex) and
+    entity = seCallEntity(call) and
+    seCriticalRole(criticalIndex, criticalRole) and
     evidenceKind = "DANGEROUS_PRIMITIVE_CALL" and
     file = call.getLocation().getFile().getRelativePath() and
     line = call.getLocation().getStartLine() and
-    source = "STATIC"
+    source = "STATIC" and
+    calleeIdentity = seCalleeIdentity(call) and
+    methodIdentity = seCallableIdentity(call.getEnclosingCallable()) and
+    callIdentity = seCallIdentity(call) and
+    argumentIndex = criticalIndex and
+    seAnchorKind(criticalIndex, anchorKind)
   )
   or
   exists(MethodCall call, int criticalIndex, Method wrapper, Parameter p, VarAccess access |
-    isEffectCall(call, effectType, mechanism, criticalIndex) and
+    securityEffectCall(call, effectType, primitiveRuleId, mechanism, criticalIndex) and
     criticalIndex >= 0 and
     call.getEnclosingCallable() = wrapper and
     p.getCallable() = wrapper and
@@ -115,6 +44,12 @@ where
     evidenceKind = "DIRECT_PARAMETER_EFFECT_WRAPPER" and
     file = call.getLocation().getFile().getRelativePath() and
     line = call.getLocation().getStartLine() and
-    source = "STATIC_DERIVED"
+    source = "STATIC_DERIVED" and
+    calleeIdentity = seCalleeIdentity(call) and
+    methodIdentity = seCallableIdentity(wrapper) and
+    callIdentity = seCallIdentity(call) and
+    argumentIndex = p.getPosition() and
+    anchorKind = "METHOD_PARAMETER"
   )
-select effectType, mechanism, entity, criticalRole, evidenceKind, file, line, source
+select effectType, mechanism, entity, criticalRole, evidenceKind, file, line, source,
+  primitiveRuleId, calleeIdentity, methodIdentity, callIdentity, argumentIndex, anchorKind
