@@ -59,9 +59,12 @@ predicate requestLikeType(Parameter p) {
   or p.getType().getName().matches("%Event")
   or p.getType().getName().matches("%Message")
   or p.getType().getName().matches("%Payload")
-  or p.getType().hasQualifiedName(
-    ["javax.servlet", "jakarta.servlet", "javax.servlet.http", "jakarta.servlet.http"],
-    ["ServletRequest", "HttpServletRequest"]
+  or exists(RefType type |
+    type = p.getType() and
+    type.hasQualifiedName(
+      ["javax.servlet", "jakarta.servlet", "javax.servlet.http", "jakarta.servlet.http"],
+      ["ServletRequest", "HttpServletRequest"]
+    )
   )
 }
 
@@ -84,7 +87,7 @@ predicate callbackOrOverride(Parameter p, string reason, string evidenceKind, st
 predicate routeBInputCandidate(
   DataFlow::Node node, Parameter p, string reason, string evidenceKind, string confidence
 ) {
-  node.asParameter() = p and p.getLocation().getFile().fromSource() and
+  node.asParameter() = p and p.fromSource() and
   (
     exists(Method method | p.getCallable() = method and annotatedBoundary(method, reason, evidenceKind, confidence))
     or callbackOrOverride(p, reason, evidenceKind, confidence)
@@ -141,7 +144,7 @@ predicate routeBEffectCandidate(
   DataFlow::Node node, MethodCall call, string reason, string effectCategory,
   string evidenceKind, string confidence, string valueRole, int argumentIndex
 ) {
-  call.getLocation().getFile().fromSource() and
+  call.fromSource() and
   sensitiveAbstraction(call.getMethod(), reason, effectCategory, evidenceKind, confidence) and
   (
     exists(Expr arg |
