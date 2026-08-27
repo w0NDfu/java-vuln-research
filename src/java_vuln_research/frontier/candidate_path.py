@@ -12,6 +12,7 @@ ROUTE_BY_SOURCE = {"STATIC": "ROUTE_A", "STATIC_DERIVED": "ROUTE_A"}
 SUPPORTED_MECHANISMS = frozenset({"DATA", "CALL"})
 PATH_STATUSES = frozenset({"COMPLETE_STATIC", "PARTIAL_STATIC", "FRONTIER_GAP"})
 FRONTIER_REASONS = frozenset({"FIELD_STATE_UNKNOWN", "LIBRARY_WRAPPER_UNKNOWN", "FRAMEWORK_UNKNOWN", "OTHER"})
+PATH_ORIGINS = frozenset({"CODEQL_NATIVE", "STATIC_AUGMENTED", "LLM_AUGMENTED"})
 
 
 class CandidatePathError(ValueError):
@@ -87,10 +88,12 @@ def _path_id(material: Mapping[str, Any]) -> str:
     return "path-" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
 
 
-def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any], effect_candidate: Mapping[str, Any], input_analysis_anchor: Mapping[str, Any], effect_analysis_anchor: Mapping[str, Any], intermediate_nodes: Iterable[Mapping[str, Any]], edges: Iterable[Mapping[str, Any]], path_status: str, detector_commit: str, unresolved_relations: Iterable[Mapping[str, Any]] = (), frontier_nodes: Iterable[Mapping[str, Any]] = (), frontier_reason: str | None = None, candidate_type_hypothesis: str = "UNKNOWN", provenance: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any], effect_candidate: Mapping[str, Any], input_analysis_anchor: Mapping[str, Any], effect_analysis_anchor: Mapping[str, Any], intermediate_nodes: Iterable[Mapping[str, Any]], edges: Iterable[Mapping[str, Any]], path_status: str, detector_commit: str, unresolved_relations: Iterable[Mapping[str, Any]] = (), frontier_nodes: Iterable[Mapping[str, Any]] = (), frontier_reason: str | None = None, candidate_type_hypothesis: str = "UNKNOWN", provenance: Mapping[str, Any] | None = None, path_origin: str = "STATIC_AUGMENTED", discovery_route_override: str | None = None, augmentation_reason: str | None = None, native_rule_id: str | None = None, native_path_id: str | None = None, confidence_tier: str | None = None, static_evidence: Iterable[Mapping[str, Any]] = (), unresolved_semantics: Iterable[str] = ()) -> dict[str, Any]:
     """Build an immutable Work1 path without asserting a vulnerability verdict."""
     if not project_id or not detector_commit:
         raise CandidatePathError("project_id and detector_commit are required")
+    if path_origin not in PATH_ORIGINS:
+        raise CandidatePathError(f"unsupported path origin: {path_origin!r}")
     if path_status not in PATH_STATUSES:
         raise CandidatePathError(f"unsupported path status: {path_status!r}")
     if path_status == "FRONTIER_GAP" and frontier_reason not in FRONTIER_REASONS:
@@ -125,11 +128,28 @@ def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any],
     input_anchor_view = analysis_anchor_view(input_analysis_anchor)
     effect_anchor_view = analysis_anchor_view(effect_analysis_anchor)
     identity = {"project_id": project_id, "input_candidate_id": str(input_candidate["candidate_id"]), "effect_candidate_id": str(effect_candidate["candidate_id"]), "input_analysis_anchor": input_anchor_view, "effect_analysis_anchor": effect_anchor_view, "path_nodes": nodes, "path_edges": path_edges, "path_status": path_status, "frontier_nodes": normalised_frontier, "frontier_reason": frontier_reason}
+    route = discovery_route_override or discovery_route(input_candidate)
+    effect_route = discovery_route_override or discovery_route(effect_candidate)
+    if route not in {"ROUTE_A", "ROUTE_B", "ROUTE_C", "CODEQL_NATIVE"} or effect_route not in {"ROUTE_A", "ROUTE_B", "ROUTE_C", "CODEQL_NATIVE"}:
+        raise CandidatePathError("unsupported discovery route")
+    native_fields = {
+        "path_origin": path_origin,
+        "augmentation_reason": augmentation_reason,
+        "discovery_route": discovery_route_override,
+        "native_rule_id": native_rule_id,
+        "native_path_id": native_path_id,
+        "confidence_tier": confidence_tier,
+        "static_evidence": [dict(item) for item in static_evidence],
+        "unresolved_semantics": [str(item) for item in unresolved_semantics],
+        "path_locations": source_locations,
+        "input_anchor": input_anchor_view,
+        "effect_anchor": effect_anchor_view,
+    }
     return {
         "candidate_path_id": _path_id(identity), "project_id": project_id,
         "input_candidate_id": str(input_candidate["candidate_id"]), "effect_candidate_id": str(effect_candidate["candidate_id"]),
         "input_entity": str(input_candidate["entity"]), "effect_entity": str(effect_candidate["entity"]),
-        "input_discovery_route": discovery_route(input_candidate), "effect_discovery_route": discovery_route(effect_candidate),
+        "input_discovery_route": route, "effect_discovery_route": effect_route,
         "input_analysis_anchor": input_anchor_view, "effect_analysis_anchor": effect_anchor_view,
         "path_nodes": nodes, "path_edges": path_edges, "semantic_mechanisms": mechanisms,
         "unresolved_relations": [dict(item) for item in unresolved_relations], "path_status": path_status,
@@ -137,4 +157,5 @@ def build_candidate_path(*, project_id: str, input_candidate: Mapping[str, Any],
         "candidate_type_hypothesis": candidate_type_hypothesis or "UNKNOWN", "evidence_refs": references,
         "source_locations": source_locations, "provenance": dict(provenance or {}),
         "schema_version": SCHEMA_VERSION, "detector_commit": detector_commit,
+        **native_fields,
     }

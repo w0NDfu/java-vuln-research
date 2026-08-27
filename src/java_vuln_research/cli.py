@@ -21,6 +21,7 @@ from .evaluation import (
     evaluate_p0a,
 )
 from .frontier import AnalysisAnchorError, CandidatePathRunError, run_w1_e1_paths
+from .native_pool import evaluate_native_pool, run_p0_a1_native_pool
 from .preflight import PreflightError, run_preflight
 from .reporting import generate_e0_report, generate_w1_e1_report
 
@@ -146,6 +147,30 @@ def _command_run_w1_e1_paths(args: argparse.Namespace) -> int:
     )
     _json_print(summary)
     return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_run_p0_a1_native_pool(args: argparse.Namespace) -> int:
+    summary = run_p0_a1_native_pool(
+        detector_manifest=args.detector_manifest,
+        baseline_raw_dir=args.baseline_raw_dir,
+        output_root=args.output_root,
+        project_root=args.project_root,
+        codeql=args.codeql,
+        run_id=args.run_id,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_evaluate_native_pool(args: argparse.Namespace) -> int:
+    summary = evaluate_native_pool(
+        baseline_raw_dir=args.baseline_raw_dir,
+        manifest_path=args.detector_manifest,
+        pool_path=args.pool_path,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0
 
 
 def _command_report_w1_e1(args: argparse.Namespace) -> int:
@@ -306,6 +331,22 @@ def build_parser() -> argparse.ArgumentParser:
     candidate_paths.add_argument("--ram-mb", type=int)
     candidate_paths.add_argument("--codeql", default="codeql")
     candidate_paths.set_defaults(func=_command_run_w1_e1_paths)
+
+    native_pool = commands.add_parser("run-p0-a1-native-pool")
+    native_pool.add_argument("--detector-manifest", required=True)
+    native_pool.add_argument("--baseline-raw-dir", required=True)
+    native_pool.add_argument("--output-root", required=True)
+    native_pool.add_argument("--project-root", required=True)
+    native_pool.add_argument("--run-id", required=True)
+    native_pool.add_argument("--codeql", default="codeql")
+    native_pool.set_defaults(func=_command_run_p0_a1_native_pool)
+
+    native_eval = commands.add_parser("evaluate-native-pool")
+    native_eval.add_argument("--detector-manifest", required=True)
+    native_eval.add_argument("--baseline-raw-dir", required=True)
+    native_eval.add_argument("--pool-path", required=True)
+    native_eval.add_argument("--output-root", required=True)
+    native_eval.set_defaults(func=_command_evaluate_native_pool)
 
     report_w1_e1 = commands.add_parser("report-w1-e1")
     report_w1_e1.add_argument("--run-id", required=True)

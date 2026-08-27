@@ -104,6 +104,62 @@ def _sarif_locations(path: Path) -> list[dict[str, Any]]:
     return result
 
 
+def iter_sarif_native_paths(path: str | Path, *, project_id: str) -> list[dict[str, Any]]:
+    """Return path-preserving SARIF records using the E0 location parser.
+
+    ``_sarif_locations`` is intentionally retained for the existing evaluator;
+    this companion keeps the same physical-location decoding while preserving
+    result/code-flow/thread-flow provenance needed by the NativePathAdapter.
+    """
+
+    source = Path(path)
+    if not source.is_file():
+        return []
+    try:
+        document = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise CandidateCoverageError(f"invalid SARIF: {source}: {error}") from error
+    result: list[dict[str, Any]] = []
+    for run_index, run in enumerate(document.get("runs", [])):
+        if not isinstance(run, Mapping):
+            continue
+        for result_index, finding in enumerate(run.get("results", []) or []):
+            if not isinstance(finding, Mapping):
+                continue
+            for flow_index, code_flow in enumerate(finding.get("codeFlows", []) or []):
+                if not isinstance(code_flow, Mapping):
+                    continue
+                for thread_index, thread_flow in enumerate(code_flow.get("threadFlows", []) or []):
+                    if not isinstance(thread_flow, Mapping):
+                        continue
+                    locations: list[dict[str, Any]] = []
+                    for thread_location in thread_flow.get("locations", []) or []:
+                        if not isinstance(thread_location, Mapping):
+                            continue
+                        physical = _physical_location(thread_location.get("location"))
+                        if physical:
+                            locations.append(physical)
+                    if locations:
+                        native_path_id = (
+                            f"{project_id}:r{run_index}:result{result_index}:"
+                            f"flow{flow_index}:thread{thread_index}"
+                        )
+                        result.append(
+                            {
+                                "native_path_id": native_path_id,
+                                "project_id": project_id,
+                                "rule_id": finding.get("ruleId"),
+                                "sarif_file": str(source),
+                                "run_index": run_index,
+                                "result_index": result_index,
+                                "code_flow_index": flow_index,
+                                "thread_flow_index": thread_index,
+                                "locations": locations,
+                            }
+                        )
+    return result
+
+
 def _path_locations(candidate: Mapping[str, Any]) -> list[dict[str, Any]]:
     locations = candidate.get("source_locations")
     if not isinstance(locations, list) or not locations:
