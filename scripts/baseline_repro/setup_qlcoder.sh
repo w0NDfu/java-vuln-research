@@ -42,7 +42,7 @@ docker run --rm \
   -e npm_config_cache=/tmp/npm-cache \
   -v "${lsp_src}:/work" \
   -w /work \
-  node:24-bookworm sh -lc 'npm install && npm run build'
+  node:24-bookworm sh -lc 'npm install && npm run build -- --moduleResolution bundler'
 
 cp "${ql_src}/Dockerfile" "${ql_src}/Dockerfile.paper"
 sed -i 's|npm install -g @anthropic-ai/claude-code$|npm install -g @anthropic-ai/claude-code@1.0.120|' "${ql_src}/Dockerfile.paper"
@@ -80,6 +80,7 @@ source "${ql_root}/method.env"
 {
   printf 'qlcoder_commit=%s\n' "$(git -C "${ql_src}" rev-parse HEAD)"
   printf 'codeql_lsp_mcp_commit=%s\n' "$(git -C "${lsp_src}" rev-parse HEAD)"
+  printf 'codeql_lsp_build_overlay=typescript_moduleResolution_bundler\n'
   printf 'codeql=%s\n' "$("${codeql_home}/codeql" version --format=terse)"
   printf 'codeql_bundle_sha256=%s\n' "$(sha256sum "${ql_root}/codeql-bundle-linux64-2.22.2.tar.gz" | cut -d ' ' -f 1)"
   printf 'claude_code=1.0.120\n'

@@ -61,7 +61,7 @@ bash scripts/baseline_repro/setup_qlcoder.sh
 bash scripts/baseline_repro/run_qlcoder_one.sh D002 QLCODER-SMOKE-D002-001
 ```
 
-The setup retains the pinned official source commit, downloads the official CodeQL Action bundle 2.22.2, builds the pinned LSP MCP server, populates the official CodeQL/CWE RAG collections, and creates a recorded environment overlay that pins Claude Code 1.0.120. The official CVE retrieval, vulnerable/fixed database build, diff, Chroma service, and iterative `ql_agent.py` path are used. QLCoder intentionally has `detector_ground_truth_access=true` under its original patch-conditioned protocol.
+The setup retains the pinned official source commit, downloads the official CodeQL Action bundle 2.22.2, builds the pinned LSP MCP server, populates the official CodeQL/CWE RAG collections, and creates a recorded environment overlay that pins Claude Code 1.0.120. Because the LSP commit has no package lock and its legacy TypeScript module resolver fails against dependencies resolved on 2026-08-28, the harness records and applies the build-only compiler overlay `--moduleResolution bundler`. The official CVE retrieval, vulnerable/fixed database build, diff, Chroma service, and iterative `ql_agent.py` path are otherwise unchanged. QLCoder intentionally has `detector_ground_truth_access=true` under its original patch-conditioned protocol.
 
 ## 4. Smoke gate
 

@@ -41,6 +41,8 @@ The upstream Dockerfile currently installs the latest Claude Code. The reproduct
 - Python environment: `3.11.11`
 - Required services: ChromaDB, CodeQL LSP MCP server, CodeQL packs/document retrieval, and the selected agent backend.
 
+The pinned LSP MCP commit has no package lock, uses semver ranges, and fixes TypeScript `moduleResolution` to legacy `node`. On 2026-08-28, the official `npm install && npm run build` command resolved a dependency layout that TypeScript could not compile (`TS2307` for `vscode-languageserver-protocol`). The cloud harness applies only the compiler-resolution overlay `--moduleResolution bundler`; this was verified to compile at the same source commit and does not alter QLCoder queries, prompts, priors, tools, or success semantics. Both the upstream failure and the successful overlay build are retained as raw artifacts.
+
 The official setup builds vulnerable and fixed databases separately with `--build-mode=none`. Those method-owned databases are distinct from the frozen Work1 2.26.3 databases and must be recorded under the QLCoder raw-artifact tree.
 
 ## Official invocation
@@ -105,4 +107,3 @@ QLCoder uses the CVE patch, vulnerable/fixed pair, and fix-method evaluation ins
 ## Dev18 compatibility decision
 
 All 18 case identities have CVE metadata and a vulnerable/fixed pair in the current official QLCoder `data/project_info.csv`. The frozen V011 checkout is not the benchmark buggy commit, so QLCoder can reproduce its official CVE pair but the result is `NOT_COMPARABLE` to Current Work1 at the frozen revision unless a common post-hoc mapping is established. Build, database, provider, and service failures are reported independently and never converted to `MISS`.
-
