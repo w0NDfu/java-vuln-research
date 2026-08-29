@@ -19,16 +19,16 @@ CodeQL 在本阶段是事实提供者，不是漏洞搜索边界。模型只能�
 - `NOT_MAPPED`：查询成功，但没有满足严格上下文的候选。
 - `UNSUPPORTED_KIND`：该 `ProgramEntity.kind` 没有已实现映射语义。
 
-同一 `(database, entity_id)` 的映射在一次工具会话中缓存；后续工具仍复制完整映射 provenance，并标注 `mapping_cache_hit=true`。Cloud smoke 将一个项目的最多 11 个确定性样本合并为一次有界 `EntityFacts` 查询，再按严格 path/range/kind/context 规则分别映射；每个逻辑结果记录 batch parent call、batch size/index、完整 batch wall-clock 与摊分 latency。这只减少重复编译，不改变映射标准或逻辑调用数。
+同一 `(database, entity_id)` 的映射在一次工具会话中缓存；后续工具仍复制完整映射 provenance，并标注 `mapping_cache_hit=true`。唯一映射除 identity、kind、位置和签名外，还保留参数位置、返回信息、声明/接收者类型、annotation 以及 override/interface 事实，供后续工具复用而不再次按名称猜测。Cloud smoke 将一个项目的最多 11 个确定性样本合并为一次有界 `EntityFacts` 查询，再按严格 path/range/kind/context 规则分别映射；每个逻辑结果记录 batch parent call、batch size/index、完整 batch wall-clock 与摊分 latency。这只减少重复编译，不改变映射标准或逻辑调用数。
 
 ## 4. CodeQL tool list
 
 | 工具 | 固定查询 | 返回事实 | 默认边界 |
 |---|---|---|---|
-| `codeql_entity_facts` | `EntityFacts.ql` | CodeQL identity、kind、位置、qualified identity、signature、enclosing context | 100 rows |
-| `codeql_callers` | `CallGraph.ql` | 直接 caller 边 | 30 edges，depth 1 |
-| `codeql_callees` | `CallGraph.ql` | 直接 callee 边 | 30 edges，depth 1 |
-| `codeql_local_flow` | `LocalFlow.ql` | 一步 local flow | 30 edges，depth 1 |
+| `codeql_entity_facts` | `EntityFacts.ql` | CodeQL identity、kind、位置、qualified identity、signature、enclosing context、参数/返回/类型/annotation/override-interface 事实 | 100 rows |
+| `codeql_callers` | `CallGraph.ql` | 以精确 mapped CodeQL identity 为锚点的直接 caller 边 | 30 edges，depth 1 |
+| `codeql_callees` | `CallGraph.ql` | 以精确 mapped CodeQL identity 为锚点的直接 callee 边 | 30 edges，depth 1 |
+| `codeql_local_flow` | `LocalFlow.ql` | 一步 local flow，可选 target entity 与 scope entity | 30 edges，depth 1 |
 | `codeql_dataflow_neighbors` | `DataFlowNeighbors.ql` | `FORWARD`/`BACKWARD`/`BOTH` 一步邻居 | 30 nodes、50 edges、depth 1 |
 | `codeql_cfg_neighbors` | `CfgNeighbors.ql` | predecessor/successor | 30 nodes、50 edges、depth 1 |
 
@@ -51,23 +51,23 @@ M2 lexical evidence 与 M3 CodeQL evidence 不可互换：
 
 ## 7. Uncertainty semantics
 
-`OK` 表示工具成功且有事实；`EMPTY` 表示查询和解码成功但没有边/事实，不等价于失败；`ENTITY_NOT_MAPPED` 与 `UNSUPPORTED` 保留映射不确定性；`ERROR` 必须携带结构化 failure。所有边先按方向过滤，再同时应用 node、edge 与 depth 上限；达到上限时 `truncated=true`，不静默丢弃边界信息。
+`OK` 表示工具成功且有事实；`EMPTY` 表示查询和解码成功但没有边/事实，不等价于失败；`ENTITY_NOT_MAPPED` 与 `UNSUPPORTED` 保留映射不确定性；`ERROR` 必须携带结构化 failure。所有边先按方向过滤，再同时应用 node、edge 与 depth 上限；达到上限时 `truncated=true`，不静默丢弃边界信息。M3 只实现 depth 1：调用方请求 `max_depth>1` 会得到明确参数错误，不会返回伪装成多跳的一步结果。
 
 ## 8. Local tests
 
-本地覆盖 strict mapping、ambiguous/not-mapped/unsupported、模板 escaping、qlpack context、query/BQRS 执行与解析、timeout/OOM/compile classification、bounded output、call direction、node bounds、mapping cache、11-entity batch、配置化 query threads、smoke deterministic sampling、artifact binding 与 percentile。当前完整测试结果：`104 passed, 1 skipped`。
+本地覆盖 strict mapping、ambiguous/not-mapped/unsupported、实体 enrichment、精确 CodeQL identity 模板、可选 local-flow target/scope、depth 拒绝语义、模板 escaping、qlpack context、query/BQRS 执行与解析、timeout/OOM/compile classification、bounded output、call direction、node bounds、mapping cache、11-entity batch、配置化 query threads、smoke deterministic sampling、artifact binding 与 percentile。当前完整测试结果：`107 passed, 1 skipped`。
 
 ## 9. 18 DB CloudStudio test
 
 CloudStudio 输入严格来自 `project_inventory.csv` 的 `codeql_db_ready=true` 集合，并由 runner 校验必须与 frozen cohort 完全相等：P006、P007、P010、P012、D001、D002、D003、D004、V001、V004、V005、V007、V009、V011、V021、V022、V023、V025。
 
-每项目确定性采样计划为 TYPE×2、METHOD×3、CONSTRUCTOR×1、FIELD×2、CALL×3；缺少某 kind 时显式记录 `sample_missing`。随后执行 entity facts、3 个实体双向 call graph、local flow×3、dataflow forward×3/backward×3、CFG×3。全量首轮 runner 使用 4 workers、每个 query 1 thread、单查询 240 秒，并按项目写 checkpoint 支持恢复；checkpoint 只有 schema version、当前 V11 Git SHA、timeout 与 query-thread 配置同时匹配时才复用。CloudStudio 会话发生平台重启后，runner 从有效 checkpoint 恢复，没有重跑已完成项目，也没有重建 DB。
+每项目确定性采样计划为 TYPE×2、METHOD×3、CONSTRUCTOR×1、FIELD×2、CALL×3；缺少某 kind 时显式记录 `sample_missing`。随后执行 entity facts、3 个实体双向 call graph、local flow×3、dataflow forward×3/backward×3、CFG×3。最终 contract-complete 全量 runner 从首个项目起使用 2 workers、每个 query 1 thread、单查询 240 秒，并按项目写 checkpoint 支持恢复；checkpoint 只有 schema version、当前 V11 Git SHA、timeout 与 query-thread 配置同时匹配时才复用。18 个项目均在同一实现 SHA 下实际执行，没有重建 DB。
 
-Cloud preflight 先在 P006 单独执行 11-entity batch：`OK`、11 rows、53.518322 秒。一次早期 4-worker run 使用 120 秒 timeout 时，P010/P012 在资源竞争下分别约 126–128 秒被分类为 `TIMEOUT`；因此最终配置依据实测将保护边界提高到 240 秒，而不是把 timeout 混入 EMPTY 或映射失败。失败 run 不进入最终五个 required artifact。
+Cloud preflight 先在 P006 验证 enrichment、精确 CodeQL callable identity 和可选 local-flow target/scope，三类查询均成功编译执行。最终全量运行中 153 个唯一映射实体全部具有 `type_information`；其中 40 个具有参数位置、60 个具有返回信息、14 个具有 annotation facts、36 个具有 override/interface facts。空字段表示该实体种类没有对应事实，不用占位值伪造信息。
 
-首轮结束时有 17 个结构化错误：5 个 OOM 和 D003 的 12 个 `QUERY_COMPILE_ERROR`。只对这 5 个失败项目以 2 workers、1 query thread、240 秒执行一次定向重试；5 个 OOM 全部消失，D003 的 12 个错误稳定复现。重试备份保存在 `checkpoints/retry1_backup/`，最终 required artifact 由 18 个最新有效 checkpoint 重新聚合。
+历史 pre-enrichment 运行曾在 4-worker 资源竞争下出现 5 个 OOM；该证据保存在 `pre_enrichment_717cd5f/`，不混入当前 required artifact。最终实现从头以 2 workers 重跑全部 18 个 ready DB，wall-clock 为 3882.606458 秒，没有 OOM 或 TIMEOUT，也不需要失败项目定向重试。D003 的 12 个 `QUERY_COMPILE_ERROR` 在新实现上稳定复现。
 
-每个实际执行的查询绑定 V11 Git SHA、CodeQL version、DB path 与 materialized query hash；项目汇总同时绑定 frozen manifest 中的 source revision。源码副本没有 `.git` 时不伪造现场 HEAD，而是明确记录 `project_source_head_origin=frozen_manifest`。90 个下游调用因映射失败在 CodeQL 执行前短路，故没有伪造 query hash；其余 432 个调用均有实际 query hash 与 source revision。artifact 运行 SHA 为 `717cd5f25b8c94ca6e918805ffd71c5288e043d7`，CodeQL 为 `2.26.3`；最终分支另包含 `aadd6a5`，用于让后续 checkpoint 额外绑定 runtime limits，不回写本次已经生成的证据。
+每个实际执行的查询绑定 V11 Git SHA、CodeQL version、DB path 与 materialized query hash；项目汇总同时绑定 frozen manifest 中的 source revision。源码副本没有 `.git` 时不伪造现场 HEAD，而是明确记录 `project_source_head_origin=frozen_manifest`。90 个下游调用因映射失败在 CodeQL 执行前短路，故没有伪造 query hash；其余 432 个调用均有实际 query hash 与 source revision。artifact 运行 SHA 为 `5c62e35075b13935885fda40ace55f6a36e4abd3`，CodeQL 为 `2.26.3`，并包含完整 EntityFacts enrichment、精确 call-graph identity、local-flow target/scope 与 depth 拒绝语义。
 
 Cloud 命令在隔离 worktree `/workspace/work1-agent-v11-cloud` 上执行，不切换或清理 Route B 工作区。最终 artifact 目录：`/workspace/experiment-output/artifacts/work1-agent-v11/m3_codeql_tools/`。
 
@@ -102,16 +102,16 @@ Cloud 命令在隔离 worktree `/workspace/work1-agent-v11-cloud` 上执行，�
 
 ## 11. Per-tool results
 
-最终共 522 个逻辑调用：301 `OK`、74 `EMPTY`、135 `ENTITY_NOT_MAPPED`、12 `ERROR`，总工具成功率为 0.718391。返回 1208 nodes、1515 edges；总 truncation rate 为 0.040230。全局 latency 为 avg 25.375673 秒、p50 10.471573 秒、p95 128.198551 秒、max 185.721123 秒。
+最终共 522 个逻辑调用：301 `OK`、74 `EMPTY`、135 `ENTITY_NOT_MAPPED`、12 `ERROR`，总工具成功率为 0.718391。返回 1208 nodes、1515 edges；总 truncation rate 为 0.040230。全局 latency 为 avg 14.600897 秒、p50 5.445301 秒、p95 63.202608 秒、max 78.750911 秒。
 
 | tool | calls | OK | EMPTY | ENM | ERROR | success | avg s | p50 s | p95 s | max s | nodes | edges | trunc. |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `codeql_callees` | 54 | 28 | 17 | 9 | 0 | 0.833333 | 19.453272 | 26.190982 | 34.598431 | 35.542804 | 133 | 146 | 0.055556 |
-| `codeql_callers` | 54 | 28 | 17 | 9 | 0 | 0.833333 | 36.947181 | 26.012425 | 117.390569 | 125.582409 | 93 | 137 | 0.055556 |
-| `codeql_cfg_neighbors` | 54 | 36 | 6 | 9 | 3 | 0.777778 | 54.847692 | 36.848446 | 137.392168 | 141.518670 | 653 | 1144 | 0.277778 |
-| `codeql_dataflow_neighbors` | 108 | 40 | 20 | 42 | 6 | 0.555556 | 37.781475 | 19.120287 | 163.204579 | 185.721123 | 110 | 62 | 0.000000 |
-| `codeql_entity_facts` | 198 | 153 | 0 | 45 | 0 | 0.772727 | 4.654311 | 3.300583 | 12.610939 | 12.610939 | 175 | 0 | 0.000000 |
-| `codeql_local_flow` | 54 | 16 | 14 | 21 | 3 | 0.555556 | 42.321275 | 19.208950 | 154.196152 | 180.614602 | 44 | 26 | 0.000000 |
+| `codeql_callees` | 54 | 28 | 17 | 9 | 0 | 0.833333 | 10.823985 | 12.392351 | 15.237333 | 15.521912 | 133 | 146 | 0.055556 |
+| `codeql_callers` | 54 | 28 | 17 | 9 | 0 | 0.833333 | 39.160167 | 46.888506 | 55.692888 | 56.398623 | 93 | 137 | 0.055556 |
+| `codeql_cfg_neighbors` | 54 | 36 | 6 | 9 | 3 | 0.777778 | 11.661455 | 13.316253 | 17.809090 | 19.493560 | 653 | 1144 | 0.277778 |
+| `codeql_dataflow_neighbors` | 108 | 40 | 20 | 42 | 6 | 0.555556 | 11.622362 | 16.666148 | 22.595638 | 25.756262 | 110 | 62 | 0.000000 |
+| `codeql_entity_facts` | 198 | 153 | 0 | 45 | 0 | 0.772727 | 5.152247 | 5.027925 | 5.853443 | 5.853443 | 175 | 0 | 0.000000 |
+| `codeql_local_flow` | 54 | 16 | 14 | 21 | 3 | 0.555556 | 37.360099 | 42.182055 | 75.903951 | 78.750911 | 44 | 26 | 0.000000 |
 
 ## 12. Mapping ambiguity analysis
 
@@ -123,11 +123,11 @@ Cloud 命令在隔离 worktree `/workspace/work1-agent-v11-cloud` 上执行，�
 
 最终 artifact 中 `TIMEOUT=0`、`OOM=0`、`QUERY_EXECUTION_ERROR=0`、decode/parse/driver error 均为 0；唯一实际错误是 D003 的 12 个 `QUERY_COMPILE_ERROR`（exit 100）：CFG 3、dataflow 6、local-flow 3。stderr 的稳定共同栈位于 CodeQL `ExtensionalLoader`/`TuplePool` cache/load 路径；同一固定查询在其余 DB 可运行，因此证据支持“D003/CodeQL 运行时 compile-stage 兼容性问题”，而不是把它误报为无边、映射失败或通用 QL 语法错误。
 
-首轮 4-worker 结果中的 5 个 OOM 分布在 D001（2）、V007（1）、V009（1）、V011（1）。2-worker 定向重试后这 5 个调用变为 2 `OK` 和 3 `EMPTY`，证明它们是并发资源压力而不是 DB 不可用。D003 的 12 个错误在定向重试中完全复现，故停止重复重试。`failures.jsonl` 共 147 行：135 个显式 mapping failure/short-circuit，加 12 个结构化 CodeQL error；没有重建或使用 15 个非 ready DB。
+历史 4-worker 结果中的 5 个 OOM 分布在 D001（2）、V007（1）、V009（1）、V011（1），证明高并发不适合该 4-core/8-GB CloudStudio 环境；它们不属于当前 artifact。最终 2-worker 全量重跑没有 OOM/TIMEOUT。D003 的 12 个错误仍完全复现，故停止重复重试。`failures.jsonl` 共 147 行：135 个显式 mapping failure/short-circuit，加 12 个结构化 CodeQL error；没有重建或使用 15 个非 ready DB。
 
 ## 14. Known CodeQL limitations
 
-- 当前 flow 与 CFG 查询提供一步邻居；API 保留 `max_depth`，本阶段 smoke 使用 depth 1。
+- 当前 call graph、flow 与 CFG 查询只提供一步邻居；API 对 `max_depth>1` 明确拒绝，本阶段 smoke 使用 depth 1。
 - Java CodeQL database 只反映建库时成功提取的程序；缺失依赖、生成代码或未被构建覆盖的模块不会由工具补全。
 - source range 可能对应多个 AST/flow 节点，因此 mapping 必须保留 ambiguity，而不能用名称猜测。
 - `EMPTY` 只说明当前实体和固定查询没有事实，不能证明没有更长路径或安全问题。
