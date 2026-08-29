@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "program_entity.schema.json",
+  "title": "Work1 V11 ProgramEntity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "entity_id",
+    "codeql_identity",
+    "kind",
+    "repository_relative_path",
+    "start_line",
+    "end_line",
+    "simple_name",
+    "qualified_name",
+    "enclosing_type",
+    "enclosing_callable",
+    "signature",
+    "type_text",
+    "provenance",
+    "extraction_confidence"
+  ],
+  "properties": {
+    "entity_id": {"type": "string", "pattern": "^entity-[0-9a-f]{24}$"},
+    "codeql_identity": {"type": ["string", "null"]},
+    "kind": {
+      "enum": [
+        "FILE",
+        "PACKAGE",
+        "TYPE",
+        "METHOD",
+        "CONSTRUCTOR",
+        "PARAMETER",
+        "FIELD",
+        "CALL",
+        "ANNOTATION",
+        "RETURN",
+        "LOCAL",
+        "CALL_ARGUMENT",
+        "FIELD_READ",
+        "FIELD_WRITE"
+      ]
+    },
+    "repository_relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "start_line": {"type": "integer", "minimum": 1},
+    "end_line": {"type": "integer", "minimum": 1},
+    "simple_name": {"type": "string", "minLength": 1},
+    "qualified_name": {"type": "string", "minLength": 1},
+    "enclosing_type": {"type": ["string", "null"]},
+    "enclosing_callable": {"type": ["string", "null"]},
+    "signature": {"type": ["string", "null"]},
+    "type_text": {"type": ["string", "null"]},
+    "provenance": {"type": "object"},
+    "extraction_confidence": {"enum": ["HIGH", "MEDIUM", "LOW", "UNKNOWN"]}
+  }
+}
