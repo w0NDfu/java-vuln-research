@@ -50,6 +50,34 @@ class CodeQLAnalysisTools:
         }
 
     @staticmethod
+    def _entity_target_values(entities: Iterable[ProgramEntity]) -> dict[str, str | int]:
+        selected = list(entities)
+        if len(selected) > 11:
+            raise ValueError("EntityFacts supports at most eleven bounded targets")
+        values: dict[str, str | int] = {}
+        for index in range(11):
+            if index < len(selected):
+                entity = selected[index]
+                values.update(
+                    {
+                        f"PATH_{index}": entity.repository_relative_path,
+                        f"START_LINE_{index}": entity.start_line,
+                        f"END_LINE_{index}": entity.end_line,
+                        f"KIND_{index}": entity.kind.value,
+                    }
+                )
+            else:
+                values.update(
+                    {
+                        f"PATH_{index}": "__WORK1_V11_UNUSED_TARGET__",
+                        f"START_LINE_{index}": 1,
+                        f"END_LINE_{index}": 1,
+                        f"KIND_{index}": "TYPE",
+                    }
+                )
+        return values
+
+    @staticmethod
     def _unmapped(tool_name: str, entity: ProgramEntity, mapping: EntityMappingResult) -> CodeQLToolResult:
         status = ToolStatus.UNSUPPORTED if mapping.status == MappingStatus.UNSUPPORTED_KIND else ToolStatus.ENTITY_NOT_MAPPED
         return CodeQLToolResult(
@@ -79,11 +107,7 @@ class CodeQLAnalysisTools:
             query=self.queries["entity_facts"],
             tool_name="map_program_entity",
             queried_entity_ids=[entity.entity_id],
-            template_values={
-                "PATH": entity.repository_relative_path,
-                "START_LINE": entity.start_line,
-                "END_LINE": entity.end_line,
-            },
+            template_values=self._entity_target_values([entity]),
         )
         mapping = map_program_entity(
             entity,
@@ -102,6 +126,60 @@ class CodeQLAnalysisTools:
                 executed.status = ToolStatus.ENTITY_NOT_MAPPED
         self._mapping_cache[cache_key] = (copy.deepcopy(mapping), copy.deepcopy(executed))
         return mapping, executed
+
+    def prefetch_entity_facts(
+        self,
+        *,
+        database: str | Path,
+        entities: Iterable[ProgramEntity],
+    ) -> CodeQLToolResult:
+        """Populate the strict mapping cache with one bounded multi-entity query."""
+
+        selected = list(entities)
+        executed = self.executor.execute(
+            database=database,
+            query=replace(self.queries["entity_facts"], max_rows=max(100, len(selected) * 100)),
+            tool_name="prefetch_entity_facts",
+            queried_entity_ids=[entity.entity_id for entity in selected],
+            template_values=self._entity_target_values(selected),
+        )
+        database_key = str(Path(database).resolve())
+        for index, entity in enumerate(selected):
+            mapping = map_program_entity(
+                entity,
+                executed.nodes,
+                database_id=Path(database).name,
+                query_hash=str(executed.provenance.get("query_hash") or ""),
+            )
+            per_entity = copy.deepcopy(executed)
+            per_entity.tool_call_id = "codeql-call-" + uuid.uuid4().hex
+            per_entity.tool_name = "codeql_entity_facts"
+            per_entity.queried_entity_ids = [entity.entity_id]
+            per_entity.nodes = [candidate.to_dict() for candidate in mapping.candidates]
+            per_entity.mapped_codeql_entities = [candidate.to_dict() for candidate in mapping.candidates]
+            per_entity.provenance.update(
+                {
+                    "mapping": mapping.to_dict(),
+                    "batch_parent_tool_call_id": executed.tool_call_id,
+                    "batch_size": len(selected),
+                    "batch_entity_index": index,
+                }
+            )
+            elapsed = float(executed.metrics.get("wall_clock_seconds") or 0.0)
+            per_entity.metrics["batch_wall_clock_seconds"] = elapsed
+            per_entity.metrics["wall_clock_seconds"] = round(elapsed / max(1, len(selected)), 6)
+            if executed.status != ToolStatus.ERROR:
+                if mapping.status == MappingStatus.MAPPED_UNIQUE:
+                    per_entity.status = ToolStatus.OK
+                elif mapping.status == MappingStatus.UNSUPPORTED_KIND:
+                    per_entity.status = ToolStatus.UNSUPPORTED
+                else:
+                    per_entity.status = ToolStatus.ENTITY_NOT_MAPPED
+            self._mapping_cache[(database_key, entity.entity_id)] = (
+                copy.deepcopy(mapping),
+                copy.deepcopy(per_entity),
+            )
+        return executed
 
     def codeql_entity_facts(self, *, database: str | Path, entity: ProgramEntity) -> CodeQLToolResult:
         _, result = self.map_entity(database=database, entity=entity)

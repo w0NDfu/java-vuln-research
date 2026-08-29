@@ -133,6 +133,25 @@ def test_executor_constructs_command_materializes_template_and_records_provenanc
     assert materialized == "select 10\n"
 
 
+def test_executor_uses_configured_default_threads(tmp_path: Path) -> None:
+    runner = Runner()
+    executor = CodeQLExecutor(
+        "codeql",
+        artifact_root=tmp_path / "artifacts",
+        threads=3,
+        runner=runner,
+    )
+    result = executor.execute(
+        database=_ready_db(tmp_path),
+        query=_query(tmp_path),
+        tool_name="test",
+        template_values={"LINE": 10},
+    )
+    assert result.status == ToolStatus.OK
+    query_command = next(command for command in runner.commands if "query" in command)
+    assert "--threads=3" in query_command
+
+
 def test_executor_preserves_qlpack_context_for_materialized_query(tmp_path: Path) -> None:
     pack = tmp_path / "pack"
     pack.mkdir()
@@ -176,6 +195,25 @@ class AnalysisRunner:
         )
 
 
+class BatchAnalysisRunner:
+    def __init__(self, nodes) -> None:
+        self.calls = 0
+        self.nodes = nodes
+        self.kwargs = None
+
+    def execute(self, **kwargs):
+        self.calls += 1
+        self.kwargs = kwargs
+        return CodeQLToolResult(
+            tool_call_id="batch",
+            tool_name=kwargs["tool_name"],
+            status=ToolStatus.OK,
+            nodes=self.nodes,
+            provenance={"query_hash": "batch-hash"},
+            metrics={"wall_clock_seconds": 11.0},
+        )
+
+
 def test_analysis_tools_filter_call_direction_and_return_bounded_nodes(tmp_path: Path) -> None:
     runner = AnalysisRunner()
     tools = CodeQLAnalysisTools(runner, tmp_path)
@@ -193,6 +231,52 @@ def test_analysis_tools_cache_mapping_per_database_and_entity(tmp_path: Path) ->
     assert first.status == second.status == MappingStatus.MAPPED_UNIQUE
     assert runner.calls == 1
     assert cached_result.provenance["mapping_cache_hit"] is True
+
+
+def test_analysis_tools_prefetches_entity_mapping_in_one_bounded_query(tmp_path: Path) -> None:
+    first = _entity()
+    second = ProgramEntity.create(
+        kind=ProgramEntityKind.FIELD,
+        repository_relative_path="src/main/java/example/A.java",
+        start_line=20,
+        end_line=20,
+        simple_name="value",
+        qualified_name="example.A.value",
+        enclosing_type="example.A",
+    )
+    runner = BatchAnalysisRunner(
+        [
+            _candidate().to_dict(),
+            _candidate(
+                codeql_identity="FIELD@src/main/java/example/A.java:20:3",
+                kind="FIELD",
+                start_line=20,
+                end_line=20,
+                qualified_name="example.A.value",
+                signature="",
+                enclosing_callable="",
+            ).to_dict(),
+        ]
+    )
+    tools = CodeQLAnalysisTools(runner, tmp_path)
+    batch = tools.prefetch_entity_facts(database=tmp_path / "db", entities=[first, second])
+    first_result = tools.codeql_entity_facts(database=tmp_path / "db", entity=first)
+    second_result = tools.codeql_entity_facts(database=tmp_path / "db", entity=second)
+
+    assert batch.status == ToolStatus.OK
+    assert runner.calls == 1
+    assert runner.kwargs["query"].max_rows == 200
+    assert runner.kwargs["template_values"]["PATH_0"] == first.repository_relative_path
+    assert runner.kwargs["template_values"]["KIND_1"] == "FIELD"
+    assert first_result.status == second_result.status == ToolStatus.OK
+    assert first_result.provenance["batch_parent_tool_call_id"] == "batch"
+    assert first_result.metrics["batch_wall_clock_seconds"] == 11.0
+    assert first_result.metrics["wall_clock_seconds"] == 5.5
+
+
+def test_entity_fact_batch_rejects_more_than_eleven_targets() -> None:
+    with pytest.raises(ValueError, match="at most eleven"):
+        CodeQLAnalysisTools._entity_target_values([_entity()] * 12)
 
 
 @pytest.mark.parametrize(

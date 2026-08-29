@@ -70,12 +70,14 @@ class CodeQLExecutor:
         artifact_root: str | Path,
         timeout_seconds: int = 90,
         max_log_chars: int = 4000,
+        threads: int = 0,
         runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     ) -> None:
         self.executable = str(executable)
         self.artifact_root = Path(artifact_root)
         self.timeout_seconds = int(timeout_seconds)
         self.max_log_chars = int(max_log_chars)
+        self.threads = int(threads)
         self._runner = runner
         self._version: str | None = None
 
@@ -149,7 +151,7 @@ class CodeQLExecutor:
         tool_name: str,
         queried_entity_ids: Sequence[str] = (),
         template_values: Mapping[str, str | int] | None = None,
-        threads: int = 0,
+        threads: int | None = None,
         ram_mb: int | None = None,
     ) -> CodeQLToolResult:
         started = time.monotonic()
@@ -228,7 +230,7 @@ class CodeQLExecutor:
             str(execution_query),
             f"--database={db}",
             f"--output={bqrs}",
-            f"--threads={int(threads)}",
+            f"--threads={self.threads if threads is None else int(threads)}",
         ]
         if ram_mb is not None:
             command.append(f"--ram={int(ram_mb)}")

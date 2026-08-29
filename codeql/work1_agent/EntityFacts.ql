@@ -1,11 +1,5 @@
-/** Work1 V11 neutral entity facts for one bounded source span. */
+/** Work1 V11 neutral entity facts for up to eleven bounded source spans. */
 import java
-
-predicate inTargetSpan(Element e) {
-  e.getLocation().getFile().getRelativePath() = {{PATH}} and
-  e.getLocation().getStartLine() <= {{END_LINE}} and
-  e.getLocation().getEndLine() >= {{START_LINE}}
-}
 
 string entityKind(Element e) {
   exists(RefType t | e = t and result = "TYPE")
@@ -17,6 +11,27 @@ string entityKind(Element e) {
   or exists(Annotation a | e = a and result = "ANNOTATION")
   or exists(ReturnStmt r | e = r and result = "RETURN")
   or exists(LocalVariableDecl l | e = l and result = "LOCAL")
+}
+
+predicate matchesTarget(Element e, string path, int startLine, int endLine, string expectedKind) {
+  e.getLocation().getFile().getRelativePath() = path and
+  e.getLocation().getStartLine() <= endLine and
+  e.getLocation().getEndLine() >= startLine and
+  entityKind(e) = expectedKind
+}
+
+predicate inTargetSpan(Element e) {
+  matchesTarget(e, {{PATH_0}}, {{START_LINE_0}}, {{END_LINE_0}}, {{KIND_0}})
+  or matchesTarget(e, {{PATH_1}}, {{START_LINE_1}}, {{END_LINE_1}}, {{KIND_1}})
+  or matchesTarget(e, {{PATH_2}}, {{START_LINE_2}}, {{END_LINE_2}}, {{KIND_2}})
+  or matchesTarget(e, {{PATH_3}}, {{START_LINE_3}}, {{END_LINE_3}}, {{KIND_3}})
+  or matchesTarget(e, {{PATH_4}}, {{START_LINE_4}}, {{END_LINE_4}}, {{KIND_4}})
+  or matchesTarget(e, {{PATH_5}}, {{START_LINE_5}}, {{END_LINE_5}}, {{KIND_5}})
+  or matchesTarget(e, {{PATH_6}}, {{START_LINE_6}}, {{END_LINE_6}}, {{KIND_6}})
+  or matchesTarget(e, {{PATH_7}}, {{START_LINE_7}}, {{END_LINE_7}}, {{KIND_7}})
+  or matchesTarget(e, {{PATH_8}}, {{START_LINE_8}}, {{END_LINE_8}}, {{KIND_8}})
+  or matchesTarget(e, {{PATH_9}}, {{START_LINE_9}}, {{END_LINE_9}}, {{KIND_9}})
+  or matchesTarget(e, {{PATH_10}}, {{START_LINE_10}}, {{END_LINE_10}}, {{KIND_10}})
 }
 
 string qualifiedIdentity(Element e) {

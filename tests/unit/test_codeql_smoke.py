@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from java_vuln_research.work1_agent.codeql.smoke import SAMPLE_PLAN, _percentile, _sample
+from java_vuln_research.work1_agent.codeql.smoke import (
+    SAMPLE_PLAN,
+    SMOKE_SCHEMA_VERSION,
+    _aggregate,
+    _load_source_revisions,
+    _percentile,
+    _sample,
+)
 from java_vuln_research.work1_agent.repository.entity import ProgramEntity
 
 
@@ -27,3 +34,42 @@ def test_smoke_sampling_is_deterministic_and_reports_missing_quota() -> None:
 
 def test_percentile_uses_nearest_rank() -> None:
     assert _percentile([1.0, 2.0, 3.0, 4.0], 0.95) == 4.0
+
+
+def test_aggregate_binds_schema_git_query_database_and_source_head() -> None:
+    result = {
+        "summary": {"project_id": "P006", "project_source_head": "source-sha"},
+        "calls": [
+            {
+                "tool_name": "codeql_entity_facts",
+                "status": "OK",
+                "nodes": [],
+                "edges": [],
+                "metrics": {"wall_clock_seconds": 1.0},
+                "provenance": {
+                    "codeql_version": "2.26.3",
+                    "query_hash": "query-sha",
+                    "database_path": "/db/P006",
+                },
+            }
+        ],
+        "mappings": [],
+    }
+    aggregate = _aggregate([result], 2.0, v11_git_sha="v11-sha")
+    assert aggregate["smoke_schema_version"] == SMOKE_SCHEMA_VERSION
+    assert aggregate["v11_git_sha"] == "v11-sha"
+    assert aggregate["query_hashes"] == ["query-sha"]
+    assert aggregate["database_paths"] == ["/db/P006"]
+    assert aggregate["project_source_heads"] == {"P006": "source-sha"}
+
+
+def test_source_revision_manifest_rejects_conflicts(tmp_path) -> None:
+    first = tmp_path / "first.yaml"
+    second = tmp_path / "second.yaml"
+    first.write_text("projects:\n  - project: P006\n    revision: abc\n", encoding="utf-8")
+    second.write_text("projects:\n  - project: P006\n    revision: def\n", encoding="utf-8")
+    assert _load_source_revisions([first]) == {"P006": "abc"}
+    import pytest
+
+    with pytest.raises(ValueError, match="conflicting source revisions"):
+        _load_source_revisions([first, second])
