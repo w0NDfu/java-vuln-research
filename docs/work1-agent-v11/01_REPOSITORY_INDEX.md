@@ -2,7 +2,7 @@
 
 日期：2026-08-29
 
-状态：`LOCAL_IMPLEMENTATION_COMPLETE / CLOUDSTUDIO_SMOKE_PENDING`
+状态：`M1_COMPLETE / CLOUDSTUDIO_SMOKE_COMPLETE`
 
 ## 1. M1 目标
 
@@ -186,32 +186,57 @@ Fixture：`tests/fixtures/work1_agent_repository/`。
 
 ## 9. 两个真实项目 CloudStudio Smoke
 
-当前状态：`PENDING_EXTERNAL_EXECUTION`。
+当前状态：`COMPLETE`。
 
-本地工作区无法访问 CloudStudio filesystem、CodeQL DB 或 benchmark checkout；原研究约束禁止自动操作 CloudStudio 浏览器 UI。因此本地提交推送后，需要在 CloudStudio terminal 执行以下步骤：
+2026-08-29 在 CloudStudio terminal 执行。为保留 `/workspace/java-vuln-research` 的既有脏工作区和当前分支，未在原 checkout 上切分支；从 `origin/work1/agent-active-security-v11` 建立独立 detached worktree：
 
 ```bash
-git fetch origin
-git checkout work1/agent-active-security-v11
-git pull --ff-only
-
-bash scripts/run_work1_v11_m1_index.sh \
-  /path/to/real-project-1 \
-  /workspace/experiment-output/artifacts/work1-agent-v11/m1_repository_index/project-1
-
-bash scripts/run_work1_v11_m1_index.sh \
-  /path/to/real-project-2 \
-  /workspace/experiment-output/artifacts/work1-agent-v11/m1_repository_index/project-2
+git -C /workspace/java-vuln-research fetch origin work1/agent-active-security-v11
+git -C /workspace/java-vuln-research worktree add --detach \
+  /workspace/work1-v11-m1-d0ae252-20260829 \
+  origin/work1/agent-active-security-v11
 ```
 
-待回填表：
+执行 HEAD：`d0ae25272f0370da39259cbf0e4536cbb26e847b`。测试对象是云端已有的两个独立真实项目 checkout：
+
+- Retrofit：`https://github.com/square/retrofit`，HEAD `7158698314daa138e993fac6a590ed19d78a8599`；
+- Hutool：`https://github.com/dromara/hutool`，HEAD `7687720c5125b29386d3bb9c7c2931da79664b73`。
+
+执行命令：
+
+```bash
+/usr/bin/time -p bash \
+  /workspace/work1-v11-m1-d0ae252-20260829/scripts/run_work1_v11_m1_index.sh \
+  /workspace/w1-e1-dev16/projects/V001 \
+  /workspace/experiment-output/artifacts/work1-agent-v11/m1_repository_index/retrofit
+
+/usr/bin/time -p bash \
+  /workspace/work1-v11-m1-d0ae252-20260829/scripts/run_work1_v11_m1_index.sh \
+  /workspace/w1-e1-dev16/projects/V002 \
+  /workspace/experiment-output/artifacts/work1-agent-v11/m1_repository_index/hutool
+```
 
 | Project | Repo root | Java files | Entities | TYPE | METHOD | CONSTRUCTOR | PARAMETER | FIELD | CALL | ANNOTATION | LOW | Warnings | Errors | Wall-clock |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| PENDING-1 | PENDING | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| PENDING-2 | PENDING | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| Retrofit | `/workspace/w1-e1-dev16/projects/V001` | 220 | 17,702 | 556 | 1,696 | 154 | 1,140 | 533 | 10,894 | 2,289 | 0 | 0 | 0 | 2.50 s |
+| Hutool | `/workspace/w1-e1-dev16/projects/V002` | 889 | 47,003 | 858 | 7,487 | 895 | 10,354 | 1,780 | 21,586 | 2,265 | 0 | 0 | 0 | 7.07 s |
 
-还必须从两个 `program_entities.jsonl` 各随机抽查少量 TYPE/METHOD/CONSTRUCTOR/CALL，核对文件、行号、owner 和 signature。该 smoke 不运行 CodeQL，也不进行漏洞评价。
+补充 confidence：Retrofit 为 HIGH 6,275 / MEDIUM 11,427；Hutool 为 HIGH 23,637 / MEDIUM 23,366。两个项目均无 LOW/UNKNOWN、warning 或 error，命令退出码均为 0。
+
+按固定随机种子抽查每个项目的 TYPE、METHOD、CONSTRUCTOR、CALL 各 1 个，并从项目 checkout 重新读取 `start_line` 对应源码，验证 `1 <= start_line <= end_line <= file_line_count`。8/8 样本的路径、范围、owner 和 signature 均匹配，`valid_range=true`。代表性记录：
+
+| Project / kind | Location | Owner | Signature |
+| --- | --- | --- | --- |
+| Retrofit / TYPE | `retrofit/src/test/java/retrofit2/RequestBuilderTest.java:726` | `retrofit2.RequestBuilderTest` | `class Example` |
+| Retrofit / METHOD | `samples/src/main/java/com/example/retrofit/ErrorHandlingAdapter.java:89` | `com.example.retrofit.ErrorHandlingAdapter.ErrorHandlingCallAdapterFactory.ErrorHandlingCallAdapter` | `adapt(Call<R>)` |
+| Retrofit / CONSTRUCTOR | `retrofit-mock/src/main/java/retrofit2/mock/Calls.java:59-65` | `retrofit2.mock.Calls.FakeCall` | `FakeCall(Response<T>,IOException)` |
+| Retrofit / CALL | `retrofit/src/main/java/retrofit2/ParameterHandler.java:337` | `retrofit2.ParameterHandler.PartMap.apply(RequestBuilder,Map<String,T>)` | `addPart/2` |
+| Hutool / TYPE | `hutool-core/src/main/java/cn/hutool/core/text/ASCIIStrCache.java:10` | top-level | `class ASCIIStrCache` |
+| Hutool / METHOD | `hutool-core/src/test/java/cn/hutool/core/io/FileUtilTest.java:57` | `cn.hutool.core.io.FileUtilTest` | `copyTest()` |
+| Hutool / CONSTRUCTOR | `hutool-core/src/main/java/cn/hutool/core/thread/NamedThreadFactory.java:39` | `cn.hutool.core.thread.NamedThreadFactory` | `NamedThreadFactory(String,boolean)` |
+| Hutool / CALL | `hutool-core/src/main/java/cn/hutool/core/util/IdcardUtil.java:462` | `cn.hutool.core.util.IdcardUtil.getDayByIdCard(String)` | `substring/2` |
+
+抽样种子为 Retrofit `1101`、Hutool `1202`；完整 JSONL 位于同一 cloud artifact root 下的 `retrofit_kind_samples.jsonl` 与 `hutool_kind_samples.jsonl`。该 smoke 未读取或构建 CodeQL DB，也未运行 CodeQL 命令或进行漏洞评价。
 
 ## 10. 文件变更
 
@@ -235,11 +260,10 @@ docs/work1-agent-v11/01_REPOSITORY_INDEX.md
 
 ## 11. 当前问题
 
-1. CloudStudio 两个真实项目 smoke 尚未执行，因此 M1 尚不能标记为完整验证。
-2. 词法 scanner 的结构真实性低于 Java AST/CodeQL；diagnostic 和 confidence 必须由后续消费者保留。
-3. 当前 source reader 为 bounded response，但会先读取单个文件字节；超过 64 MiB 的文件被拒绝。
-4. 当前没有跨 commit entity matching。
-5. 当前 search 为 repository facts，不提供 caller/callee、override 或 implementation resolution。
+1. 词法 scanner 的结构真实性低于 Java AST/CodeQL；diagnostic 和 confidence 必须由后续消费者保留。
+2. 当前 source reader 为 bounded response，但会先读取单个文件字节；超过 64 MiB 的文件被拒绝。
+3. 当前没有跨 commit entity matching。
+4. 当前 search 为 repository facts，不提供 caller/callee、override 或 implementation resolution。
 
 ## 12. M2 所需接口
 
