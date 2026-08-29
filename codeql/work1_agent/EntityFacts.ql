@@ -90,6 +90,70 @@ string enclosingCallable(Element e) {
     not e instanceof Stmt and result = ""
 }
 
+string parameterPositions(Element e) {
+  exists(Callable c |
+    e = c and
+    result = concat(int i |
+      i = [0 .. c.getNumberOfParameters() - 1]
+    | i.toString() + ":" + c.getParameter(i).getType().toString(), "," order by i))
+  or exists(Parameter p |
+    e = p and result = p.getPosition().toString() + ":" + p.getType().toString())
+  or not e instanceof Callable and not e instanceof Parameter and result = ""
+}
+
+string returnInformation(Element e) {
+  exists(Callable c | e = c and result = c.getReturnType().toString())
+  or exists(ReturnStmt r | e = r and result = r.getEnclosingCallable().getReturnType().toString())
+  or not e instanceof Callable and not e instanceof ReturnStmt and result = ""
+}
+
+string typeInformation(Element e) {
+  exists(RefType t | e = t and result = "declared=" + t.getQualifiedName())
+  or exists(Callable c |
+    e = c and result = "declaring=" + c.getDeclaringType().getQualifiedName() +
+      "|return=" + c.getReturnType().toString())
+  or exists(Field f | e = f and result = "field=" + f.getType().toString())
+  or exists(Parameter p | e = p and result = "parameter=" + p.getType().toString())
+  or exists(MethodCall c |
+    e = c and c.hasQualifier() and
+    result = "receiver=" + c.getQualifier().getType().toString() + "|result=" + c.getType().toString())
+  or exists(MethodCall c |
+    e = c and not c.hasQualifier() and
+    result = "receiver=" + c.getMethod().getDeclaringType().getQualifiedName() +
+      "|result=" + c.getType().toString())
+  or exists(Annotation a | e = a and result = "annotation=" + a.getType().getQualifiedName())
+  or exists(ReturnStmt r |
+    e = r and result = "return=" + r.getEnclosingCallable().getReturnType().toString())
+  or exists(LocalVariableDecl l | e = l and result = "local=" + l.getType().toString())
+  or not e instanceof RefType and not e instanceof Callable and not e instanceof Field and
+    not e instanceof Parameter and not e instanceof MethodCall and not e instanceof Annotation and
+    not e instanceof ReturnStmt and not e instanceof LocalVariableDecl and result = ""
+}
+
+string annotationFacts(Element e) {
+  exists(Annotatable a |
+    e = a and
+    result = concat(Annotation ann |
+      ann = a.getAnAnnotation()
+    | ann.getType().getQualifiedName(), "," order by ann.getType().getQualifiedName()))
+  or not e instanceof Annotatable and result = ""
+}
+
+string overrideInterfaceFacts(Element e) {
+  exists(Method m |
+    e = m and
+    result = concat(Method overridden |
+      m.overrides(overridden)
+    | overridden.getDeclaringType().getQualifiedName() + "." + overridden.getSignature(),
+      "," order by overridden.getDeclaringType().getQualifiedName(), overridden.getSignature()))
+  or exists(RefType t |
+    e = t and
+    result = concat(RefType parent |
+      parent = t.getASupertype()
+    | parent.getQualifiedName(), "," order by parent.getQualifiedName()))
+  or not e instanceof Method and not e instanceof RefType and result = ""
+}
+
 from Element e, string kind
 where inTargetSpan(e) and kind = entityKind(e)
 select
@@ -102,4 +166,9 @@ select
   qualifiedIdentity(e),
   entitySignature(e),
   declaringType(e),
-  enclosingCallable(e)
+  enclosingCallable(e),
+  parameterPositions(e),
+  returnInformation(e),
+  typeInformation(e),
+  annotationFacts(e),
+  overrideInterfaceFacts(e)

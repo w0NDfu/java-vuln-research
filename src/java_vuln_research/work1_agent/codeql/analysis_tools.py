@@ -4,7 +4,7 @@ import copy
 import uuid
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from ..repository.entity import ProgramEntity
 from .entity_mapper import EntityMappingResult, MappingStatus, map_program_entity
@@ -22,6 +22,11 @@ ENTITY_COLUMNS = (
     "signature",
     "declaring_type",
     "enclosing_callable",
+    "parameter_positions",
+    "return_information",
+    "type_information",
+    "annotation_facts",
+    "override_interface_facts",
 )
 EDGE_COLUMNS = (
     "source_identity",
@@ -200,11 +205,12 @@ class CodeQLAnalysisTools:
         max_edges: int,
         max_depth: int,
         allowed_edge_kinds: set[str] | None = None,
+        row_filter: Callable[[Mapping[str, Any]], bool] | None = None,
     ) -> CodeQLToolResult:
         for name, value, ceiling in (
             ("max_nodes", max_nodes, 200),
             ("max_edges", max_edges, 500),
-            ("max_depth", max_depth, 5),
+            ("max_depth", max_depth, 1),
         ):
             if int(value) < 1 or int(value) > ceiling:
                 raise ValueError(f"{name} must be between 1 and {ceiling}")
@@ -224,6 +230,7 @@ class CodeQLAnalysisTools:
                 "PATH": entity.repository_relative_path,
                 "START_LINE": entity.start_line,
                 "END_LINE": entity.end_line,
+                "CODEQL_IDENTITY": mapping.candidates[0].codeql_identity,
             },
         )
         result.mapped_codeql_entities = [mapping.candidates[0].to_dict()]
@@ -237,6 +244,7 @@ class CodeQLAnalysisTools:
             for row in raw_rows
             if allowed_edge_kinds is None
             or str(row.get("edge_kind") or "").upper() in allowed_edge_kinds
+            if row_filter is None or row_filter(row)
         ]
         edge_limited = filtered[:max_edges]
 
@@ -277,8 +285,69 @@ class CodeQLAnalysisTools:
     def codeql_callees(self, *, database: str | Path, entity: ProgramEntity, max_edges: int = 30) -> CodeQLToolResult:
         return self._edge_tool(database=database, entity=entity, query_key="call_graph", tool_name="codeql_callees", evidence_kind=EvidenceKind.CODEQL_CALL, max_nodes=30, max_edges=max_edges, max_depth=1, allowed_edge_kinds={"CALLEE"})
 
-    def codeql_local_flow(self, *, database: str | Path, entity: ProgramEntity, max_edges: int = 30) -> CodeQLToolResult:
-        return self._edge_tool(database=database, entity=entity, query_key="local_flow", tool_name="codeql_local_flow", evidence_kind=EvidenceKind.CODEQL_LOCAL_FLOW, max_nodes=30, max_edges=max_edges, max_depth=1)
+    def codeql_local_flow(
+        self,
+        *,
+        database: str | Path,
+        entity: ProgramEntity,
+        target_entity: ProgramEntity | None = None,
+        scope_entity: ProgramEntity | None = None,
+        max_edges: int = 30,
+    ) -> CodeQLToolResult:
+        target_mapping = None
+        scope_mapping = None
+        if target_entity is not None:
+            target_mapping, target_result = self.map_entity(database=database, entity=target_entity)
+            if target_result.status == ToolStatus.ERROR:
+                target_result.tool_name = "codeql_local_flow"
+                return target_result
+            if target_mapping.status != MappingStatus.MAPPED_UNIQUE:
+                return self._unmapped("codeql_local_flow", target_entity, target_mapping)
+        if scope_entity is not None:
+            scope_mapping, scope_result = self.map_entity(database=database, entity=scope_entity)
+            if scope_result.status == ToolStatus.ERROR:
+                scope_result.tool_name = "codeql_local_flow"
+                return scope_result
+            if scope_mapping.status != MappingStatus.MAPPED_UNIQUE:
+                return self._unmapped("codeql_local_flow", scope_entity, scope_mapping)
+
+        expected_scope = None
+        if scope_mapping is not None:
+            scope_candidate = scope_mapping.candidates[0]
+            if (
+                scope_candidate.kind not in {"METHOD", "CONSTRUCTOR"}
+                or not scope_candidate.declaring_type
+                or not scope_candidate.signature
+            ):
+                raise ValueError("scope_entity must map to a callable")
+            expected_scope = f"{scope_candidate.declaring_type}.{scope_candidate.signature}"
+
+        def local_filter(row: Mapping[str, Any]) -> bool:
+            if target_entity is not None:
+                if str(row.get("repository_relative_path") or "") != target_entity.repository_relative_path:
+                    return False
+                start_line = int(row.get("start_line") or 0)
+                end_line = int(row.get("end_line") or start_line)
+                if start_line > target_entity.end_line or target_entity.start_line > end_line:
+                    return False
+            return expected_scope is None or str(row.get("callable_identity") or "") == expected_scope
+
+        result = self._edge_tool(
+            database=database,
+            entity=entity,
+            query_key="local_flow",
+            tool_name="codeql_local_flow",
+            evidence_kind=EvidenceKind.CODEQL_LOCAL_FLOW,
+            max_nodes=30,
+            max_edges=max_edges,
+            max_depth=1,
+            row_filter=local_filter,
+        )
+        result.provenance.update(
+            target_entity_id=target_entity.entity_id if target_entity is not None else None,
+            scope_entity_id=scope_entity.entity_id if scope_entity is not None else None,
+        )
+        return result
 
     def codeql_dataflow_neighbors(
         self,

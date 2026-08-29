@@ -1,10 +1,18 @@
 /** Work1 V11 direct CodeQL call edges around one callable source span. */
 import java
 
+string callableKind(Callable c) {
+  c instanceof Constructor and result = "CONSTRUCTOR"
+  or c instanceof Method and result = "METHOD"
+}
+
+string mappedCallableIdentity(Callable c) {
+  result = callableKind(c) + "@" + c.getLocation().getFile().getRelativePath() + ":" +
+    c.getLocation().getStartLine().toString() + ":" + c.getLocation().getStartColumn().toString()
+}
+
 predicate targetCallable(Callable c) {
-  c.getLocation().getFile().getRelativePath() = {{PATH}} and
-  c.getLocation().getStartLine() <= {{END_LINE}} and
-  c.getLocation().getEndLine() >= {{START_LINE}}
+  mappedCallableIdentity(c) = {{CODEQL_IDENTITY}}
 }
 
 string callableId(Callable c) {

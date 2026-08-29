@@ -90,6 +90,23 @@ def test_mapping_requires_context_and_is_unique() -> None:
     assert "qualified_name exact" in result.mapping_evidence
 
 
+def test_mapping_preserves_entity_enrichment_facts() -> None:
+    candidate = _candidate(
+        parameter_positions="0:java.lang.String",
+        return_information="boolean",
+        type_information="declaring=example.A|return=boolean",
+        annotation_facts="java.lang.Override",
+        override_interface_facts="example.Base.run(java.lang.String)",
+    )
+    result = map_program_entity(_entity(), [candidate])
+    encoded = result.candidates[0].to_dict()
+    assert encoded["parameter_positions"] == "0:java.lang.String"
+    assert encoded["return_information"] == "boolean"
+    assert encoded["type_information"].startswith("declaring=example.A")
+    assert encoded["annotation_facts"] == "java.lang.Override"
+    assert encoded["override_interface_facts"].startswith("example.Base.run")
+
+
 def test_mapping_never_selects_first_ambiguous_candidate() -> None:
     result = map_program_entity(
         _entity(),
@@ -103,6 +120,7 @@ def test_mapping_never_selects_first_ambiguous_candidate() -> None:
 def test_mapping_not_mapped_and_unsupported() -> None:
     assert map_program_entity(_entity(), [_candidate(repository_relative_path="other/A.java")]).status == MappingStatus.NOT_MAPPED
     assert map_program_entity(_entity(ProgramEntityKind.FILE), []).status == MappingStatus.UNSUPPORTED_KIND
+    assert map_program_entity(_entity(ProgramEntityKind.CALL_ARGUMENT), []).status == MappingStatus.UNSUPPORTED_KIND
 
 
 def test_executor_constructs_command_materializes_template_and_records_provenance(tmp_path: Path) -> None:
@@ -173,6 +191,7 @@ def test_executor_preserves_qlpack_context_for_materialized_query(tmp_path: Path
 class AnalysisRunner:
     def __init__(self) -> None:
         self.calls = 0
+        self.last_edge_kwargs = None
 
     def execute(self, **kwargs):
         self.calls += 1
@@ -184,6 +203,7 @@ class AnalysisRunner:
                 nodes=[_candidate().to_dict()],
                 provenance={"query_hash": "hash"},
             )
+        self.last_edge_kwargs = kwargs
         return CodeQLToolResult(
             tool_call_id="edges",
             tool_name=kwargs["tool_name"],
@@ -221,6 +241,101 @@ def test_analysis_tools_filter_call_direction_and_return_bounded_nodes(tmp_path:
     assert [edge["edge_kind"] for edge in result.edges] == ["CALLER"]
     assert {node["codeql_identity"] for node in result.nodes} == {"caller", "target"}
     assert result.metrics["returned_nodes"] == 2
+    assert runner.last_edge_kwargs["template_values"]["CODEQL_IDENTITY"].startswith("METHOD@")
+
+
+class LocalFlowRunner:
+    def execute(self, **kwargs):
+        if kwargs["tool_name"] == "map_program_entity":
+            values = kwargs["template_values"]
+            kind = values["KIND_0"]
+            start = int(values["START_LINE_0"])
+            signature = "run/1" if kind == "METHOD" else ""
+            return CodeQLToolResult(
+                tool_call_id=f"mapping-{kind}-{start}",
+                tool_name="map_program_entity",
+                status=ToolStatus.OK,
+                nodes=[
+                    _candidate(
+                        codeql_identity=f"{kind}@src/main/java/example/A.java:{start}:3",
+                        kind=kind,
+                        start_line=start,
+                        end_line=start,
+                        qualified_name="example.A.run",
+                        signature=signature,
+                        enclosing_callable="example.A.run",
+                    ).to_dict()
+                ],
+                provenance={"query_hash": "mapping-hash"},
+            )
+        return CodeQLToolResult(
+            tool_call_id="flow",
+            tool_name="codeql_local_flow",
+            status=ToolStatus.OK,
+            nodes=[
+                {
+                    "source_identity": "source",
+                    "target_identity": "wanted",
+                    "edge_kind": "DATAFLOW",
+                    "repository_relative_path": "src/main/java/example/A.java",
+                    "start_line": 20,
+                    "end_line": 20,
+                    "callable_identity": "example.A.run/1",
+                },
+                {
+                    "source_identity": "source",
+                    "target_identity": "wrong-scope",
+                    "edge_kind": "DATAFLOW",
+                    "repository_relative_path": "src/main/java/example/A.java",
+                    "start_line": 20,
+                    "end_line": 20,
+                    "callable_identity": "example.Other.run/1",
+                },
+                {
+                    "source_identity": "source",
+                    "target_identity": "wrong-target",
+                    "edge_kind": "DATAFLOW",
+                    "repository_relative_path": "src/main/java/example/A.java",
+                    "start_line": 99,
+                    "end_line": 99,
+                    "callable_identity": "example.A.run/1",
+                },
+            ],
+        )
+
+
+def test_local_flow_optional_target_and_scope_are_enforced(tmp_path: Path) -> None:
+    source = _entity(ProgramEntityKind.CALL)
+    target = ProgramEntity.create(
+        kind=ProgramEntityKind.CALL,
+        repository_relative_path="src/main/java/example/A.java",
+        start_line=20,
+        end_line=20,
+        simple_name="target",
+        qualified_name="example.A.target",
+        enclosing_type="example.A",
+        enclosing_callable="example.A.run",
+    )
+    scope = ProgramEntity.create(
+        kind=ProgramEntityKind.METHOD,
+        repository_relative_path="src/main/java/example/A.java",
+        start_line=30,
+        end_line=30,
+        simple_name="run",
+        qualified_name="example.A.run",
+        enclosing_type="example.A",
+        signature="run/1",
+    )
+    tools = CodeQLAnalysisTools(LocalFlowRunner(), tmp_path)
+    result = tools.codeql_local_flow(
+        database=tmp_path / "db",
+        entity=source,
+        target_entity=target,
+        scope_entity=scope,
+    )
+    assert [edge["target_identity"] for edge in result.edges] == ["wanted"]
+    assert result.provenance["target_entity_id"] == target.entity_id
+    assert result.provenance["scope_entity_id"] == scope.entity_id
 
 
 def test_analysis_tools_cache_mapping_per_database_and_entity(tmp_path: Path) -> None:
@@ -277,6 +392,12 @@ def test_analysis_tools_prefetches_entity_mapping_in_one_bounded_query(tmp_path:
 def test_entity_fact_batch_rejects_more_than_eleven_targets() -> None:
     with pytest.raises(ValueError, match="at most eleven"):
         CodeQLAnalysisTools._entity_target_values([_entity()] * 12)
+
+
+def test_one_step_neighbor_tools_reject_depth_above_one(tmp_path: Path) -> None:
+    tools = CodeQLAnalysisTools(AnalysisRunner(), tmp_path)
+    with pytest.raises(ValueError, match="max_depth"):
+        tools.codeql_dataflow_neighbors(database=tmp_path / "db", entity=_entity(), max_depth=2)
 
 
 @pytest.mark.parametrize(

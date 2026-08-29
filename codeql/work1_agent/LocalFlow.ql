@@ -24,8 +24,20 @@ predicate targetNode(DataFlow::Node n) {
     startLine <= {{END_LINE}} and endLine >= {{START_LINE}})
 }
 
+predicate nodeCallable(DataFlow::Node n, Callable c) {
+  exists(Expr e | n.asExpr() = e and c = e.getEnclosingCallable())
+  or exists(Parameter p | n.asParameter() = p and c = p.getCallable())
+}
+
+string callableId(DataFlow::Node n) {
+  exists(Callable c |
+    nodeCallable(n, c) and
+    result = c.getDeclaringType().getQualifiedName() + "." + c.getName() + "/" +
+      c.getNumberOfParameters().toString())
+}
+
 from DataFlow::Node source, DataFlow::Node target, string file, int startLine, int endLine
 where
   targetNode(source) and DataFlow::localFlowStep(source, target) and
   nodeLocation(target, file, startLine, endLine)
-select nodeId(source), nodeId(target), "DATAFLOW", file, startLine, endLine, ""
+select nodeId(source), nodeId(target), "DATAFLOW", file, startLine, endLine, callableId(target)

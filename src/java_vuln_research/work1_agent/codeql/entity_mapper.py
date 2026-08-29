@@ -25,9 +25,6 @@ SUPPORTED_KINDS = frozenset(
         ProgramEntityKind.ANNOTATION,
         ProgramEntityKind.RETURN,
         ProgramEntityKind.LOCAL,
-        ProgramEntityKind.CALL_ARGUMENT,
-        ProgramEntityKind.FIELD_READ,
-        ProgramEntityKind.FIELD_WRITE,
     }
 )
 
@@ -43,6 +40,11 @@ class MappingCandidate:
     signature: str | None = None
     declaring_type: str | None = None
     enclosing_callable: str | None = None
+    parameter_positions: str | None = None
+    return_information: str | None = None
+    type_information: str | None = None
+    annotation_facts: str | None = None
+    override_interface_facts: str | None = None
 
     @classmethod
     def from_row(cls, row: Mapping[str, Any]) -> "MappingCandidate":
@@ -58,6 +60,21 @@ class MappingCandidate:
             enclosing_callable=str(row["enclosing_callable"])
             if row.get("enclosing_callable") not in {None, ""}
             else None,
+            parameter_positions=str(row["parameter_positions"])
+            if row.get("parameter_positions") not in {None, ""}
+            else None,
+            return_information=str(row["return_information"])
+            if row.get("return_information") not in {None, ""}
+            else None,
+            type_information=str(row["type_information"])
+            if row.get("type_information") not in {None, ""}
+            else None,
+            annotation_facts=str(row["annotation_facts"])
+            if row.get("annotation_facts") not in {None, ""}
+            else None,
+            override_interface_facts=str(row["override_interface_facts"])
+            if row.get("override_interface_facts") not in {None, ""}
+            else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -71,6 +88,11 @@ class MappingCandidate:
             "signature": self.signature,
             "declaring_type": self.declaring_type,
             "enclosing_callable": self.enclosing_callable,
+            "parameter_positions": self.parameter_positions,
+            "return_information": self.return_information,
+            "type_information": self.type_information,
+            "annotation_facts": self.annotation_facts,
+            "override_interface_facts": self.override_interface_facts,
         }
 
 
