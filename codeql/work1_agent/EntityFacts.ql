@@ -13,51 +13,27 @@ string entityKind(Element e) {
   or exists(LocalVariableDecl l | e = l and result = "LOCAL")
 }
 
+predicate target(string path, int startLine, int endLine, string expectedKind) {
+  path = {{PATH_0}} and startLine = {{START_LINE_0}} and endLine = {{END_LINE_0}} and expectedKind = {{KIND_0}}
+  or path = {{PATH_1}} and startLine = {{START_LINE_1}} and endLine = {{END_LINE_1}} and expectedKind = {{KIND_1}}
+  or path = {{PATH_2}} and startLine = {{START_LINE_2}} and endLine = {{END_LINE_2}} and expectedKind = {{KIND_2}}
+  or path = {{PATH_3}} and startLine = {{START_LINE_3}} and endLine = {{END_LINE_3}} and expectedKind = {{KIND_3}}
+  or path = {{PATH_4}} and startLine = {{START_LINE_4}} and endLine = {{END_LINE_4}} and expectedKind = {{KIND_4}}
+  or path = {{PATH_5}} and startLine = {{START_LINE_5}} and endLine = {{END_LINE_5}} and expectedKind = {{KIND_5}}
+  or path = {{PATH_6}} and startLine = {{START_LINE_6}} and endLine = {{END_LINE_6}} and expectedKind = {{KIND_6}}
+  or path = {{PATH_7}} and startLine = {{START_LINE_7}} and endLine = {{END_LINE_7}} and expectedKind = {{KIND_7}}
+  or path = {{PATH_8}} and startLine = {{START_LINE_8}} and endLine = {{END_LINE_8}} and expectedKind = {{KIND_8}}
+  or path = {{PATH_9}} and startLine = {{START_LINE_9}} and endLine = {{END_LINE_9}} and expectedKind = {{KIND_9}}
+  or path = {{PATH_10}} and startLine = {{START_LINE_10}} and endLine = {{END_LINE_10}} and expectedKind = {{KIND_10}}
+}
+
 predicate inTargetSpan(Element e) {
-  (
-    e.getLocation().getFile().getRelativePath() = {{PATH_0}} and
-    e.getLocation().getStartLine() <= {{END_LINE_0}} and
-    e.getLocation().getEndLine() >= {{START_LINE_0}} and entityKind(e) = {{KIND_0}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_1}} and
-    e.getLocation().getStartLine() <= {{END_LINE_1}} and
-    e.getLocation().getEndLine() >= {{START_LINE_1}} and entityKind(e) = {{KIND_1}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_2}} and
-    e.getLocation().getStartLine() <= {{END_LINE_2}} and
-    e.getLocation().getEndLine() >= {{START_LINE_2}} and entityKind(e) = {{KIND_2}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_3}} and
-    e.getLocation().getStartLine() <= {{END_LINE_3}} and
-    e.getLocation().getEndLine() >= {{START_LINE_3}} and entityKind(e) = {{KIND_3}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_4}} and
-    e.getLocation().getStartLine() <= {{END_LINE_4}} and
-    e.getLocation().getEndLine() >= {{START_LINE_4}} and entityKind(e) = {{KIND_4}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_5}} and
-    e.getLocation().getStartLine() <= {{END_LINE_5}} and
-    e.getLocation().getEndLine() >= {{START_LINE_5}} and entityKind(e) = {{KIND_5}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_6}} and
-    e.getLocation().getStartLine() <= {{END_LINE_6}} and
-    e.getLocation().getEndLine() >= {{START_LINE_6}} and entityKind(e) = {{KIND_6}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_7}} and
-    e.getLocation().getStartLine() <= {{END_LINE_7}} and
-    e.getLocation().getEndLine() >= {{START_LINE_7}} and entityKind(e) = {{KIND_7}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_8}} and
-    e.getLocation().getStartLine() <= {{END_LINE_8}} and
-    e.getLocation().getEndLine() >= {{START_LINE_8}} and entityKind(e) = {{KIND_8}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_9}} and
-    e.getLocation().getStartLine() <= {{END_LINE_9}} and
-    e.getLocation().getEndLine() >= {{START_LINE_9}} and entityKind(e) = {{KIND_9}}
-  ) or (
-    e.getLocation().getFile().getRelativePath() = {{PATH_10}} and
-    e.getLocation().getStartLine() <= {{END_LINE_10}} and
-    e.getLocation().getEndLine() >= {{START_LINE_10}} and entityKind(e) = {{KIND_10}}
+  exists(string path, int startLine, int endLine, string expectedKind |
+    target(path, startLine, endLine, expectedKind) and
+    e.getLocation().getFile().getRelativePath() = path and
+    e.getLocation().getStartLine() <= endLine and
+    e.getLocation().getEndLine() >= startLine and
+    entityKind(e) = expectedKind
   )
 }
 
