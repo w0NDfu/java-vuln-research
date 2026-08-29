@@ -319,6 +319,8 @@ def run_project(
             ),
             "UNKNOWN",
         ),
+        "query_timeout_seconds": timeout_seconds,
+        "query_threads": query_threads,
         "query_hashes": json.dumps(query_hashes, separators=(",", ":")),
         "sample_requested": sum(value for _, value in SAMPLE_PLAN),
         "sample_available": len(samples),
@@ -350,7 +352,13 @@ def _write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
 
 
-def _aggregate(results: Sequence[dict[str, Any]], elapsed: float, *, v11_git_sha: str) -> dict[str, Any]:
+def _aggregate(
+    results: Sequence[dict[str, Any]],
+    elapsed: float,
+    *,
+    v11_git_sha: str,
+    workers: int | None = None,
+) -> dict[str, Any]:
     calls = [item for result in results for item in result["calls"]]
     mappings = [item for result in results for item in result["mappings"]]
     latencies = [float((item.get("metrics") or {}).get("wall_clock_seconds") or 0.0) for item in calls]
@@ -365,6 +373,13 @@ def _aggregate(results: Sequence[dict[str, Any]], elapsed: float, *, v11_git_sha
     return {
         "smoke_schema_version": SMOKE_SCHEMA_VERSION,
         "v11_git_sha": v11_git_sha,
+        "workers": workers,
+        "query_timeout_seconds": sorted(
+            {int(result["summary"].get("query_timeout_seconds") or 0) for result in results}
+        ),
+        "query_threads": sorted(
+            {int(result["summary"].get("query_threads") or 0) for result in results}
+        ),
         "codeql_versions": sorted(
             {
                 str((item.get("provenance") or {}).get("codeql_version"))
@@ -475,6 +490,8 @@ def run(args: argparse.Namespace) -> int:
             if (
                 summary.get("smoke_schema_version") == SMOKE_SCHEMA_VERSION
                 and summary.get("v11_git_sha") == v11_git_sha
+                and int(summary.get("query_timeout_seconds") or 0) == args.timeout
+                and int(summary.get("query_threads") or 0) == args.query_threads
             ):
                 return project.project_id, cached
         result = run_project(
@@ -507,7 +524,12 @@ def run(args: argparse.Namespace) -> int:
     _write_jsonl(output / "tool_calls.jsonl", (item for result in results for item in result["calls"]))
     _write_jsonl(output / "entity_mapping.jsonl", (item for result in results for item in result["mappings"]))
     _write_jsonl(output / "failures.jsonl", (item for result in results for item in result["failures"]))
-    aggregate = _aggregate(results, time.monotonic() - started, v11_git_sha=v11_git_sha)
+    aggregate = _aggregate(
+        results,
+        time.monotonic() - started,
+        v11_git_sha=v11_git_sha,
+        workers=args.workers,
+    )
     (output / "aggregate.json").write_text(json.dumps(aggregate, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(aggregate, ensure_ascii=False), flush=True)
     return 0

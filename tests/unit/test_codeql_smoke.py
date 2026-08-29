@@ -55,12 +55,13 @@ def test_aggregate_binds_schema_git_query_database_and_source_head() -> None:
         ],
         "mappings": [],
     }
-    aggregate = _aggregate([result], 2.0, v11_git_sha="v11-sha")
+    aggregate = _aggregate([result], 2.0, v11_git_sha="v11-sha", workers=4)
     assert aggregate["smoke_schema_version"] == SMOKE_SCHEMA_VERSION
     assert aggregate["v11_git_sha"] == "v11-sha"
     assert aggregate["query_hashes"] == ["query-sha"]
     assert aggregate["database_paths"] == ["/db/P006"]
     assert aggregate["project_source_heads"] == {"P006": "source-sha"}
+    assert aggregate["workers"] == 4
 
 
 def test_source_revision_manifest_rejects_conflicts(tmp_path) -> None:
