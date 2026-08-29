@@ -10,6 +10,7 @@ from java_vuln_research.work1_agent.codeql.entity_mapper import (
     MappingStatus,
     map_program_entity,
 )
+from java_vuln_research.work1_agent.codeql.analysis_tools import CodeQLAnalysisTools
 from java_vuln_research.work1_agent.codeql.executor import CodeQLExecutor, QuerySpec
 from java_vuln_research.work1_agent.codeql.result import (
     CodeQLToolResult,
@@ -130,6 +131,58 @@ def test_executor_constructs_command_materializes_template_and_records_provenanc
     assert "--ram=512" in query_command
     materialized = Path(query_command[3]).read_text(encoding="utf-8")
     assert materialized == "select 10\n"
+
+
+def test_executor_preserves_qlpack_context_for_materialized_query(tmp_path: Path) -> None:
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "qlpack.yml").write_text("name: test/pack\nversion: 0.0.1\n", encoding="utf-8")
+    (pack / "codeql-pack.lock.yml").write_text("lockVersion: 1.0.0\n", encoding="utf-8")
+    query = QuerySpec("Query", pack / "Query.ql", ("value",))
+    query.path.write_text("select {{LINE}}\n", encoding="utf-8")
+    runner = Runner()
+    result = CodeQLExecutor("codeql", artifact_root=tmp_path / "out", runner=runner).execute(
+        database=_ready_db(tmp_path), query=query, tool_name="test", template_values={"LINE": 1}
+    )
+    assert result.status == ToolStatus.OK
+    materialized = Path(next(command for command in runner.commands if "query" in command)[3])
+    assert (materialized.parent / "qlpack.yml").is_file()
+    assert (materialized.parent / "codeql-pack.lock.yml").is_file()
+    assert result.provenance["query_pack_root"] == str(pack)
+
+
+class AnalysisRunner:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def execute(self, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            return CodeQLToolResult(
+                tool_call_id="mapping",
+                tool_name=kwargs["tool_name"],
+                status=ToolStatus.OK,
+                nodes=[_candidate().to_dict()],
+                provenance={"query_hash": "hash"},
+            )
+        return CodeQLToolResult(
+            tool_call_id="edges",
+            tool_name=kwargs["tool_name"],
+            status=ToolStatus.OK,
+            nodes=[
+                {"source_identity": "caller", "target_identity": "target", "edge_kind": "CALLER"},
+                {"source_identity": "target", "target_identity": "callee", "edge_kind": "CALLEE"},
+            ],
+        )
+
+
+def test_analysis_tools_filter_call_direction_and_return_bounded_nodes(tmp_path: Path) -> None:
+    runner = AnalysisRunner()
+    tools = CodeQLAnalysisTools(runner, tmp_path)
+    result = tools.codeql_callers(database=tmp_path / "db", entity=_entity())
+    assert [edge["edge_kind"] for edge in result.edges] == ["CALLER"]
+    assert {node["codeql_identity"] for node in result.nodes} == {"caller", "target"}
+    assert result.metrics["returned_nodes"] == 2
 
 
 @pytest.mark.parametrize(

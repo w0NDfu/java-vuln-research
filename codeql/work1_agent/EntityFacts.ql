@@ -54,7 +54,8 @@ string declaringType(Element e) {
   or exists(Parameter p | e = p and result = p.getCallable().getDeclaringType().getQualifiedName())
   or exists(Expr x | e = x and result = x.getEnclosingCallable().getDeclaringType().getQualifiedName())
   or exists(Stmt s | e = s and result = s.getEnclosingCallable().getDeclaringType().getQualifiedName())
-  or result = ""
+  or not e instanceof RefType and not e instanceof Callable and not e instanceof Field and
+    not e instanceof Parameter and not e instanceof Expr and not e instanceof Stmt and result = ""
 }
 
 string enclosingCallable(Element e) {
@@ -67,7 +68,8 @@ string enclosingCallable(Element e) {
   or exists(Stmt s |
     e = s and result = s.getEnclosingCallable().getDeclaringType().getQualifiedName() + "." +
       s.getEnclosingCallable().getName())
-  or result = ""
+  or not e instanceof Callable and not e instanceof Parameter and not e instanceof Expr and
+    not e instanceof Stmt and result = ""
 }
 
 from Element e, string kind

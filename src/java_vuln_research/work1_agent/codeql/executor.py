@@ -33,6 +33,15 @@ def _sha256(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+def _query_pack_root(path: Path) -> Path | None:
+    """Return the nearest qlpack root containing ``path``, if any."""
+
+    for candidate in (path.parent, *path.parents):
+        if (candidate / "qlpack.yml").is_file():
+            return candidate
+    return None
+
+
 def _classify_failure(output: str) -> FailureReason:
     lowered = output.casefold()
     if any(token in lowered for token in ("out of memory", "java heap space", "exit code 137", "killed")):
@@ -184,6 +193,7 @@ class CodeQLExecutor:
         call_dir.mkdir(parents=True, exist_ok=False)
         execution_query = query.path
         template_hash = _sha256(query.path)
+        query_pack_root = _query_pack_root(query.path)
         if template_values:
             source = query.path.read_text(encoding="utf-8")
             for key, value in sorted(template_values.items()):
@@ -199,6 +209,15 @@ class CodeQLExecutor:
                 )
             execution_query = call_dir / query.path.name
             execution_query.write_text(source, encoding="utf-8", newline="\n")
+            # A generated query outside its original qlpack cannot resolve
+            # imports such as ``java``.  Reproduce the minimal pack context in
+            # the immutable call artifact so CodeQL also sees the exact lock
+            # file used for dependency resolution.
+            if query_pack_root is not None:
+                for metadata_name in ("qlpack.yml", "codeql-pack.lock.yml"):
+                    metadata = query_pack_root / metadata_name
+                    if metadata.is_file():
+                        shutil.copy2(metadata, call_dir / metadata_name)
         bqrs = call_dir / "result.bqrs"
         csv_path = call_dir / "result.csv"
         log_path = call_dir / "query.log"
@@ -220,6 +239,7 @@ class CodeQLExecutor:
             "query_path": str(query.path),
             "query_hash": _sha256(execution_query),
             "query_template_hash": template_hash,
+            "query_pack_root": str(query_pack_root) if query_pack_root is not None else None,
             "arguments": dict(template_values or {}),
             "command": command,
             "result_path": str(bqrs),

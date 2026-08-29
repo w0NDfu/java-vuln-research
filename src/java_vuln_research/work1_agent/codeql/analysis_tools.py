@@ -111,6 +111,7 @@ class CodeQLAnalysisTools:
         max_nodes: int,
         max_edges: int,
         max_depth: int,
+        allowed_edge_kinds: set[str] | None = None,
     ) -> CodeQLToolResult:
         for name, value, ceiling in (
             ("max_nodes", max_nodes, 200),
@@ -142,20 +143,51 @@ class CodeQLAnalysisTools:
             mapping=mapping.to_dict(),
             limits={"max_nodes": max_nodes, "max_edges": max_edges, "max_depth": max_depth},
         )
-        selected = result.nodes[:max_edges]
+        raw_rows = list(result.nodes)
+        filtered = [
+            row
+            for row in raw_rows
+            if allowed_edge_kinds is None
+            or str(row.get("edge_kind") or "").upper() in allowed_edge_kinds
+        ]
+        edge_limited = filtered[:max_edges]
+
+        node_ids: list[str] = []
+        seen_nodes: set[str] = set()
+        for row in edge_limited:
+            for key in ("source_identity", "target_identity"):
+                identity = str(row.get(key) or "")
+                if identity and identity not in seen_nodes:
+                    seen_nodes.add(identity)
+                    node_ids.append(identity)
+        selected_node_ids = set(node_ids[:max_nodes])
+        selected = [
+            row
+            for row in edge_limited
+            if str(row.get("source_identity") or "") in selected_node_ids
+            and str(row.get("target_identity") or "") in selected_node_ids
+        ]
         result.edges = [{**row, "evidence_kind": evidence_kind.value} for row in selected]
-        result.nodes = []
-        result.truncated = result.truncated or len(selected) >= max_edges
+        result.nodes = [
+            {"codeql_identity": identity, "evidence_kind": evidence_kind.value}
+            for identity in node_ids[:max_nodes]
+        ]
+        result.truncated = (
+            result.truncated
+            or len(filtered) > max_edges
+            or len(node_ids) > max_nodes
+            or len(selected) < len(edge_limited)
+        )
         if result.status == ToolStatus.OK and not result.edges:
             result.status = ToolStatus.EMPTY
-        result.metrics.update(returned_nodes=0, returned_edges=len(result.edges))
+        result.metrics.update(returned_nodes=len(result.nodes), returned_edges=len(result.edges))
         return result
 
     def codeql_callers(self, *, database: str | Path, entity: ProgramEntity, max_edges: int = 30) -> CodeQLToolResult:
-        return self._edge_tool(database=database, entity=entity, query_key="call_graph", tool_name="codeql_callers", evidence_kind=EvidenceKind.CODEQL_CALL, max_nodes=30, max_edges=max_edges, max_depth=1)
+        return self._edge_tool(database=database, entity=entity, query_key="call_graph", tool_name="codeql_callers", evidence_kind=EvidenceKind.CODEQL_CALL, max_nodes=30, max_edges=max_edges, max_depth=1, allowed_edge_kinds={"CALLER"})
 
     def codeql_callees(self, *, database: str | Path, entity: ProgramEntity, max_edges: int = 30) -> CodeQLToolResult:
-        return self._edge_tool(database=database, entity=entity, query_key="call_graph", tool_name="codeql_callees", evidence_kind=EvidenceKind.CODEQL_CALL, max_nodes=30, max_edges=max_edges, max_depth=1)
+        return self._edge_tool(database=database, entity=entity, query_key="call_graph", tool_name="codeql_callees", evidence_kind=EvidenceKind.CODEQL_CALL, max_nodes=30, max_edges=max_edges, max_depth=1, allowed_edge_kinds={"CALLEE"})
 
     def codeql_local_flow(self, *, database: str | Path, entity: ProgramEntity, max_edges: int = 30) -> CodeQLToolResult:
         return self._edge_tool(database=database, entity=entity, query_key="local_flow", tool_name="codeql_local_flow", evidence_kind=EvidenceKind.CODEQL_LOCAL_FLOW, max_nodes=30, max_edges=max_edges, max_depth=1)
@@ -173,7 +205,8 @@ class CodeQLAnalysisTools:
         resolved = str(direction).upper()
         if resolved not in {"FORWARD", "BACKWARD", "BOTH"}:
             raise ValueError("direction must be FORWARD, BACKWARD, or BOTH")
-        result = self._edge_tool(database=database, entity=entity, query_key="dataflow_neighbors", tool_name="codeql_dataflow_neighbors", evidence_kind=EvidenceKind.CODEQL_DATAFLOW, max_nodes=max_nodes, max_edges=max_edges, max_depth=max_depth)
+        allowed = None if resolved == "BOTH" else {resolved}
+        result = self._edge_tool(database=database, entity=entity, query_key="dataflow_neighbors", tool_name="codeql_dataflow_neighbors", evidence_kind=EvidenceKind.CODEQL_DATAFLOW, max_nodes=max_nodes, max_edges=max_edges, max_depth=max_depth, allowed_edge_kinds=allowed)
         result.provenance["direction"] = resolved
         return result
 
@@ -190,6 +223,7 @@ class CodeQLAnalysisTools:
         resolved = str(direction).upper()
         if resolved not in {"FORWARD", "BACKWARD", "BOTH"}:
             raise ValueError("direction must be FORWARD, BACKWARD, or BOTH")
-        result = self._edge_tool(database=database, entity=entity, query_key="cfg_neighbors", tool_name="codeql_cfg_neighbors", evidence_kind=EvidenceKind.CODEQL_CFG, max_nodes=max_nodes, max_edges=max_edges, max_depth=max_depth)
+        allowed = None if resolved == "BOTH" else {"SUCCESSOR" if resolved == "FORWARD" else "PREDECESSOR"}
+        result = self._edge_tool(database=database, entity=entity, query_key="cfg_neighbors", tool_name="codeql_cfg_neighbors", evidence_kind=EvidenceKind.CODEQL_CFG, max_nodes=max_nodes, max_edges=max_edges, max_depth=max_depth, allowed_edge_kinds=allowed)
         result.provenance["direction"] = resolved
         return result
