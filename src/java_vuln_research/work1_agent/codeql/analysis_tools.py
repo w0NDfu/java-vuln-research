@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -38,6 +39,7 @@ class CodeQLAnalysisTools:
 
     def __init__(self, executor: CodeQLExecutor, query_root: str | Path) -> None:
         self.executor = executor
+        self._mapping_cache: dict[tuple[str, str], tuple[EntityMappingResult, CodeQLToolResult]] = {}
         root = Path(query_root)
         self.queries = {
             "entity_facts": QuerySpec("EntityFacts", root / "EntityFacts.ql", ENTITY_COLUMNS, 100),
@@ -65,6 +67,13 @@ class CodeQLAnalysisTools:
         database: str | Path,
         entity: ProgramEntity,
     ) -> tuple[EntityMappingResult, CodeQLToolResult]:
+        cache_key = (str(Path(database).resolve()), entity.entity_id)
+        cached = self._mapping_cache.get(cache_key)
+        if cached is not None:
+            mapping, result = cached
+            cloned = copy.deepcopy(result)
+            cloned.provenance["mapping_cache_hit"] = True
+            return copy.deepcopy(mapping), cloned
         executed = self.executor.execute(
             database=database,
             query=self.queries["entity_facts"],
@@ -84,13 +93,14 @@ class CodeQLAnalysisTools:
         )
         executed.mapped_codeql_entities = [item.to_dict() for item in mapping.candidates]
         executed.provenance["mapping"] = mapping.to_dict()
-        if executed.status not in {ToolStatus.ERROR, ToolStatus.EMPTY}:
+        if executed.status != ToolStatus.ERROR:
             if mapping.status == MappingStatus.MAPPED_UNIQUE:
                 executed.status = ToolStatus.OK
             elif mapping.status == MappingStatus.UNSUPPORTED_KIND:
                 executed.status = ToolStatus.UNSUPPORTED
             else:
                 executed.status = ToolStatus.ENTITY_NOT_MAPPED
+        self._mapping_cache[cache_key] = (copy.deepcopy(mapping), copy.deepcopy(executed))
         return mapping, executed
 
     def codeql_entity_facts(self, *, database: str | Path, entity: ProgramEntity) -> CodeQLToolResult:

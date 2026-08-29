@@ -185,6 +185,16 @@ def test_analysis_tools_filter_call_direction_and_return_bounded_nodes(tmp_path:
     assert result.metrics["returned_nodes"] == 2
 
 
+def test_analysis_tools_cache_mapping_per_database_and_entity(tmp_path: Path) -> None:
+    runner = AnalysisRunner()
+    tools = CodeQLAnalysisTools(runner, tmp_path)
+    first, _ = tools.map_entity(database=tmp_path / "db", entity=_entity())
+    second, cached_result = tools.map_entity(database=tmp_path / "db", entity=_entity())
+    assert first.status == second.status == MappingStatus.MAPPED_UNIQUE
+    assert runner.calls == 1
+    assert cached_result.provenance["mapping_cache_hit"] is True
+
+
 @pytest.mark.parametrize(
     ("stderr", "reason"),
     [
