@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 from java_vuln_research.work1_agent.proposal.model import canonical_json
 
 
-PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V2"
+PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V3"
 
 SYSTEM_PROMPT = """You are the reasoning component inside a project-level security-related candidate-path exploration agent.
 
@@ -36,6 +36,9 @@ For PROPOSE, proposal must have exactly these fields and no others:
 - semantic_category: a string or null; evidence_refs: one or more supplied evidence IDs.
 - reason: a non-empty string; model_confidence: a number from 0 to 1 or null; provenance: a non-empty object.
 A role reference has exactly entity_id, role, and an index only when role is PARAMETER or ARGUMENT. role is one of ENTITY, PARAMETER, ARGUMENT, RETURN, CALL_RESULT, RECEIVER, FIELD, FIELD_READ, FIELD_WRITE, CALL, METHOD, CONSTRUCTOR. scope.kind is one of ENTITY, CALLABLE, FIELD, FRAMEWORK_RELATION, CALLBACK_RELATION, and scope.entity_ids contains only supplied entity IDs. Do not return proposal_id in a proposal draft; the controller creates it. Do not invent alternative proposal fields such as gap_type, summary, proposed_semantics, candidate_anchors, why_minimal, checkability, originating_tool_call_ids, or caveats; put supporting text in reason and provenance.
+
+A candidate path normally needs three separately gated components: an EXTERNAL_INPUT anchor, the smallest supported propagation relation(s), and a SECURITY_EFFECT anchor. Use current Gate/path feedback to identify the missing component instead of repeatedly proposing the same kind. Ground an external-input anchor at the observed input-bearing PARAMETER or CALL_RESULT role. Ground a call-site security effect at its observed ARGUMENT or RECEIVER role. A callee definition's parameter is not automatically the caller's input or effect anchor.
+The outer decision owns stop_reason. A PROPOSE decision sets outer stop_reason to null, and proposal itself must never contain stop_reason or any other outer-decision field.
 """
 
 
