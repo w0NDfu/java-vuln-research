@@ -62,11 +62,22 @@ def build_case_inventory(
         hint = hint_index.get((project_id, case_id))
         annotation = _annotation_available(case, hint)
         eligible = source_ready and db_ready and not detected and annotation
+        exclusions = []
+        if not source_ready:
+            exclusions.append("SOURCE_NOT_READY")
+        if not db_ready:
+            exclusions.append("CODEQL_DB_NOT_READY")
+        if detected:
+            exclusions.append("BASELINE_DETECTED")
+        if not annotation:
+            exclusions.append("BENCHMARK_ANNOTATION_UNAVAILABLE")
         rows.append(
             {
                 "project_id": project_id,
                 "case_id": case_id,
                 "project_name": project.get("project_name", ""),
+                "project_repository": project.get("project_name", ""),
+                "source_revision": (hint or {}).get("annotation_revision", project.get("source_revision", "UNKNOWN")),
                 "cwe": case.get("cwe") or case.get("CWE") or case.get("cwe_id") or "",
                 "comparison_level": case.get("comparison_level", "UNKNOWN"),
                 "source_root": source_root,
@@ -77,6 +88,8 @@ def build_case_inventory(
                 "annotation_available": annotation,
                 "diagnostic_hint_available": hint is not None,
                 "eligible": eligible,
+                "eligible_for_m6": eligible,
+                "exclusion_reason": "|".join(exclusions),
             }
         )
     rows.sort(key=lambda item: (str(item["project_id"]), str(item["case_id"])))
