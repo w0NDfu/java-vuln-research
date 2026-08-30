@@ -290,6 +290,7 @@ def run_controlled(
         output_root=artifact_root,
         graph=graph,
         result=result,
+        summary_extra={"scenario_results": scenarios},
         manifest={
             "git_sha": git_sha,
             "source_project_identity": CONTROLLED_PROJECT_ID,
@@ -306,8 +307,6 @@ def run_controlled(
             "scenario_results": scenarios,
         },
     )
-    summary["scenario_results"] = scenarios
-    (Path(artifact_root) / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return summary
 
 

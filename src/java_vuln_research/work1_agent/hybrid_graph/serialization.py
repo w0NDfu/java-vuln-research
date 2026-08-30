@@ -80,6 +80,7 @@ def write_artifacts(
     graph: HybridEvidenceGraph,
     result: PathSearchResult,
     manifest: Mapping[str, Any],
+    summary_extra: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     output = Path(output_root)
     output.mkdir(parents=True, exist_ok=True)
@@ -89,6 +90,8 @@ def write_artifacts(
     _write_jsonl(output / "graph_diagnostics.jsonl", graph.diagnostics)
     _write_jsonl(output / "path_diagnostics.jsonl", result.diagnostics)
     summary = graph_summary(graph, result)
+    if summary_extra:
+        summary.update(dict(summary_extra))
     (output / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     artifact_names = (
         "graph_nodes.jsonl", "graph_edges.jsonl", "candidate_paths.jsonl",

@@ -126,6 +126,8 @@ def test_graph_serialization_and_schemas(controlled_artifacts):
     for value in paths:
         jsonschema.Draft202012Validator(path_schema, resolver=resolver).validate(value)
     assert all("provenance" in item for item in nodes + edges)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["artifact_hashes"]["summary.json"] == file_sha256(root / "summary.json")
 
 
 def test_proposal_to_edge_and_inactive_proposals(controlled_artifacts, controlled_data):
