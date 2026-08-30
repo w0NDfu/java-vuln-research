@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0`、`M7-1` 与 `M7-2`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约，以及 fail-closed runtime security boundary/no-leakage audit。尚未接入真实 LLM、工具执行、proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
+当前完成 `M7-0` 至 `M7-3`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit，以及 provider-neutral LLM client、冻结 prompt 与严格 structured parser。尚未执行 repository/CodeQL tools、proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
 
 ## M7-0 Git and worktree isolation
 
@@ -157,3 +157,54 @@ Java source 与正式 trusted schema 仍记录路径、大小和 hash，但跳�
 `PROCEED_M7_3`。
 
 接受理由：runtime input 已具备统一 fail-closed entry point、显式 denylist、内容级反伪装检查、逐文件 hash ledger、冻结语义、审计输出与结构化 violation；定向和完整回归通过；M7 runtime 未导入 M6 diagnostic/evaluator，也未接入任何 benchmark artifact。
+
+## M7-3 Provider-neutral reasoner boundary
+
+M7-3 新增三层分离：
+
+1. `LLMClient` protocol：controller 以后只依赖 `complete(LLMRequest) -> LLMResponse`，不依赖任何 provider SDK。
+2. `OpenAICompatibleLLMClient`：当前唯一在线 transport 实现，API key、base URL、exact model ID、provider 与参数只能由 `LLMClientConfig` runtime config 或 `M7_LLM_*` 环境变量提供；manifest 只记录 key 的环境变量名与 presence，不序列化 secret。
+3. `MockLLMClient`：按冻结 sequence 返回 canonical JSON，零网络、零随机性，并保留完整 request history。
+
+`LLMRequest` 对 project、round、system prompt、observation 与 attempt 生成稳定 request ID；`LLMResponse` 记录 model-call ID、provider、exact model ID、raw structured output、tokens、finish reason、wall clock 与非 secret 配置 provenance。HTTP transport 请求 JSON-only response format；timeout 和 unavailable 分开分类。
+
+### Prompt boundary
+
+冻结 `M7_SECURITY_EXPLORATION_V1` system prompt 只描述 Work1 candidate-path exploration：先取证后 proposal；名字只能作为搜索线索；实体、role/index、EvidenceRef 和 tool-call ID 必须来自当前运行；unavailable/empty/truncated/unmapped 不等于关系不存在；不得 arbitrary query；不得 direct input-to-effect shortcut；Gate 反馈后需重新取证；路径形成后允许 STOP；证据不足时保守 STOP；明确禁止输出漏洞确认、最终 weakness class、可利用性或防护有效性。
+
+Prompt 不含项目名、case ID、已知 API、恢复答案或 root-cause 表。tool catalog 作为 bounded data 以 canonical JSON 动态附加；prompt SHA-256 可直接冻结进后续 manifest。
+
+### Structured parser
+
+模型输出不是自然语言，而是只有五个字段的 `work1_agent_model_decision.schema.json` envelope。处理顺序为：
+
+1. 拒绝 Markdown fence、前后 prose、非法 JSON 与非 object；
+2. 拒绝 unknown action 和额外字段；
+3. 用 JSON schema 校验 decision；
+4. 按实际 M2/M3 ceiling 校验每个 tool 的 exact required/optional argument、relative path、entity ID、line/byte/result/depth bounds；
+5. runtime 注入不可由模型覆盖的 project ID、round、provider/model-call provenance 与 `benchmark_informed=false`；
+6. proposal draft 通过 `SecurityProposal.create()` 计算 canonical proposal ID，并重新验证为正式 M4 schema；
+7. 可选 catalog check 拒绝不存在的 ProgramEntity 或 fabricated EvidenceRef；
+8. 生成 canonical `AgentAction` 后再次用 action schema 校验；
+9. 在不修改 budget tracker 的前提下预检 tool/proposal budget。
+
+正式 action/proposal 仍完全兼容 M1/M4 contract；proposal draft 只是隔离在 untrusted model-output 边界的输入 envelope，模型不需要也不能猜测 SHA-based action/proposal ID。
+
+运行时内置一个 fail-closed Draft 2020-12 vocabulary validator，覆盖当前 schemas 实际使用的 `$ref`、`oneOf`、`anyOf`、`allOf`、`if/then/else`、`not`、type、required、additionalProperties、pattern、enum、const 与 size/value bounds；未知 schema keyword 会拒绝，而不是静默忽略。安装 `jsonschema 4.26.0` 后又用标准实现交叉验证 model-decision/proposal schema，避免自有 validator 与 schema 文件发生漂移。
+
+统一 model failure classes 全部已测试：`MODEL_UNAVAILABLE`、`MODEL_TIMEOUT`、`INVALID_JSON`、`INVALID_ACTION`、`SCHEMA_VIOLATION`、`TOOL_ARGUMENT_INVALID`、`BUDGET_EXCEEDED`。
+
+### M7-3 regression evidence
+
+- M7-3 targeted：`18 passed`，返回码 0。
+- M7-1～M7-3 aggregate targeted：`49 passed`，返回码 0。
+- local full regression：`198 passed, 1 skipped, 3 warnings`，返回码 0。
+- `compileall` 与 `git diff --check`：返回码 0。
+
+唯一 skip 是既有环境相关测试；warnings 来自既有及交叉校验测试使用 `jsonschema.RefResolver` 的上游 deprecation，不影响 schema validation 结果。
+
+### M7-3 acceptance decision
+
+`PROCEED_M7_4`。
+
+接受理由：在线/离线模型共享 provider-neutral protocol；secret 不进入 manifest；prompt 没有 benchmark/project-specific hint；模型输出经过 decision 与 canonical action 双重 schema 验证；所有越权/越界/非法/预算失败均结构化分类；mock 与 transport 均有 deterministic tests；完整回归通过。下一阶段才会把这些 action 接到 repository-first observation 与 M2/M3 deterministic adapter。

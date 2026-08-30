@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+import json
+import socket
+
+import pytest
+
+from java_vuln_research.work1_agent.agent import (
+    LLMClientConfig,
+    LLMRequest,
+    MockLLMClient,
+    ModelCallError,
+    ModelFailureClass,
+    OpenAICompatibleLLMClient,
+)
+
+
+def _request() -> LLMRequest:
+    return LLMRequest.create(project_id="P", round=1, system_prompt="bounded prompt", observation={"budget": {"rounds": 14}})
+
+
+def _stop() -> dict[str, object]:
+    return {"action_type": "STOP", "arguments": {}, "proposal": None, "stop_reason": "INSUFFICIENT_EVIDENCE", "reason": "No grounded action remains."}
+
+
+def test_mock_client_is_deterministic_and_exhaustion_is_classified() -> None:
+    client = MockLLMClient([_stop()])
+    response = client.complete(_request())
+    assert json.loads(response.raw_text) == _stop()
+    assert response.provider == "deterministic-mock"
+    with pytest.raises(ModelCallError) as caught:
+        client.complete(_request())
+    assert caught.value.failure_class is ModelFailureClass.MODEL_UNAVAILABLE
+
+
+def test_config_comes_from_environment_and_never_serializes_secret() -> None:
+    config = LLMClientConfig.from_environment(
+        {
+            "M7_LLM_PROVIDER": "compatible",
+            "M7_LLM_MODEL": "exact-model-v1",
+            "M7_LLM_BASE_URL": "https://model.example/v1",
+            "M7_LLM_API_KEY": "super-secret",
+            "M7_LLM_TEMPERATURE": "0.1",
+            "M7_LLM_MAX_OUTPUT_TOKENS": "1024",
+            "M7_LLM_SEED": "7",
+        }
+    )
+    manifest = config.to_manifest_dict()
+    assert manifest["exact_model_id"] == "exact-model-v1"
+    assert manifest["seed"] == 7
+    assert "super-secret" not in json.dumps(manifest)
+    assert config.api_key_env == "M7_LLM_API_KEY"
+
+
+def test_missing_environment_configuration_is_model_unavailable() -> None:
+    with pytest.raises(ModelCallError) as caught:
+        LLMClientConfig.from_environment({})
+    assert caught.value.failure_class is ModelFailureClass.MODEL_UNAVAILABLE
+
+
+def test_openai_compatible_transport_is_auditable_without_leaking_key() -> None:
+    captured: dict[str, object] = {}
+
+    def transport(url: str, headers: dict[str, str], body: bytes, timeout: float) -> dict[str, object]:
+        captured.update(url=url, headers=headers, body=json.loads(body), timeout=timeout)
+        return {
+            "id": "response-1",
+            "choices": [{"message": {"content": json.dumps(_stop())}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 12, "completion_tokens": 7},
+        }
+
+    config = LLMClientConfig("compatible", "exact-model", "https://model.example/v1", "secret", timeout_seconds=10)
+    response = OpenAICompatibleLLMClient(config, transport=transport).complete(_request())
+    assert captured["url"] == "https://model.example/v1/chat/completions"
+    assert captured["body"]["response_format"] == {"type": "json_object"}
+    assert response.input_tokens == 12 and response.output_tokens == 7
+    assert "secret" not in json.dumps(response.to_dict())
+
+
+def test_transport_timeout_has_explicit_failure_class() -> None:
+    def timeout(*_args: object) -> dict[str, object]:
+        raise socket.timeout()
+
+    config = LLMClientConfig("compatible", "model", "https://model.example/v1", "secret")
+    with pytest.raises(ModelCallError) as caught:
+        OpenAICompatibleLLMClient(config, transport=timeout).complete(_request())
+    assert caught.value.failure_class is ModelFailureClass.MODEL_TIMEOUT
+    assert caught.value.retryable is True

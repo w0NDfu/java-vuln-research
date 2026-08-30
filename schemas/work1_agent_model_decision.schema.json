@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "work1_agent_model_decision.schema.json",
+  "title": "Work1 V11 M7 Model Decision Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action_type", "arguments", "proposal", "stop_reason", "reason"],
+  "properties": {
+    "action_type": {
+      "enum": [
+        "SEARCH_CODE", "SEARCH_SYMBOLS", "INSPECT_METHOD", "INSPECT_TYPE", "READ_FILE_RANGE",
+        "GET_CALLERS", "GET_CALLEES", "GET_IMPLEMENTATIONS", "GET_OVERRIDES", "GET_FIELDS", "GET_ANNOTATIONS",
+        "CODEQL_ENTITY_FACTS", "CODEQL_CALLERS", "CODEQL_CALLEES", "CODEQL_LOCAL_FLOW",
+        "CODEQL_DATAFLOW_NEIGHBORS", "CODEQL_CFG_NEIGHBORS", "PROPOSE", "STOP"
+      ]
+    },
+    "arguments": {"type": "object"},
+    "proposal": {"oneOf": [{"$ref": "security_proposal.schema.json"}, {"$ref": "work1_agent_model_decision.schema.json#/$defs/proposal_draft"}, {"type": "null"}]},
+    "stop_reason": {"type": ["string", "null"], "enum": ["PATH_FORMED", "INSUFFICIENT_EVIDENCE", "BUDGET_EXHAUSTED", "NO_FURTHER_ACTION", "TOOL_UNAVAILABLE", "OTHER", null]},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action_type": {"const": "PROPOSE"}}},
+      "then": {"properties": {"arguments": {"maxProperties": 0}, "proposal": {"oneOf": [{"$ref": "security_proposal.schema.json"}, {"$ref": "work1_agent_model_decision.schema.json#/$defs/proposal_draft"}]}, "stop_reason": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"action_type": {"const": "STOP"}}},
+      "then": {"properties": {"arguments": {"maxProperties": 0}, "proposal": {"type": "null"}, "stop_reason": {"type": "string"}}}
+    },
+    {
+      "if": {"properties": {"action_type": {"not": {"enum": ["PROPOSE", "STOP"]}}}},
+      "then": {"properties": {"proposal": {"type": "null"}, "stop_reason": {"type": "null"}}}
+    }
+  ],
+  "$defs": {
+    "proposal_draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_type", "subject", "source", "target", "scope", "semantic_category", "evidence_refs", "reason", "model_confidence", "provenance"],
+      "properties": {
+        "proposal_type": {"enum": ["EXTERNAL_INPUT", "SECURITY_EFFECT", "WRAPPER_FLOW", "LIBRARY_FLOW", "FIELD_STATE", "FRAMEWORK_RELATION", "CALLBACK_RELATION"]},
+        "subject": {"$ref": "security_proposal.schema.json#/$defs/role_ref"},
+        "source": {"anyOf": [{"$ref": "security_proposal.schema.json#/$defs/role_ref"}, {"type": "null"}]},
+        "target": {"anyOf": [{"$ref": "security_proposal.schema.json#/$defs/role_ref"}, {"type": "null"}]},
+        "scope": {"$ref": "security_proposal.schema.json#/$defs/scope"},
+        "semantic_category": {"type": ["string", "null"]},
+        "evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^evidence-[0-9a-f]{24}$"}, "uniqueItems": true},
+        "reason": {"type": "string", "minLength": 1},
+        "model_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "provenance": {"type": "object", "minProperties": 1}
+      }
+    }
+  }
+}
