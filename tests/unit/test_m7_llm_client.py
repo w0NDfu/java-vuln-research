@@ -33,6 +33,25 @@ def test_mock_client_is_deterministic_and_exhaustion_is_classified() -> None:
     assert caught.value.failure_class is ModelFailureClass.MODEL_UNAVAILABLE
 
 
+def test_mock_client_factory_can_use_prior_observation() -> None:
+    request = LLMRequest.create(
+        project_id="P",
+        round=2,
+        system_prompt="bounded",
+        observation={"recent_feedback": [{"evidence_refs": [{"evidence_id": "evidence-abc"}]}]},
+    )
+    client = MockLLMClient([
+        lambda current: {
+            **_stop(),
+            "reason": current.observation["recent_feedback"][0]["evidence_refs"][0]["evidence_id"],
+        }
+    ])
+
+    response = client.complete(request)
+
+    assert json.loads(response.raw_text)["reason"] == "evidence-abc"
+
+
 def test_config_comes_from_environment_and_never_serializes_secret() -> None:
     config = LLMClientConfig.from_environment(
         {

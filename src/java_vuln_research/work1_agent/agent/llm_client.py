@@ -263,10 +263,14 @@ class OpenAICompatibleLLMClient:
         )
 
 
+MockResponse = str | Mapping[str, Any] | ModelCallError
+MockResponseFactory = Callable[[LLMRequest], MockResponse]
+
+
 class MockLLMClient:
     """Deterministic scripted client; it never accesses network or environment."""
 
-    def __init__(self, responses: Sequence[str | Mapping[str, Any] | ModelCallError]) -> None:
+    def __init__(self, responses: Sequence[MockResponse | MockResponseFactory]) -> None:
         self._responses = list(responses)
         self.requests: list[LLMRequest] = []
 
@@ -276,6 +280,8 @@ class MockLLMClient:
         if index >= len(self._responses):
             raise ModelCallError(ModelFailureClass.MODEL_UNAVAILABLE, "mock response sequence exhausted", retryable=False)
         scripted = self._responses[index]
+        if callable(scripted):
+            scripted = scripted(request)
         if isinstance(scripted, ModelCallError):
             raise scripted
         raw_text = canonical_json(scripted) if isinstance(scripted, Mapping) else scripted
