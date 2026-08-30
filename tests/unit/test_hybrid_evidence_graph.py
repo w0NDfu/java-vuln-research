@@ -188,7 +188,13 @@ def test_field_framework_callback_paths(controlled_artifacts):
 
 
 def test_cycle_prevention_and_exact_path_dedupe(controlled_artifacts):
-    _, summary = controlled_artifacts
+    root, summary = controlled_artifacts
+    paths = [
+        json.loads(line)
+        for line in (root / "candidate_paths.jsonl").read_text(encoding="utf-8").splitlines()
+        if "ordered_edges" in line
+    ]
+    assert all(len(item["unresolved_semantics"]) == len(set(item["unresolved_semantics"])) for item in paths)
     assert summary["cycle_prevention_count"] > 0
     assert summary["deduplicated_path_count"] > 0
     assert summary["search_truncation_count"] == 0

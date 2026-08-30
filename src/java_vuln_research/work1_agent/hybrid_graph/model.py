@@ -317,9 +317,11 @@ class HybridCandidatePath:
         proposal_ids = tuple(sorted({item.proposal_id for item in edges if item.proposal_id}))
         unresolved = tuple(
             sorted(
-                f"{item.relation_kind.value}:{item.proposal_id}"
-                for item in edges
-                if item.support_class == SupportClass.ADMISSIBLE_SEMANTIC_PROPOSAL and item.proposal_id
+                {
+                    f"{item.relation_kind.value}:{item.proposal_id}"
+                    for item in edges
+                    if item.support_class == SupportClass.ADMISSIBLE_SEMANTIC_PROPOSAL and item.proposal_id
+                }
             )
         )
         evidence_refs = tuple(sorted({ref for item in edges for ref in item.evidence_refs}))
