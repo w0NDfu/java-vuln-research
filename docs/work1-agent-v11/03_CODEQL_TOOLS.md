@@ -38,7 +38,7 @@ CodeQL 在本阶段是事实提供者，不是漏洞搜索边界。模型只能�
 
 模板化查询会把最近的 `qlpack.yml` 和 `codeql-pack.lock.yml` 复制到调用 artifact，保留 Java library pack 的精确解析上下文。此行为由真实 V001 probe 验证：修复前为 `could not resolve module java`，修复后同一实体达到 `MAPPED_UNIQUE/OK`。
 
-失败分类包括 `CODEQL_UNAVAILABLE`、`DB_NOT_FOUND`、`DB_NOT_READY`、`QUERY_NOT_FOUND`、`QUERY_COMPILE_ERROR`、`QUERY_EXECUTION_ERROR`、`TIMEOUT`、`OOM`、`BQRS_DECODE_ERROR` 与 `OUTPUT_PARSE_ERROR`。
+失败分类包括 `CODEQL_UNAVAILABLE`、`DB_NOT_FOUND`、`DB_NOT_READY`、`QUERY_NOT_FOUND`、`QUERY_COMPILE_ERROR`、`QUERY_EXECUTION_ERROR`、`DB_CACHE_CORRUPTION`、`TIMEOUT`、`OOM`、`BQRS_DECODE_ERROR` 与 `OUTPUT_PARSE_ERROR`。`DB_CACHE_CORRUPTION` 在 M4 的 D003 取证中加入，用来把数据库 tuple-pool checksum 损坏与 QL 编译错误分开。
 
 ## 6. Evidence types
 
@@ -65,7 +65,7 @@ CloudStudio 输入严格来自 `project_inventory.csv` 的 `codeql_db_ready=true
 
 Cloud preflight 先在 P006 验证 enrichment、精确 CodeQL callable identity 和可选 local-flow target/scope，三类查询均成功编译执行。最终全量运行中 153 个唯一映射实体全部具有 `type_information`；其中 40 个具有参数位置、60 个具有返回信息、14 个具有 annotation facts、36 个具有 override/interface facts。空字段表示该实体种类没有对应事实，不用占位值伪造信息。
 
-历史 pre-enrichment 运行曾在 4-worker 资源竞争下出现 5 个 OOM；该证据保存在 `pre_enrichment_717cd5f/`，不混入当前 required artifact。最终实现从头以 2 workers 重跑全部 18 个 ready DB，wall-clock 为 3882.606458 秒，没有 OOM 或 TIMEOUT，也不需要失败项目定向重试。D003 的 12 个 `QUERY_COMPILE_ERROR` 在新实现上稳定复现。
+历史 pre-enrichment 运行曾在 4-worker 资源竞争下出现 5 个 OOM；该证据保存在 `pre_enrichment_717cd5f/`，不混入当前 required artifact。最终实现从头以 2 workers 重跑全部 18 个 ready DB，wall-clock 为 3882.606458 秒，没有 OOM 或 TIMEOUT，也不需要失败项目定向重试。D003 的 12 个错误在该历史 M3 artifact 中稳定复现，并因旧分类器把正常的 `Compiling query plan` 进度文本当成错误特征而记录为 `QUERY_COMPILE_ERROR`；M4 取证已将它们纠正为 `DB_CACHE_CORRUPTION`。
 
 每个实际执行的查询绑定 V11 Git SHA、CodeQL version、DB path 与 materialized query hash；项目汇总同时绑定 frozen manifest 中的 source revision。源码副本没有 `.git` 时不伪造现场 HEAD，而是明确记录 `project_source_head_origin=frozen_manifest`。90 个下游调用因映射失败在 CodeQL 执行前短路，故没有伪造 query hash；其余 432 个调用均有实际 query hash 与 source revision。artifact 运行 SHA 为 `5c62e35075b13935885fda40ace55f6a36e4abd3`，CodeQL 为 `2.26.3`，并包含完整 EntityFacts enrichment、精确 call-graph identity、local-flow target/scope 与 depth 拒绝语义。
 
@@ -121,9 +121,9 @@ Cloud 命令在隔离 worktree `/workspace/work1-agent-v11-cloud` 上执行，�
 
 ## 13. Timeout/OOM/error analysis
 
-最终 artifact 中 `TIMEOUT=0`、`OOM=0`、`QUERY_EXECUTION_ERROR=0`、decode/parse/driver error 均为 0；唯一实际错误是 D003 的 12 个 `QUERY_COMPILE_ERROR`（exit 100）：CFG 3、dataflow 6、local-flow 3。stderr 的稳定共同栈位于 CodeQL `ExtensionalLoader`/`TuplePool` cache/load 路径；同一固定查询在其余 DB 可运行，因此证据支持“D003/CodeQL 运行时 compile-stage 兼容性问题”，而不是把它误报为无边、映射失败或通用 QL 语法错误。
+最终 M3 artifact 中 `TIMEOUT=0`、`OOM=0`、`QUERY_EXECUTION_ERROR=0`、decode/parse/driver error 均为 0；唯一实际错误是 D003 的 12 个 exit-100 调用：CFG 3、dataflow 6、local-flow 3。M4 对保存的完整 `query.log` 和 provenance 复核后确认：查询已经成功编译并进入 `Starting evaluation`，随后在 CodeQL `ExtensionalLoader`/`TuplePool` 读取 `db-java/default/cache/cached-strings/tuple-pool` 时报告 `Invalid checksum on pool file`。因此历史 `QUERY_COMPILE_ERROR` 是分类器误标，正确通用分类是 `DB_CACHE_CORRUPTION`，M4 resolution category 为 `DB/LANGUAGE_VERSION_LIMITATION`；这不是通用 QL 语法/API bug，也不是实体专用 query generation bug。
 
-历史 4-worker 结果中的 5 个 OOM 分布在 D001（2）、V007（1）、V009（1）、V011（1），证明高并发不适合该 4-core/8-GB CloudStudio 环境；它们不属于当前 artifact。最终 2-worker 全量重跑没有 OOM/TIMEOUT。D003 的 12 个错误仍完全复现，故停止重复重试。`failures.jsonl` 共 147 行：135 个显式 mapping failure/short-circuit，加 12 个结构化 CodeQL error；没有重建或使用 15 个非 ready DB。
+历史 4-worker 结果中的 5 个 OOM 分布在 D001（2）、V007（1）、V009（1）、V011（1），证明高并发不适合该 4-core/8-GB CloudStudio 环境；它们不属于当前 artifact。最终 2-worker 全量重跑没有 OOM/TIMEOUT。D003 的 12 个错误属于同一稳定 DB cache limitation，故不做项目专用补丁，也不触发“通用 query bug 时另跑 2 个 DB”的回归分支。分类器现在优先识别 invalid-checksum tuple-pool 错误，并不再把普通编译进度文本视为 failure token；12 条保存诊断的分类重放均得到 `DB_CACHE_CORRUPTION`。`failures.jsonl` 共 147 行：135 个显式 mapping failure/short-circuit，加 12 个结构化 CodeQL error；历史 artifact 保持不可变，纠正索引与原始日志保存在 M4 `d003_resolution/`。
 
 ## 14. Known CodeQL limitations
 
@@ -135,4 +135,4 @@ Cloud 命令在隔离 worktree `/workspace/work1-agent-v11-cloud` 上执行，�
 
 ## 15. M4 handoff
 
-M4 只能消费 M3 的显式 evidence kind、mapping status、provenance、limits/truncation 与 failure semantics。M3 完成门槛是 18 个 ready DB 全部被执行、五个指定 artifact 完整生成、统计与本报告一致。当前门槛已达到，建议 **`PROCEED_M4`**；但 M4 必须把 D003 的 12 个结构化错误视为缺失证据，把 D004/V022 的低映射覆盖视为 uncertainty，不能解释成 negative evidence。本阶段在给出建议后停止，不启动 Security Proposal、Evidence Gate、Hybrid Evidence Graph、Agent、Prompt 或漏洞实验。
+M4 只能消费 M3 的显式 evidence kind、mapping status、provenance、limits/truncation 与 failure semantics。M3 完成门槛是 18 个 ready DB 全部被执行、五个指定 artifact 完整生成、统计与本报告一致。当前门槛已达到，建议 **`PROCEED_M4`**；M4 将 D003 的 flow/CFG cache failure 视为缺失 CodeQL 证据而不是反证，repository evidence 仍可独立 admission；D004/V022 的低映射覆盖同样只是 uncertainty。本阶段在给出建议后停止，不启动 Security Proposal、Evidence Gate、Hybrid Evidence Graph、Agent、Prompt 或漏洞实验。
