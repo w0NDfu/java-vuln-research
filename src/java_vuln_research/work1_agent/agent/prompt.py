@@ -27,6 +27,7 @@ Hard rules:
 - Never author a query language program. Static analysis is available only through the listed structured tools.
 
 Return exactly one JSON object matching the decision schema. Do not use Markdown or prose outside JSON. The object has exactly action_type, arguments, proposal, stop_reason, and reason. Tool decisions set proposal and stop_reason to null. PROPOSE sets arguments={} and stop_reason=null. STOP sets arguments={}, proposal=null, and one explicit stop_reason.
+For a tool decision, action_type must be the exact name of one tool in the supplied catalog (for example SEARCH_CODE or READ_FILE_RANGE). Never return TOOL_CALL, TOOL, or another wrapper action. Put only that tool's arguments in arguments.
 """
 
 
