@@ -15,6 +15,7 @@ def test_prompt_is_benchmark_agnostic_and_requires_evidence_first() -> None:
     assert "proposal must have exactly these fields" in lowered
     assert "do not return proposal_id" in lowered
     assert "gap_type" in lowered
+    assert prompt.endswith("Return no code fence, Markdown label, preface, or trailing prose.")
     assert PROMPT_VERSION == "M7_SECURITY_EXPLORATION_V2"
     assert "retrofit" not in lowered and "hutool" not in lowered
     assert "diagnostic_proposals" not in lowered and "root-cause table" not in lowered
