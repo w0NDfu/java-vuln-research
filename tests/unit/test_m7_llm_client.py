@@ -58,6 +58,7 @@ def test_config_comes_from_environment_and_never_serializes_secret() -> None:
             "M7_LLM_PROVIDER": "compatible",
             "M7_LLM_MODEL": "exact-model-v1",
             "M7_LLM_BASE_URL": "https://model.example/v1",
+            "M7_LLM_ENDPOINT": "https://model.example/v1/chat/completions",
             "M7_LLM_API_KEY": "super-secret",
             "M7_LLM_TEMPERATURE": "0.1",
             "M7_LLM_MAX_OUTPUT_TOKENS": "1024",
@@ -66,6 +67,8 @@ def test_config_comes_from_environment_and_never_serializes_secret() -> None:
     )
     manifest = config.to_manifest_dict()
     assert manifest["exact_model_id"] == "exact-model-v1"
+    assert manifest["endpoint_url"] == "https://model.example/v1/chat/completions"
+    assert manifest["endpoint_mode"] == "EXACT"
     assert manifest["seed"] == 7
     assert "super-secret" not in json.dumps(manifest)
     assert config.api_key_env == "M7_LLM_API_KEY"
@@ -94,6 +97,31 @@ def test_openai_compatible_transport_is_auditable_without_leaking_key() -> None:
     assert captured["body"]["response_format"] == {"type": "json_object"}
     assert response.input_tokens == 12 and response.output_tokens == 7
     assert "secret" not in json.dumps(response.to_dict())
+
+
+def test_exact_endpoint_is_used_verbatim_without_concatenation() -> None:
+    captured: dict[str, object] = {}
+
+    def transport(url: str, _headers: dict[str, str], _body: bytes, _timeout: float) -> dict[str, object]:
+        captured["url"] = url
+        return {
+            "id": "response-exact",
+            "choices": [{"message": {"content": json.dumps(_stop())}, "finish_reason": "stop"}],
+        }
+
+    endpoint = "https://api.openlux.ai/v1/chat/completions"
+    config = LLMClientConfig(
+        "openlux",
+        "claude-opus-5",
+        "https://api.openlux.ai/v1",
+        "secret",
+        endpoint_url=endpoint,
+    )
+
+    OpenAICompatibleLLMClient(config, transport=transport).complete(_request())
+
+    assert captured["url"] == endpoint
+    assert config.to_manifest_dict()["endpoint_mode"] == "EXACT"
 
 
 def test_transport_timeout_has_explicit_failure_class() -> None:

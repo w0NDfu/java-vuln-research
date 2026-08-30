@@ -27,7 +27,7 @@ from java_vuln_research.work1_agent.repository.indexer import build_repository_i
 from .actions import ActionType, StopReason
 from .controller import AgentController
 from .graph_adapter import AgentGraphPathAdapter
-from .llm_client import LLMRequest, MockLLMClient
+from .llm_client import LLMClient, LLMClientConfig, LLMRequest, MockLLMClient, OpenAICompatibleLLMClient
 from .parser import StrictActionParser
 from .prompt import build_system_prompt, prompt_sha256
 from .observation import bounded_tool_catalog
@@ -218,14 +218,102 @@ def run_controlled_smoke(*, repository_root: Path, schema_root: Path, artifact_r
     return summary
 
 
+def run_controlled_real_llm_smoke(
+    *,
+    repository_root: Path,
+    schema_root: Path,
+    artifact_root: Path,
+    git_sha: str,
+    config: LLMClientConfig | None = None,
+    llm_client: LLMClient | None = None,
+) -> dict[str, object]:
+    """Run the same non-benchmark fixture with an environment-backed reasoner."""
+
+    resolved_config = config or LLMClientConfig.from_environment()
+    client = llm_client or OpenAICompatibleLLMClient(resolved_config)
+    index = build_repository_index(repository_root)
+    output = artifact_root / "CONTROLLED_REAL_LLM"
+    output.mkdir(parents=True, exist_ok=True)
+    boundary = RuntimeSecurityBoundary(
+        project_id="CONTROLLED",
+        repository_identity="controlled-real@" + git_sha,
+        allowed_roots=runtime_roots(
+            source_roots=[repository_root],
+            artifact_roots=[artifact_root],
+            schema_roots=[schema_root],
+        ),
+    )
+    for source_path in sorted(repository_root.rglob("*.java")):
+        boundary.read_bytes(
+            source_path,
+            kind=RuntimeInputKind.JAVA_SOURCE,
+            logical_name="java:" + source_path.relative_to(repository_root).as_posix(),
+        )
+    gate = EvidenceGate(repository_root=repository_root, entities=index.entities, evidence_catalog={})
+    graph_adapter = AgentGraphPathAdapter(
+        project_id="CONTROLLED",
+        entities=index.entities,
+        evidence_gate=gate,
+        git_sha=git_sha,
+    )
+    state = AgentState.create(
+        project_id="CONTROLLED",
+        repository_identity="controlled-real@" + git_sha,
+        provenance={"producer": "M7_CONTROLLED_REAL_LLM", "benchmark_informed": False},
+    )
+    controller = AgentController(
+        state=state,
+        repository_index=index,
+        codeql_status={"project_id": "CONTROLLED", "ready": False, "status": "UNAVAILABLE"},
+        llm_client=client,
+        parser=StrictActionParser(schema_root),
+        tool_adapter=RepositoryCodeQLToolAdapter(
+            project_id="CONTROLLED",
+            repository_index=index,
+            security_boundary=boundary,
+        ),
+        evidence_gate=gate,
+        graph_path_adapter=graph_adapter,
+    )
+    result = controller.run()
+    input_manifest = boundary.seal()
+    boundary.audit()
+    prompt = build_system_prompt(bounded_tool_catalog())
+    audit = write_controller_artifacts(
+        result,
+        output,
+        run_manifest={
+            "run_kind": "CONTROLLED_REAL_LLM",
+            "git_sha": git_sha,
+            "repository_revision": git_sha,
+            **resolved_config.to_manifest_dict(),
+            "system_prompt_sha256": prompt_sha256(prompt),
+            "benchmark_informed": False,
+        },
+        input_manifest=input_manifest,
+    )
+    summary = {
+        **result.summary(),
+        "candidate_path_count": len(result.state.active_candidate_path_ids),
+        "artifact_root": str(output),
+        "artifact_audit_pass": audit["required_files_present"],
+        "no_leakage_pass": audit["no_leakage_pass"],
+        "model_configuration": resolved_config.to_manifest_dict(),
+    }
+    (artifact_root / "real_llm_summary.json").write_text(canonical_json(summary) + "\n", encoding="utf-8")
+    return summary
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository-root", type=Path, required=True)
     parser.add_argument("--schema-root", type=Path, required=True)
     parser.add_argument("--artifact-root", type=Path, required=True)
     parser.add_argument("--git-sha", required=True)
+    parser.add_argument("--mode", choices=("deterministic-mock", "real-llm"), default="deterministic-mock")
     args = parser.parse_args()
-    print(canonical_json(run_controlled_smoke(repository_root=args.repository_root, schema_root=args.schema_root, artifact_root=args.artifact_root, git_sha=args.git_sha)))
+    runner = run_controlled_real_llm_smoke if args.mode == "real-llm" else run_controlled_smoke
+    print(canonical_json(runner(repository_root=args.repository_root, schema_root=args.schema_root, artifact_root=args.artifact_root, git_sha=args.git_sha)))
     return 0
 
 

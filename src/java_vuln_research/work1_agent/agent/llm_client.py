@@ -55,6 +55,7 @@ class LLMClientConfig:
     model_id: str
     base_url: str
     api_key: str = field(repr=False)
+    endpoint_url: str | None = None
     api_key_env: str = "M7_LLM_API_KEY"
     timeout_seconds: float = 60.0
     temperature: float = 0.0
@@ -67,6 +68,10 @@ class LLMClientConfig:
         parsed = urllib.parse.urlparse(self.base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("base_url must be an HTTP(S) origin/path without credentials, query, or fragment")
+        if self.endpoint_url is not None:
+            endpoint = urllib.parse.urlparse(self.endpoint_url)
+            if endpoint.scheme not in {"http", "https"} or not endpoint.netloc or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment:
+                raise ValueError("endpoint_url must be an HTTP(S) URL without credentials, query, or fragment")
         if not 1 <= float(self.timeout_seconds) <= 600:
             raise ValueError("timeout_seconds must be between 1 and 600")
         if not 0 <= float(self.temperature) <= 2:
@@ -92,6 +97,7 @@ class LLMClientConfig:
             model_id=required["MODEL"],
             base_url=required["BASE_URL"],
             api_key=required["API_KEY"],
+            endpoint_url=values.get(prefix + "ENDPOINT", "").strip() or None,
             api_key_env=prefix + "API_KEY",
             timeout_seconds=float(values.get(prefix + "TIMEOUT_SECONDS", "60")),
             temperature=float(values.get(prefix + "TEMPERATURE", "0")),
@@ -104,6 +110,8 @@ class LLMClientConfig:
             "provider": self.provider,
             "exact_model_id": self.model_id,
             "base_url": self.base_url,
+            "endpoint_url": self.endpoint_url,
+            "endpoint_mode": "EXACT" if self.endpoint_url else "OPENAI_BASE_URL",
             "api_key_env": self.api_key_env,
             "api_key_present": bool(self.api_key),
             "timeout_seconds": self.timeout_seconds,
@@ -223,7 +231,7 @@ class OpenAICompatibleLLMClient:
         }
         if self.config.seed is not None:
             payload["seed"] = self.config.seed
-        endpoint = self.config.base_url.rstrip("/") + "/chat/completions"
+        endpoint = self.config.endpoint_url or (self.config.base_url.rstrip("/") + "/chat/completions")
         started = time.monotonic()
         try:
             response = self._transport(
