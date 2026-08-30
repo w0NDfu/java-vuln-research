@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 至 `M7-7`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit、provider-neutral LLM client、冻结 prompt/严格 structured parser、repository-first observation、全量 M2/M3 工具适配、tool → observation controller、正式 M4 proposal/Evidence Gate，以及 M5 graph/path/stopping 反馈闭环。尚未运行 controlled Agent smoke 或真实 autonomous kill test。
+当前完成 `M7-0` 至 `M7-7`，并完成 `M7-8` 的 deterministic controlled smoke/artifact audit。CloudStudio controlled real-LLM smoke 尚未执行：云环境没有配置任何 `M7_LLM_*` 或 `OPENAI_API_KEY` 凭证，因此 M7-8 尚未验收，M7-9 及以后未启动。
 
 ## M7-0 Git and worktree isolation
 
@@ -309,3 +309,22 @@ controller 仅在显式注入正式 `EvidenceGate` 时启用 `PROPOSE`；未注�
 `PROCEED_M7_8`。
 
 接受理由：路径只在 input proposal、effect proposal 和有 EvidenceRef 的中间关系共同存在时形成；native path identity 不变；new path/anchor/truncation feedback 可追踪；显式 PATH_FORMED STOP 与 stagnation/budget STOP 都有测试；本地与 CloudStudio 完整回归通过。下一阶段运行 controlled deterministic mock smoke 与不含 benchmark 答案的 controlled real-LLM smoke，并生成 artifacts/audit。
+
+## M7-8 Controlled smoke and artifacts（进行中）
+
+新增可执行 `run_work1_v11_m7_controlled.sh`、controlled runner 与统一 runtime artifact writer。deterministic mock 使用非 benchmark 合成 fixture，完成 3 轮：ADMISSIBLE input proposal → ADMISSIBLE effect proposal → 形成 1 条有 structural EvidenceRef 中间边的 hybrid path → 显式 `STOP(PATH_FORMED)`。
+
+CloudStudio 权威输出位于 `/workspace/experiment-output/artifacts/work1-agent-v11/m7_agent/CONTROLLED/`，包含 `agent_trace.jsonl`、model/tool calls、EvidenceRef、proposals、Gate results、graph nodes/edges、candidate paths、path diagnostics、summary、manifest 和 artifact audit。模型失败测试也验证同一文件契约仍完整生成 failure manifest。input manifest 对 controlled Java source 逐文件登记 hash，`no_leakage_pass=true`。
+
+### M7-8 current evidence
+
+- artifact writer + controlled integration targeted：`8 passed`，返回码 0。
+- local full regression：`219 passed, 1 skipped, 3 warnings`，返回码 0。
+- CloudStudio deterministic controlled smoke（commit `f4eaccd`）：2 proposals、2 ADMISSIBLE、1 candidate path、3 model calls、`PATH_FORMED`、artifact audit pass、no-leakage pass。
+- CloudStudio full regression（commit `f4eaccd`）：`220 passed, 1 skipped, 3 warnings`，返回码 0，耗时 5.31 秒。
+
+### M7-8 blocking condition
+
+CloudStudio presence-only 检查结果：`M7_LLM_PROVIDER=false`、`M7_LLM_MODEL=false`、`M7_LLM_BASE_URL=false`、`M7_LLM_API_KEY=false`、`OPENAI_API_KEY=false`。检查没有打印、读取或落盘任何 secret 内容。
+
+因此当前决策为 `BLOCKED_M7_8_REAL_LLM_CONFIGURATION`，不是 `PROCEED_M7_9`。缺失的是外部模型 endpoint/model/API key 授权信息，无法通过安装软件补齐；在 controlled real-LLM smoke 完成前不会冻结 kill-test manifest，也不会启动真实 benchmark。
