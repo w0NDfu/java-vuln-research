@@ -127,7 +127,8 @@ def test_exact_endpoint_is_used_verbatim_without_concatenation() -> None:
     assert config.to_manifest_dict()["endpoint_mode"] == "EXACT"
 
 
-def test_tool_call_mode_forces_and_reads_one_structured_decision() -> None:
+@pytest.mark.parametrize("tool_arguments", [json.dumps(_stop()), _stop()])
+def test_tool_call_mode_forces_and_reads_one_structured_decision(tool_arguments: object) -> None:
     captured: dict[str, object] = {}
 
     def transport(_url: str, _headers: dict[str, str], body: bytes, _timeout: float) -> dict[str, object]:
@@ -141,7 +142,7 @@ def test_tool_call_mode_forces_and_reads_one_structured_decision() -> None:
                         "tool_calls": [
                             {
                                 "type": "function",
-                                "function": {"name": "submit_agent_decision", "arguments": json.dumps(_stop())},
+                                "function": {"name": "submit_agent_decision", "arguments": tool_arguments},
                             }
                         ],
                     },

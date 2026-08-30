@@ -296,9 +296,17 @@ class OpenAICompatibleLLMClient:
             message = choice["message"]
             if self.config.structured_output_mode is StructuredOutputMode.TOOL_CALL:
                 tool_calls = message["tool_calls"]
-                if len(tool_calls) != 1 or tool_calls[0]["function"]["name"] != "submit_agent_decision":
+                matching = [
+                    item
+                    for item in tool_calls
+                    if isinstance(item, Mapping)
+                    and isinstance(item.get("function"), Mapping)
+                    and item["function"].get("name") == "submit_agent_decision"
+                ]
+                if len(matching) != 1:
                     raise ValueError("unexpected structured tool call")
-                text = tool_calls[0]["function"]["arguments"]
+                arguments = matching[0]["function"].get("arguments")
+                text = canonical_json(arguments) if isinstance(arguments, Mapping) else arguments
             else:
                 text = message["content"]
             if not isinstance(text, str) or not text.strip():
