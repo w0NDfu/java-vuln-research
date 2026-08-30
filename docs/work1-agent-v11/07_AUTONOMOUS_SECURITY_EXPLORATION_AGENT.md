@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 至 `M7-5`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit、provider-neutral LLM client、冻结 prompt/严格 structured parser、repository-first observation、全量 M2/M3 工具适配，以及 tool → observation controller 闭环。尚未接入 proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
+当前完成 `M7-0` 至 `M7-6`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit、provider-neutral LLM client、冻结 prompt/严格 structured parser、repository-first observation、全量 M2/M3 工具适配、tool → observation controller，以及正式 M4 proposal/Evidence Gate 反馈闭环。尚未接入 M5 graph/path，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
 
 ## M7-0 Git and worktree isolation
 
@@ -257,3 +257,31 @@ warnings 仍仅为 `jsonschema.RefResolver` 上游 deprecation。
 `PROCEED_M7_6`。
 
 接受理由：工具结果确实成为下一轮 observation 的可见反馈；模型失败、预算耗尽、跨项目装配和提前 proposal 均 fail-closed；model/action/tool/budget/stop trace 连续且可 replay；本地与 CloudStudio 完整回归通过。下一阶段才接正式 M4 proposal 与独立 Evidence Gate，并返回 NEEDS_MORE_EVIDENCE / REJECTED 等 Gate feedback。
+
+## M7-6 Formal M4 proposal and Evidence Gate feedback
+
+controller 仅在显式注入正式 `EvidenceGate` 时启用 `PROPOSE`；未注入时继续保持 M7-5 fail-closed。模型 proposal 仍由 strict parser 转成唯一的 M4 `SecurityProposal`，随后 controller 扣减 proposal budget、调用独立 Gate、记录完整 proposal/Gate trace，并把结果作为下一轮 observation 的结构化反馈。Gate 的 ADMISSIBLE 只增加 active proposal 集和 admissible budget；REJECTED、NEEDS_MORE_EVIDENCE、DUPLICATE、ALREADY_SUPPORTED、UNSUPPORTED 均不会伪装成 graph edge。
+
+新增通用 tool-result → `EvidenceRef` 适配：
+
+- 只有 status=OK 且能解析到当前 `RepositoryIndex` 实体的 item 才能成为 evidence；
+- repository read/search/inspect 产生 `REPOSITORY_TOOL_RESULT` SUPPORTING evidence；
+- 中性 M2 relation 产生 `REPOSITORY_RELATION` STRONG_STRUCTURAL evidence，但仍保留 `deterministic_relation=false`；
+- 六个固定 M3 action 分别映射正式 CodeQL evidence kind 和 DIRECT strength；UNAVAILABLE/EMPTY/ERROR/UNSUPPORTED/ENTITY_NOT_MAPPED 不产生 evidence；
+- 每个 EvidenceRef 绑定 tool-call ID、item result hash、实体、可解析 source range 与非 benchmark provenance，并与完整 tool artifact 一起注册到 Gate；identity collision 立即拒绝。
+
+`AgentGateFeedback` 至少包含 gate status/reason、resolved EvidenceRef、active proposal count、path before/after count、new path IDs、new connected anchors、unresolved semantics、search/path truncation、tool availability/error 与 remaining budget。M7-6 尚未接 graph，因此 path/new-anchor 字段明确为零/空且 `graph_update_enabled=false`，而不是虚构进展。
+
+同时修正正式 M4 Gate 的 retry 语义：`NEEDS_MORE_EVIDENCE` 不再提前把 proposal ID 标记为 seen；Agent 取得更强证据后，同一个语义 proposal ID 可以重新 Gate 并转为 ADMISSIBLE。真正 ADMISSIBLE 后再次提交仍返回 DUPLICATE，原 duplicate/native 行为不变。
+
+### M7-6 regression evidence
+
+- M4 Gate + M7-6 controller/feedback targeted：`28 passed`，返回码 0。
+- M7-1～M7-6 + M4 Gate aggregate targeted：`82 passed, 2 warnings`，返回码 0。
+- local full regression：`214 passed, 1 skipped, 3 warnings`，返回码 0。
+
+### M7-6 acceptance decision
+
+`PROCEED_M7_7`。
+
+接受理由：已真实验证 NEEDS_MORE_EVIDENCE → repository tool → 新 EvidenceRef → 同一 proposal 补强 → ADMISSIBLE；REJECTED proposal 不进入 active proposal 或 graph；CodeQL unavailable 不生成否定证据；Gate feedback 字段完整并进入下一轮 observation；完整回归通过。下一阶段接 M5 graph/path、path feedback、停止条件和防候选爆炸预算，不改变 Gate admission 标准。

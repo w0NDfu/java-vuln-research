@@ -89,6 +89,30 @@ class EvidenceGate:
         self.native_relation_ids = frozenset(native_relation_ids)
         self.seen_proposal_ids = set(seen_proposal_ids)
 
+    def register_evidence(
+        self,
+        evidence: EvidenceRef,
+        *,
+        tool_artifact: Mapping[str, Any] | None = None,
+    ) -> None:
+        """Register one runtime evidence object without weakening identity checks."""
+
+        existing = self.evidence_catalog.get(evidence.evidence_id)
+        if existing is not None and existing.to_json() != evidence.to_json():
+            raise ValueError("evidence_id collision with different content")
+        self.evidence_catalog[evidence.evidence_id] = evidence
+        if evidence.tool_call_id is None:
+            if tool_artifact is not None:
+                raise ValueError("tool artifact requires evidence with tool_call_id")
+            return
+        if tool_artifact is None:
+            raise ValueError("tool-backed evidence requires its tool artifact")
+        artifact = dict(tool_artifact)
+        prior = self.artifact_index.get(evidence.tool_call_id)
+        if prior is not None and canonical_json(prior) != canonical_json(artifact):
+            raise ValueError("tool_call_id collision with different artifact")
+        self.artifact_index[evidence.tool_call_id] = artifact
+
     @staticmethod
     def _check(name: str, errors: Sequence[str]) -> GateCheck:
         return GateCheck(name, CheckStatus.FAIL if errors else CheckStatus.PASS, tuple(errors))
@@ -290,7 +314,6 @@ class EvidenceGate:
                     sufficiency_errors.append("AMBIGUOUS_FIELD_ANCHOR")
                     break
         checks.append(self._check("EVIDENCE_SUFFICIENCY", sufficiency_errors))
-        self.seen_proposal_ids.add(proposal.proposal_id)
         if sufficiency_errors:
             return EvidenceGateResult(
                 proposal.proposal_id, GateStatus.NEEDS_MORE_EVIDENCE, checks,
@@ -298,6 +321,7 @@ class EvidenceGate:
                 warnings=["model_confidence is metadata and did not affect admission"],
                 provenance=provenance,
             )
+        self.seen_proposal_ids.add(proposal.proposal_id)
         codeql_kinds = {
             EvidenceSourceKind.CODEQL_ENTITY_FACT, EvidenceSourceKind.CODEQL_CALL,
             EvidenceSourceKind.CODEQL_LOCAL_FLOW, EvidenceSourceKind.CODEQL_DATAFLOW,

@@ -9,10 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from java_vuln_research.work1_agent.proposal import EvidenceGate, EvidenceGateResult, GateStatus, SecurityProposal
 from java_vuln_research.work1_agent.repository.indexer import RepositoryIndex
 
 from .actions import TOOL_ACTIONS, ActionType, StopReason
 from .budget import BudgetExceeded
+from .feedback import AgentGateFeedback, build_gate_feedback, evidence_from_tool_result
 from .llm_client import LLMClient, LLMRequest, ModelCallError
 from .observation import AgentObservation, bounded_tool_catalog, build_repository_first_observation
 from .parser import StrictActionParser
@@ -22,7 +24,7 @@ from .tool_adapter import AgentToolResult, RepositoryCodeQLToolAdapter
 from .trace import AgentTrace, TraceEventType
 
 
-CONTROLLER_VERSION = "M7_TOOL_LOOP_V1"
+CONTROLLER_VERSION = "M7_CONTROLLER_V1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +51,11 @@ class AgentControllerResult:
     trace: AgentTrace
     observations: tuple[AgentObservation, ...]
     tool_results: tuple[AgentToolResult, ...]
+    proposals: tuple[SecurityProposal, ...]
+    gate_results: tuple[EvidenceGateResult, ...]
+    gate_feedback: tuple[AgentGateFeedback, ...]
     failures: tuple[AgentControllerFailure, ...]
+    proposal_handling_enabled: bool
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -58,15 +64,17 @@ class AgentControllerResult:
             "rounds": self.state.current_round,
             "model_calls": self.state.budget.model_calls,
             "tool_calls": self.state.budget.tool_calls_total,
+            "proposals": self.state.budget.proposals_total,
+            "admissible_proposals": self.state.budget.admissible_proposals,
             "observations": len(self.observations),
             "failures": [item.to_dict() for item in self.failures],
             "stop_reason": self.state.stop_reason.value if self.state.stop_reason else None,
-            "proposal_handling_enabled": False,
+            "proposal_handling_enabled": self.proposal_handling_enabled,
         }
 
 
 class AgentController:
-    """Run one structured decision per round without proposal handling."""
+    """Run one structured decision per round with optional deterministic Gate."""
 
     def __init__(
         self,
@@ -77,6 +85,7 @@ class AgentController:
         llm_client: LLMClient,
         parser: StrictActionParser,
         tool_adapter: RepositoryCodeQLToolAdapter,
+        evidence_gate: EvidenceGate | None = None,
         native_baseline_summary: Mapping[str, Any] | None = None,
     ) -> None:
         if state.project_id != tool_adapter.project_id:
@@ -91,10 +100,17 @@ class AgentController:
         self.llm_client = llm_client
         self.parser = parser
         self.tool_adapter = tool_adapter
+        self.evidence_gate = evidence_gate
+        if evidence_gate is not None and evidence_gate.repository_root != repository_index.repository_root.resolve():
+            raise ValueError("controller and Evidence Gate repository roots differ")
         self.native_baseline_summary = dict(native_baseline_summary or {})
         self.trace = AgentTrace(state.project_id)
         self.observations: list[AgentObservation] = []
         self.tool_results: list[AgentToolResult] = []
+        self.proposals: list[SecurityProposal] = []
+        self.gate_results: list[EvidenceGateResult] = []
+        self.gate_feedback: list[AgentGateFeedback] = []
+        self.admissible_proposals: dict[str, SecurityProposal] = {}
         self.failures: list[AgentControllerFailure] = []
         self.recent_feedback: list[Mapping[str, Any]] = []
         self.system_prompt = build_system_prompt(bounded_tool_catalog())
@@ -130,7 +146,11 @@ class AgentController:
             self.trace,
             tuple(self.observations),
             tuple(self.tool_results),
+            tuple(self.proposals),
+            tuple(self.gate_results),
+            tuple(self.gate_feedback),
             tuple(self.failures),
+            self.evidence_gate is not None,
         )
 
     def run(self) -> AgentControllerResult:
@@ -197,15 +217,59 @@ class AgentController:
 
             self._append(TraceEventType.ACTION, action.to_dict())
             if action.action_type is ActionType.PROPOSE:
-                self._failure(
-                    AgentControllerFailure(
-                        "PROPOSAL_DISABLED_M7_5",
-                        "M7-5 controller does not execute proposal actions",
-                        self.state.current_round,
-                        response.model_call_id,
+                if self.evidence_gate is None:
+                    self._failure(
+                        AgentControllerFailure(
+                            "PROPOSAL_DISABLED_M7_5",
+                            "controller was configured without an Evidence Gate",
+                            self.state.current_round,
+                            response.model_call_id,
+                        )
                     )
+                    break
+                assert action.proposal is not None
+                proposal = SecurityProposal.from_dict(action.proposal)
+                try:
+                    self.state.budget.record_proposal()
+                    paths_before = tuple(self.state.active_candidate_path_ids)
+                    gate_result = self.evidence_gate.evaluate(proposal)
+                    if gate_result.status is GateStatus.ADMISSIBLE and proposal.proposal_id not in self.admissible_proposals:
+                        self.state.budget.record_admissible_proposal()
+                        self.admissible_proposals[proposal.proposal_id] = proposal
+                except (BudgetExceeded, OSError, UnicodeError, ValueError) as exc:
+                    self._failure(
+                        AgentControllerFailure(
+                            "BUDGET_EXCEEDED" if isinstance(exc, BudgetExceeded) else "GATE_EXECUTION_ERROR",
+                            str(exc),
+                            self.state.current_round,
+                            response.model_call_id,
+                        ),
+                        stop_reason=StopReason.BUDGET_EXHAUSTED if isinstance(exc, BudgetExceeded) else StopReason.OTHER,
+                    )
+                    break
+                self.proposals.append(proposal)
+                self.gate_results.append(gate_result)
+                self.state.record_proposal(
+                    proposal.proposal_id,
+                    project_id=self.state.project_id,
+                    gate_status=gate_result.status.value,
                 )
-                break
+                self._append(TraceEventType.PROPOSAL, proposal.to_dict())
+                feedback = build_gate_feedback(
+                    project_id=self.state.project_id,
+                    round=self.state.current_round,
+                    result=gate_result,
+                    active_proposal_count=len(self.admissible_proposals),
+                    candidate_path_ids_before=paths_before,
+                    candidate_path_ids_after=tuple(self.state.active_candidate_path_ids),
+                    tool_results=self.tool_results,
+                    budget=self.state.budget,
+                )
+                self.gate_feedback.append(feedback)
+                self.recent_feedback.append(feedback.to_dict())
+                self._append(TraceEventType.GATE_RESULT, feedback.to_dict())
+                self._append(TraceEventType.BUDGET, self.state.budget.to_dict())
+                continue
             if action.action_type is ActionType.STOP:
                 self._stop(action.stop_reason or StopReason.OTHER, details={"action_id": action.action_id})
                 break
@@ -247,7 +311,16 @@ class AgentController:
                 entity_ids=entity_ids,
             )
             self.tool_results.append(tool_result)
-            feedback = tool_result.to_dict()
+            tool_evidence = evidence_from_tool_result(tool_result, self.repository_index)
+            for evidence in tool_evidence:
+                self.state.record_evidence(evidence.evidence_id, project_id=self.state.project_id)
+                if self.evidence_gate is not None:
+                    self.evidence_gate.register_evidence(evidence, tool_artifact=tool_result.to_dict())
+                self._append(TraceEventType.EVIDENCE, evidence.to_dict())
+            feedback = {
+                **tool_result.to_dict(),
+                "evidence_refs": [item.to_dict() for item in tool_evidence],
+            }
             self.recent_feedback.append(feedback)
             self._append(TraceEventType.TOOL_RESULT, feedback)
             self._append(TraceEventType.BUDGET, self.state.budget.to_dict())

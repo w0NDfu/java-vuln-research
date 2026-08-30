@@ -3,6 +3,7 @@
 from .actions import AgentAction, ActionType, StopReason
 from .budget import AgentBudgetLimits, BudgetExceeded, BudgetTracker
 from .controller import AgentController, AgentControllerFailure, AgentControllerResult
+from .feedback import AgentGateFeedback, build_gate_feedback, evidence_from_tool_result
 from .llm_client import (
     LLMClient,
     LLMClientConfig,
@@ -36,6 +37,7 @@ __all__ = [
     "AgentController",
     "AgentControllerFailure",
     "AgentControllerResult",
+    "AgentGateFeedback",
     "AgentState",
     "AgentObservation",
     "AgentToolResult",
@@ -65,8 +67,10 @@ __all__ = [
     "StopReason",
     "TraceEventType",
     "build_system_prompt",
+    "build_gate_feedback",
     "build_repository_first_observation",
     "bounded_tool_catalog",
+    "evidence_from_tool_result",
     "prompt_sha256",
     "runtime_roots",
     "validate_tool_arguments",

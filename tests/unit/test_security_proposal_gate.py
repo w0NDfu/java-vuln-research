@@ -259,6 +259,28 @@ def test_weak_evidence_and_ambiguous_field_need_more_evidence(indexed) -> None:
     assert "AMBIGUOUS_FIELD_ANCHOR" in result.missing_evidence
 
 
+def test_needs_more_evidence_can_be_retried_with_stronger_evidence(indexed) -> None:
+    method = _one(indexed, ProgramEntityKind.METHOD, "wrap")
+    proposal_without_evidence = _proposal(
+        ProposalType.EXTERNAL_INPUT,
+        EntityRoleRef(method.entity_id, EntityRole.RETURN),
+        (),
+        category="UNKNOWN",
+    )
+    gate = _gate(indexed)
+    assert gate.evaluate(proposal_without_evidence).status == GateStatus.NEEDS_MORE_EVIDENCE
+    evidence = _evidence(method)
+    gate.register_evidence(evidence)
+    proposal_with_evidence = _proposal(
+        ProposalType.EXTERNAL_INPUT,
+        EntityRoleRef(method.entity_id, EntityRole.RETURN),
+        (evidence.evidence_id,),
+        category="UNKNOWN",
+    )
+    assert proposal_with_evidence.proposal_id == proposal_without_evidence.proposal_id
+    assert gate.evaluate(proposal_with_evidence).status == GateStatus.ADMISSIBLE
+
+
 def test_provenance_preserved(indexed) -> None:
     method = _one(indexed, ProgramEntityKind.METHOD, "wrap")
     ev = _evidence(method)
