@@ -31,6 +31,11 @@ class StructuredOutputMode(str, Enum):
     TOOL_CALL = "TOOL_CALL"
 
 
+class LLMAPIProtocol(str, Enum):
+    OPENAI = "OPENAI"
+    ANTHROPIC = "ANTHROPIC"
+
+
 class ModelCallError(RuntimeError):
     def __init__(
         self,
@@ -67,6 +72,7 @@ class LLMClientConfig:
     max_output_tokens: int = 2048
     seed: int | None = 0
     structured_output_mode: StructuredOutputMode | str = StructuredOutputMode.JSON_OBJECT
+    api_protocol: LLMAPIProtocol | str = LLMAPIProtocol.OPENAI
 
     def __post_init__(self) -> None:
         if not self.provider.strip() or not self.model_id.strip() or not self.api_key:
@@ -85,6 +91,7 @@ class LLMClientConfig:
         if not 1 <= int(self.max_output_tokens) <= 65_536:
             raise ValueError("max_output_tokens must be between 1 and 65536")
         object.__setattr__(self, "structured_output_mode", StructuredOutputMode(self.structured_output_mode))
+        object.__setattr__(self, "api_protocol", LLMAPIProtocol(self.api_protocol))
 
     @classmethod
     def from_environment(
@@ -111,6 +118,7 @@ class LLMClientConfig:
             max_output_tokens=int(values.get(prefix + "MAX_OUTPUT_TOKENS", "2048")),
             seed=int(seed_text) if seed_text else None,
             structured_output_mode=values.get(prefix + "OUTPUT_MODE", "JSON_OBJECT").strip().upper(),
+            api_protocol=values.get(prefix + "API_PROTOCOL", "OPENAI").strip().upper(),
         )
 
     def to_manifest_dict(self) -> dict[str, Any]:
@@ -127,6 +135,7 @@ class LLMClientConfig:
             "max_output_tokens": self.max_output_tokens,
             "seed": self.seed,
             "structured_output_mode": self.structured_output_mode.value,
+            "api_protocol": self.api_protocol.value,
         }
 
 
@@ -213,6 +222,8 @@ class OpenAICompatibleLLMClient:
     """One provider implementation behind the provider-neutral ``LLMClient`` protocol."""
 
     def __init__(self, config: LLMClientConfig, *, transport: Transport | None = None) -> None:
+        if config.api_protocol is not LLMAPIProtocol.OPENAI:
+            raise ValueError("OpenAICompatibleLLMClient requires OPENAI api_protocol")
         self.config = config
         self._transport = transport or _post_json
 
@@ -308,6 +319,104 @@ class OpenAICompatibleLLMClient:
             wall_clock_seconds=round(time.monotonic() - started, 6),
             input_tokens=int(usage.get("prompt_tokens") or 0),
             output_tokens=int(usage.get("completion_tokens") or 0),
+            finish_reason=finish_reason,
+            provenance={"response_id": response.get("id"), "configuration": self.config.to_manifest_dict()},
+        )
+
+
+class AnthropicMessagesLLMClient:
+    """Anthropic Messages transport with optional forced decision tool use."""
+
+    def __init__(self, config: LLMClientConfig, *, transport: Transport | None = None) -> None:
+        if config.api_protocol is not LLMAPIProtocol.ANTHROPIC:
+            raise ValueError("AnthropicMessagesLLMClient requires ANTHROPIC api_protocol")
+        self.config = config
+        self._transport = transport or _post_json
+
+    def complete(self, request: LLMRequest) -> LLMResponse:
+        model_call_id = stable_digest(
+            "modelcall",
+            {
+                "request_id": request.request_id,
+                "provider": self.config.provider,
+                "model_id": self.config.model_id,
+                "temperature": self.config.temperature,
+                "max_output_tokens": self.config.max_output_tokens,
+                "api_protocol": self.config.api_protocol.value,
+                "structured_output_mode": self.config.structured_output_mode.value,
+            },
+        )
+        payload: dict[str, Any] = {
+            "model": self.config.model_id,
+            "system": request.system_prompt,
+            "messages": [{"role": "user", "content": request.user_content()}],
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_output_tokens,
+        }
+        if self.config.structured_output_mode is StructuredOutputMode.TOOL_CALL:
+            payload["tools"] = [
+                {
+                    "name": "submit_agent_decision",
+                    "description": "Submit exactly one structured M7 agent decision.",
+                    "input_schema": {"type": "object"},
+                }
+            ]
+            payload["tool_choice"] = {"type": "tool", "name": "submit_agent_decision"}
+        endpoint = self.config.endpoint_url or (self.config.base_url.rstrip("/") + "/messages")
+        started = time.monotonic()
+        try:
+            response = self._transport(
+                endpoint,
+                {
+                    "Authorization": "Bearer " + self.config.api_key,
+                    "x-api-key": self.config.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                canonical_json(payload).encode("utf-8"),
+                self.config.timeout_seconds,
+            )
+        except (TimeoutError, socket.timeout) as exc:
+            raise ModelCallError(ModelFailureClass.MODEL_TIMEOUT, "model request timed out", model_call_id=model_call_id, retryable=True) from exc
+        except urllib.error.URLError as exc:
+            if isinstance(exc.reason, (TimeoutError, socket.timeout)):
+                raise ModelCallError(ModelFailureClass.MODEL_TIMEOUT, "model request timed out", model_call_id=model_call_id, retryable=True) from exc
+            raise ModelCallError(ModelFailureClass.MODEL_UNAVAILABLE, "model endpoint unavailable", model_call_id=model_call_id, retryable=True) from exc
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise ModelCallError(ModelFailureClass.MODEL_UNAVAILABLE, "model transport returned an unusable response", model_call_id=model_call_id, retryable=True) from exc
+        try:
+            content = response["content"]
+            if self.config.structured_output_mode is StructuredOutputMode.TOOL_CALL:
+                matching = [
+                    block
+                    for block in content
+                    if isinstance(block, Mapping)
+                    and block.get("type") == "tool_use"
+                    and block.get("name") == "submit_agent_decision"
+                ]
+                if len(matching) != 1 or not isinstance(matching[0].get("input"), Mapping):
+                    raise ValueError("unexpected Anthropic tool use")
+                text = canonical_json(matching[0]["input"])
+            else:
+                blocks = [str(block["text"]) for block in content if isinstance(block, Mapping) and block.get("type") == "text"]
+                if len(blocks) != 1:
+                    raise ValueError("unexpected Anthropic text blocks")
+                text = blocks[0]
+            if not text.strip():
+                raise ValueError("empty content")
+            usage = dict(response.get("usage") or {})
+            finish_reason = str(response["stop_reason"]) if response.get("stop_reason") is not None else None
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ModelCallError(ModelFailureClass.MODEL_UNAVAILABLE, "model response lacks a usable structured choice", model_call_id=model_call_id) from exc
+        return LLMResponse(
+            model_call_id=model_call_id,
+            request_id=request.request_id,
+            provider=self.config.provider,
+            model_id=self.config.model_id,
+            raw_text=text,
+            wall_clock_seconds=round(time.monotonic() - started, 6),
+            input_tokens=int(usage.get("input_tokens") or 0),
+            output_tokens=int(usage.get("output_tokens") or 0),
             finish_reason=finish_reason,
             provenance={"response_id": response.get("id"), "configuration": self.config.to_manifest_dict()},
         )

@@ -6,6 +6,8 @@ import socket
 import pytest
 
 from java_vuln_research.work1_agent.agent import (
+    AnthropicMessagesLLMClient,
+    LLMAPIProtocol,
     LLMClientConfig,
     LLMRequest,
     MockLLMClient,
@@ -65,6 +67,7 @@ def test_config_comes_from_environment_and_never_serializes_secret() -> None:
             "M7_LLM_MAX_OUTPUT_TOKENS": "1024",
             "M7_LLM_SEED": "7",
             "M7_LLM_OUTPUT_MODE": "tool_call",
+            "M7_LLM_API_PROTOCOL": "anthropic",
         }
     )
     manifest = config.to_manifest_dict()
@@ -73,6 +76,7 @@ def test_config_comes_from_environment_and_never_serializes_secret() -> None:
     assert manifest["endpoint_mode"] == "EXACT"
     assert manifest["seed"] == 7
     assert manifest["structured_output_mode"] == "TOOL_CALL"
+    assert manifest["api_protocol"] == "ANTHROPIC"
     assert "super-secret" not in json.dumps(manifest)
     assert config.api_key_env == "M7_LLM_API_KEY"
 
@@ -166,6 +170,38 @@ def test_tool_call_mode_forces_and_reads_one_structured_decision(tool_arguments:
     assert body["tool_choice"]["function"]["name"] == "submit_agent_decision"
     assert body["tools"][0]["function"]["parameters"] == {"type": "object"}
     assert json.loads(response.raw_text) == _stop()
+
+
+def test_anthropic_messages_tool_mode_reads_tool_use_input() -> None:
+    captured: dict[str, object] = {}
+
+    def transport(url: str, headers: dict[str, str], body: bytes, _timeout: float) -> dict[str, object]:
+        captured.update(url=url, headers=headers, body=json.loads(body))
+        return {
+            "id": "msg-1",
+            "content": [{"type": "tool_use", "name": "submit_agent_decision", "input": _stop()}],
+            "stop_reason": "tool_use",
+            "usage": {"input_tokens": 20, "output_tokens": 8},
+        }
+
+    config = LLMClientConfig(
+        "openlux",
+        "claude-opus-5",
+        "https://api.openlux.ai/v1",
+        "secret",
+        endpoint_url="https://api.openlux.ai/v1/messages",
+        structured_output_mode=StructuredOutputMode.TOOL_CALL,
+        api_protocol=LLMAPIProtocol.ANTHROPIC,
+    )
+
+    response = AnthropicMessagesLLMClient(config, transport=transport).complete(_request())
+
+    assert captured["url"] == "https://api.openlux.ai/v1/messages"
+    assert captured["body"]["tool_choice"] == {"type": "tool", "name": "submit_agent_decision"}
+    assert captured["body"]["tools"][0]["input_schema"] == {"type": "object"}
+    assert captured["headers"]["anthropic-version"] == "2023-06-01"
+    assert json.loads(response.raw_text) == _stop()
+    assert response.input_tokens == 20 and response.output_tokens == 8
 
 
 def test_transport_timeout_has_explicit_failure_class() -> None:

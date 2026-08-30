@@ -6,6 +6,8 @@ from .controller import AgentController, AgentControllerFailure, AgentController
 from .feedback import AgentGateFeedback, build_gate_feedback, evidence_from_tool_result
 from .graph_adapter import AgentGraphPathAdapter, AgentGraphPathResult, AgentGraphRelation
 from .llm_client import (
+    AnthropicMessagesLLMClient,
+    LLMAPIProtocol,
     LLMClient,
     LLMClientConfig,
     LLMRequest,
@@ -54,6 +56,8 @@ __all__ = [
     "BudgetTracker",
     "BoundaryDecision",
     "BoundaryViolationCode",
+    "AnthropicMessagesLLMClient",
+    "LLMAPIProtocol",
     "LLMClient",
     "LLMClientConfig",
     "LLMRequest",

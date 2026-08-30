@@ -27,7 +27,15 @@ from java_vuln_research.work1_agent.repository.indexer import build_repository_i
 from .actions import ActionType, StopReason
 from .controller import AgentController
 from .graph_adapter import AgentGraphPathAdapter
-from .llm_client import LLMClient, LLMClientConfig, LLMRequest, MockLLMClient, OpenAICompatibleLLMClient
+from .llm_client import (
+    AnthropicMessagesLLMClient,
+    LLMAPIProtocol,
+    LLMClient,
+    LLMClientConfig,
+    LLMRequest,
+    MockLLMClient,
+    OpenAICompatibleLLMClient,
+)
 from .parser import StrictActionParser
 from .prompt import build_system_prompt, prompt_sha256
 from .observation import bounded_tool_catalog
@@ -230,7 +238,11 @@ def run_controlled_real_llm_smoke(
     """Run the same non-benchmark fixture with an environment-backed reasoner."""
 
     resolved_config = config or LLMClientConfig.from_environment()
-    client = llm_client or OpenAICompatibleLLMClient(resolved_config)
+    client = llm_client or (
+        AnthropicMessagesLLMClient(resolved_config)
+        if resolved_config.api_protocol is LLMAPIProtocol.ANTHROPIC
+        else OpenAICompatibleLLMClient(resolved_config)
+    )
     index = build_repository_index(repository_root)
     output = artifact_root / "CONTROLLED_REAL_LLM"
     output.mkdir(parents=True, exist_ok=True)
