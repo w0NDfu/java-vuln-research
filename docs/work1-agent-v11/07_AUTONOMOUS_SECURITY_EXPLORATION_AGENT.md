@@ -199,6 +199,7 @@ Prompt 不含项目名、case ID、已知 API、恢复答案或 root-cause 表�
 - M7-3 targeted：`18 passed`，返回码 0。
 - M7-1～M7-3 aggregate targeted：`49 passed`，返回码 0。
 - local full regression：`198 passed, 1 skipped, 3 warnings`，返回码 0。
+- CloudStudio full regression（commit `ed6fd24`）：`198 passed, 1 skipped, 3 warnings`，返回码 0。
 - `compileall` 与 `git diff --check`：返回码 0。
 
 唯一 skip 是既有环境相关测试；warnings 来自既有及交叉校验测试使用 `jsonschema.RefResolver` 的上游 deprecation，不影响 schema validation 结果。
