@@ -12,6 +12,7 @@ from java_vuln_research.work1_agent.agent import (
     ModelCallError,
     ModelFailureClass,
     OpenAICompatibleLLMClient,
+    StructuredOutputMode,
 )
 
 
@@ -63,6 +64,7 @@ def test_config_comes_from_environment_and_never_serializes_secret() -> None:
             "M7_LLM_TEMPERATURE": "0.1",
             "M7_LLM_MAX_OUTPUT_TOKENS": "1024",
             "M7_LLM_SEED": "7",
+            "M7_LLM_OUTPUT_MODE": "tool_call",
         }
     )
     manifest = config.to_manifest_dict()
@@ -70,6 +72,7 @@ def test_config_comes_from_environment_and_never_serializes_secret() -> None:
     assert manifest["endpoint_url"] == "https://model.example/v1/chat/completions"
     assert manifest["endpoint_mode"] == "EXACT"
     assert manifest["seed"] == 7
+    assert manifest["structured_output_mode"] == "TOOL_CALL"
     assert "super-secret" not in json.dumps(manifest)
     assert config.api_key_env == "M7_LLM_API_KEY"
 
@@ -122,6 +125,46 @@ def test_exact_endpoint_is_used_verbatim_without_concatenation() -> None:
 
     assert captured["url"] == endpoint
     assert config.to_manifest_dict()["endpoint_mode"] == "EXACT"
+
+
+def test_tool_call_mode_forces_and_reads_one_structured_decision() -> None:
+    captured: dict[str, object] = {}
+
+    def transport(_url: str, _headers: dict[str, str], body: bytes, _timeout: float) -> dict[str, object]:
+        captured["body"] = json.loads(body)
+        return {
+            "id": "response-tool",
+            "choices": [
+                {
+                    "message": {
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "type": "function",
+                                "function": {"name": "submit_agent_decision", "arguments": json.dumps(_stop())},
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        }
+
+    config = LLMClientConfig(
+        "openlux",
+        "claude-opus-5",
+        "https://api.openlux.ai/v1",
+        "secret",
+        structured_output_mode=StructuredOutputMode.TOOL_CALL,
+    )
+
+    response = OpenAICompatibleLLMClient(config, transport=transport).complete(_request())
+
+    body = captured["body"]
+    assert "response_format" not in body
+    assert body["tool_choice"]["function"]["name"] == "submit_agent_decision"
+    assert body["tools"][0]["function"]["parameters"]["additionalProperties"] is False
+    assert json.loads(response.raw_text) == _stop()
 
 
 def test_transport_timeout_has_explicit_failure_class() -> None:

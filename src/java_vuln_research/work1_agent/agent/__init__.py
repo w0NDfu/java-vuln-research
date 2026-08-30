@@ -14,6 +14,7 @@ from .llm_client import (
     ModelCallError,
     ModelFailureClass,
     OpenAICompatibleLLMClient,
+    StructuredOutputMode,
 )
 from .parser import StrictActionParser, validate_tool_arguments
 from .observation import AgentObservation, build_repository_first_observation, bounded_tool_catalog
@@ -61,6 +62,7 @@ __all__ = [
     "ModelCallError",
     "ModelFailureClass",
     "OpenAICompatibleLLMClient",
+    "StructuredOutputMode",
     "PROMPT_VERSION",
     "PROJECT_ARTIFACT_FILES",
     "RuntimeInputEntry",

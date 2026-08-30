@@ -26,6 +26,11 @@ class ModelFailureClass(str, Enum):
     BUDGET_EXCEEDED = "BUDGET_EXCEEDED"
 
 
+class StructuredOutputMode(str, Enum):
+    JSON_OBJECT = "JSON_OBJECT"
+    TOOL_CALL = "TOOL_CALL"
+
+
 class ModelCallError(RuntimeError):
     def __init__(
         self,
@@ -61,6 +66,7 @@ class LLMClientConfig:
     temperature: float = 0.0
     max_output_tokens: int = 2048
     seed: int | None = 0
+    structured_output_mode: StructuredOutputMode | str = StructuredOutputMode.JSON_OBJECT
 
     def __post_init__(self) -> None:
         if not self.provider.strip() or not self.model_id.strip() or not self.api_key:
@@ -78,6 +84,7 @@ class LLMClientConfig:
             raise ValueError("temperature must be between 0 and 2")
         if not 1 <= int(self.max_output_tokens) <= 65_536:
             raise ValueError("max_output_tokens must be between 1 and 65536")
+        object.__setattr__(self, "structured_output_mode", StructuredOutputMode(self.structured_output_mode))
 
     @classmethod
     def from_environment(
@@ -103,6 +110,7 @@ class LLMClientConfig:
             temperature=float(values.get(prefix + "TEMPERATURE", "0")),
             max_output_tokens=int(values.get(prefix + "MAX_OUTPUT_TOKENS", "2048")),
             seed=int(seed_text) if seed_text else None,
+            structured_output_mode=values.get(prefix + "OUTPUT_MODE", "JSON_OBJECT").strip().upper(),
         )
 
     def to_manifest_dict(self) -> dict[str, Any]:
@@ -118,6 +126,7 @@ class LLMClientConfig:
             "temperature": self.temperature,
             "max_output_tokens": self.max_output_tokens,
             "seed": self.seed,
+            "structured_output_mode": self.structured_output_mode.value,
         }
 
 
@@ -217,6 +226,7 @@ class OpenAICompatibleLLMClient:
                 "temperature": self.config.temperature,
                 "max_output_tokens": self.config.max_output_tokens,
                 "seed": self.config.seed,
+                "structured_output_mode": self.config.structured_output_mode.value,
             },
         )
         payload: dict[str, Any] = {
@@ -227,8 +237,41 @@ class OpenAICompatibleLLMClient:
             ],
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_output_tokens,
-            "response_format": {"type": "json_object"},
         }
+        if self.config.structured_output_mode is StructuredOutputMode.TOOL_CALL:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "submit_agent_decision",
+                        "description": "Submit exactly one structured M7 agent decision.",
+                        "parameters": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["action_type", "arguments", "proposal", "stop_reason", "reason"],
+                            "properties": {
+                                "action_type": {
+                                    "enum": [
+                                        "SEARCH_CODE", "SEARCH_SYMBOLS", "INSPECT_METHOD", "INSPECT_TYPE", "READ_FILE_RANGE",
+                                        "GET_CALLERS", "GET_CALLEES", "GET_IMPLEMENTATIONS", "GET_OVERRIDES", "GET_FIELDS", "GET_ANNOTATIONS",
+                                        "CODEQL_ENTITY_FACTS", "CODEQL_CALLERS", "CODEQL_CALLEES", "CODEQL_LOCAL_FLOW",
+                                        "CODEQL_DATAFLOW_NEIGHBORS", "CODEQL_CFG_NEIGHBORS", "PROPOSE", "STOP",
+                                    ]
+                                },
+                                "arguments": {"type": "object"},
+                                "proposal": {"type": ["object", "null"]},
+                                "stop_reason": {
+                                    "enum": ["PATH_FORMED", "INSUFFICIENT_EVIDENCE", "BUDGET_EXHAUSTED", "NO_FURTHER_ACTION", "TOOL_UNAVAILABLE", "OTHER", None]
+                                },
+                                "reason": {"type": "string"},
+                            },
+                        },
+                    },
+                }
+            ]
+            payload["tool_choice"] = {"type": "function", "function": {"name": "submit_agent_decision"}}
+        else:
+            payload["response_format"] = {"type": "json_object"}
         if self.config.seed is not None:
             payload["seed"] = self.config.seed
         endpoint = self.config.endpoint_url or (self.config.base_url.rstrip("/") + "/chat/completions")
@@ -250,7 +293,14 @@ class OpenAICompatibleLLMClient:
             raise ModelCallError(ModelFailureClass.MODEL_UNAVAILABLE, "model transport returned an unusable response", model_call_id=model_call_id, retryable=True) from exc
         try:
             choice = response["choices"][0]
-            text = choice["message"]["content"]
+            message = choice["message"]
+            if self.config.structured_output_mode is StructuredOutputMode.TOOL_CALL:
+                tool_calls = message["tool_calls"]
+                if len(tool_calls) != 1 or tool_calls[0]["function"]["name"] != "submit_agent_decision":
+                    raise ValueError("unexpected structured tool call")
+                text = tool_calls[0]["function"]["arguments"]
+            else:
+                text = message["content"]
             if not isinstance(text, str) or not text.strip():
                 raise ValueError("empty content")
             usage = dict(response.get("usage") or {})
