@@ -9,7 +9,7 @@ import pytest
 from java_vuln_research.work1_agent.m6_killtest import detector as detector_module
 from java_vuln_research.work1_agent.m6_killtest.contracts import DiagnosticCause, FailureReason, M6_PROPOSAL_BUDGET
 from java_vuln_research.work1_agent.m6_killtest.detector import run_detector
-from java_vuln_research.work1_agent.m6_killtest.diagnostic import analyse_case
+from java_vuln_research.work1_agent.m6_killtest.diagnostic import analyse_case, locate_entity_index
 from java_vuln_research.work1_agent.m6_killtest.evaluator import evaluate_frozen_run
 from java_vuln_research.work1_agent.m6_killtest.inventory import build_case_inventory, select_cases
 from java_vuln_research.work1_agent.m6_killtest.io import read_json, read_jsonl, sha256_file, write_jsonl
@@ -116,6 +116,17 @@ def test_diagnostic_proposals_are_flagged_and_runtime_disabled(m6_case):
     assert all(row["provenance"]["benchmark_informed"] is True for row in proposals)
     assert all(row["provenance"]["allowed_for_agent_runtime"] is False for row in proposals)
     assert all(row["provenance"]["eligible_for_detection_metric"] is False for row in proposals)
+
+
+def test_entity_index_discovery_prefilters_by_project_identity(m6_case, tmp_path: Path):
+    case_root, hint, _, _ = m6_case
+    good = tmp_path / "indices" / "T001" / "entities.jsonl"
+    good.parent.mkdir(parents=True)
+    good.write_bytes((tmp_path / "entities.jsonl").read_bytes())
+    unrelated = tmp_path / "indices" / "OTHER" / "entities.jsonl"
+    unrelated.parent.mkdir(parents=True)
+    unrelated.write_text("not-json\n", encoding="utf-8")
+    assert locate_entity_index(tmp_path / "indices", "T001", hint) == good
 
 
 def test_proposal_budget_is_enforced(m6_case, tmp_path: Path):

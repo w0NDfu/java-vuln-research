@@ -74,6 +74,9 @@ def choose_target(entities: Sequence[ProgramEntity], hint: Mapping[str, Any]) ->
 
 def locate_entity_index(root: str | Path, project_id: str, hint: Mapping[str, Any]) -> Path:
     paths = sorted(Path(root).rglob("entities.jsonl"))
+    project_paths = [path for path in paths if project_id.lower() in {part.lower() for part in path.parts}]
+    if project_paths:
+        paths = project_paths
     ranked: list[tuple[int, Path]] = []
     for path in paths:
         path_score = 20 if project_id.lower() in str(path).lower() else 0
