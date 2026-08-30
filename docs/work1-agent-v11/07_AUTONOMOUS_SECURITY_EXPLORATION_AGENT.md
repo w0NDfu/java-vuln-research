@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 至 `M7-8`。CloudStudio 已同时执行 deterministic controlled smoke 与真实 `claude-opus-5` controlled smoke；真实运行按严格契约 fail-closed，并保留完整 failure manifest。`M7-9` 及以后尚未启动。
+当前完成 `M7-0` 至 `M7-9`。CloudStudio 已同时执行 deterministic controlled smoke 与真实 `claude-opus-5` controlled smoke；真实运行按严格契约 fail-closed，并保留完整 failure manifest。真实 kill test 的 detector input 已冻结且 no-leakage audit 通过；`M7-10` 尚未启动。
 
 ## M7-0 Git and worktree isolation
 
@@ -331,3 +331,34 @@ CloudStudio 权威输出位于 `/workspace/experiment-output/artifacts/work1-age
 `PROCEED_M7_9_WITH_MODEL_OUTPUT_RISK`。
 
 接受理由：真实 endpoint/model/auth 已验证；deterministic 闭环证明 tool→EvidenceRef→proposal→Gate→graph/path 的完整机制；真实模型确实自主执行工具并产生一个 ADMISSIBLE proposal；非法输出没有进入 Evidence Graph；失败仍生成完整可审计 artifacts；no-leakage 与完整回归均通过。M7 不预设模型一定成功，因此 provider 输出不稳定作为冻结前风险进入 M7-9 manifest，而不是通过放宽 parser、增加项目特例或查看 benchmark 答案来“调到成功”。
+
+## M7-9 Frozen kill-test detector manifest（完成）
+
+新增 `freeze_work1_v11_m7_killtest.sh`、`killtest_manifest.py` 与 `work1_agent_killtest_detector_manifest.schema.json`。冻结程序在 detector runtime 之外读取 M6 已冻结 `selected_cases.csv`，只复用其运行对象选择；随后通过 M1 inventory 重新绑定源码与 CodeQL DB。selection manifest 与 detector manifest 物理分离，前者显式 `selection_source_allowed_for_agent_runtime=false`，后者完全不含 case ID、CVE、CWE、patch/fix、benchmark location、annotation、diagnostic proposal 或 root cause。
+
+CloudStudio 最终冻结目录：
+
+`/workspace/experiment-output/artifacts/work1-agent-v11/m7_agent/killtest_freeze/`
+
+最终 detector manifest ID 为 `m7detector-c61aad878f8fc1b33dc22bf7`，冻结项目严格为：
+
+`D003, P006, P007, P010, P012, V001, V004, V005, V009, V023`
+
+每个项目只暴露 `project_id`、安全 project name、repository root/revision、source-ready、CodeQL DB path/ready/metadata identity、零条 native candidate path 的冻结摘要，以及 `benchmark_informed=false`。M1～M5 lineage 使用完整目录 tree hash，文件计数分别为 200、33、4686、483、77；baseline lineage 记录 CodeQL release `2.26.3` 和 tree hash。M4/M5 只作为 lineage 绑定，不把既有 proposal、M6 diagnostic 或 benchmark-informed artifact 放进 Agent runtime 输入。
+
+冻结配置：exact model `claude-opus-5`，OpenAI exact endpoint，JSON object mode，temperature 0，seed omitted，max output 2048，timeout 60 秒；controller `M7_CONTROLLER_V1`，stagnation threshold 3，同轮 model-output repair 上限 1；budget 为 15 rounds、40 total tool calls、10 proposals、8 admissible proposals；path bounds 为 depth 12、每 anchor pair 20 paths、2000 expanded nodes。System prompt `M7_SECURITY_EXPLORATION_V5` SHA-256 为 `18aaf813a3f0f5661fcc656be2271b81ed46f7d37e5d4cd2cdb8a4ca79270ada`；action/proposal/state/trace/EvidenceRef/graph/path schemas 和 tool catalog 均记录 SHA-256。
+
+### M7-9 no-leakage and regression evidence
+
+- detector schema validation：PASS，10 个不同 project，全部 source-ready；CodeQL DB status 逐项目冻结。
+- forbidden field hits：0；forbidden token hits：0；selected forbidden value hits：0。
+- artifact secret scan：PASS；manifest 仅记录 `api_key_present=true` 和环境变量名，不含 key value。
+- runtime denylist unit tests：PASS；selection/M6 diagnostic/evaluator 均标记 runtime 不可访问。
+- output hashes 已冻结：`detector_manifest.json`、`selection_manifest.json`、`no_leakage_audit.json`。
+- CloudStudio targeted：`28 passed`；最终 local full：`228 passed, 1 skipped, 3 warnings`；最终 CloudStudio full：`228 passed, 1 skipped, 3 warnings`，返回码均为 0。
+
+### M7-9 acceptance decision
+
+`PROCEED_M7_10`。
+
+接受理由：selection 在 detector 外冻结；Agent 输入没有任何 benchmark answer；prompt/model/schema/tool/controller/budget/path 配置和 M1～M5/baseline lineage 全部绑定；secret/no-leakage/denylist/schema/full-regression 均通过。自此开始 M7-10 后，不再依据这 10 个正式运行对象的 benchmark 结果修改 prompt、schema、model、tool config、Gate 或 path builder。
