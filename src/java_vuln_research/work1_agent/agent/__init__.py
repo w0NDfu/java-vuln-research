@@ -13,6 +13,7 @@ from .llm_client import (
     OpenAICompatibleLLMClient,
 )
 from .parser import StrictActionParser, validate_tool_arguments
+from .observation import AgentObservation, build_repository_first_observation, bounded_tool_catalog
 from .prompt import PROMPT_VERSION, SYSTEM_PROMPT, build_system_prompt, prompt_sha256
 from .state import AgentState
 from .security_boundary import (
@@ -25,12 +26,16 @@ from .security_boundary import (
     runtime_roots,
 )
 from .trace import AgentTrace, AgentTraceEvent, TraceEventType
+from .tool_adapter import AgentToolResult, AgentToolStatus, RepositoryCodeQLToolAdapter
 
 __all__ = [
     "ActionType",
     "AgentAction",
     "AgentBudgetLimits",
     "AgentState",
+    "AgentObservation",
+    "AgentToolResult",
+    "AgentToolStatus",
     "AgentTrace",
     "AgentTraceEvent",
     "BudgetExceeded",
@@ -49,12 +54,15 @@ __all__ = [
     "RuntimeInputEntry",
     "RuntimeInputKind",
     "RuntimeSecurityBoundary",
+    "RepositoryCodeQLToolAdapter",
     "SecurityBoundaryViolation",
     "StrictActionParser",
     "SYSTEM_PROMPT",
     "StopReason",
     "TraceEventType",
     "build_system_prompt",
+    "build_repository_first_observation",
+    "bounded_tool_catalog",
     "prompt_sha256",
     "runtime_roots",
     "validate_tool_arguments",

@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 至 `M7-3`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit，以及 provider-neutral LLM client、冻结 prompt 与严格 structured parser。尚未执行 repository/CodeQL tools、proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
+当前完成 `M7-0` 至 `M7-4`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit、provider-neutral LLM client、冻结 prompt/严格 structured parser，以及 repository-first observation 和全量 M2/M3 工具适配。尚未执行 proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
 
 ## M7-0 Git and worktree isolation
 
@@ -209,3 +209,27 @@ Prompt 不含项目名、case ID、已知 API、恢复答案或 root-cause 表�
 `PROCEED_M7_4`。
 
 接受理由：在线/离线模型共享 provider-neutral protocol；secret 不进入 manifest；prompt 没有 benchmark/project-specific hint；模型输出经过 decision 与 canonical action 双重 schema 验证；所有越权/越界/非法/预算失败均结构化分类；mock 与 transport 均有 deterministic tests；完整回归通过。下一阶段才会把这些 action 接到 repository-first observation 与 M2/M3 deterministic adapter。
+
+## M7-4 Repository-first observation and fixed tool adapters
+
+新增 `AgentObservation`，每轮从当前 `RepositoryIndex` 和 `AgentState` 构建稳定、可散列、上限 64 KiB 的 repository-first observation。初始 observation 不要求 frontier、native path 或 CodeQL 可用；它只提供：Java/实体/diagnostic 计数，最多 20 个 package、30 个 type、30 个 method/constructor 的中性 overview，CodeQL availability，native baseline 的非答案型摘要，当前预算、最近 10 条反馈和全部 17 个固定工具的参数上限。运行规则明确写入：unavailable 不代表不存在，structural candidate 不是漏洞结论。
+
+新增 `RepositoryCodeQLToolAdapter`，覆盖全部 source-ready 项目可执行的 11 个 M2 action 和全部 db-ready 项目可执行的 6 个固定 M3 action，而不是固定 Retrofit/Hutool：
+
+- M2：`SEARCH_CODE`、`SEARCH_SYMBOLS`、`READ_FILE_RANGE`、`INSPECT_METHOD`、`INSPECT_TYPE`，以及 callers/callees/implementations/overrides/fields/annotations 的中性结构候选；
+- M3：`codeql_entity_facts`、`codeql_callers`、`codeql_callees`、`codeql_local_flow`、`codeql_dataflow_neighbors`、`codeql_cfg_neighbors`。
+
+所有 action 在执行前重新通过 exact argument allow-list/hard ceiling 校验；跨项目 action 立即拒绝。M2 每次读取的 Java 文件都经 `RuntimeSecurityBoundary` 登记 SHA-256，最终可进入 frozen detector input manifest。通用 M2 relation 被显式标记 `M1_NEUTRAL_STRUCTURAL_RELATION`、`deterministic_relation=false`，不会冒充 CodeQL 事实。M3 只惰性分发既有固定 API，不接受模型生成 QL；原始 `OK/EMPTY/ERROR/UNSUPPORTED/ENTITY_NOT_MAPPED` 状态被精确保留。没有 ready DB 时返回结构化 `UNAVAILABLE` 与 `UNAVAILABLE_IS_NOT_NEGATIVE_EVIDENCE`，不把不可用解释为关系为空。
+
+### M7-4 regression evidence
+
+- observation + tool adapter targeted：`7 passed`，返回码 0。
+- local full regression：`205 passed, 1 skipped, 3 warnings`，返回码 0。
+
+唯一 skip 与 warnings 均为前述环境项和 `jsonschema.RefResolver` 上游 deprecation；没有新增失败。
+
+### M7-4 acceptance decision
+
+`PROCEED_M7_5`。
+
+接受理由：初始 observation 在无 frontier/native/CodeQL 情况下仍可启动；M2/M3 17 个动作均有统一的 bounded dispatcher、项目隔离、可追踪输入和保守 availability 语义；结构候选不会升级为确定性事实；定向及完整回归通过。下一阶段接入正式 M4 Gate，序列化 proposal feedback，并保持 Gate 为 Agent 外部的确定性独立组件。
