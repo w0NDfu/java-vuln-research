@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 from java_vuln_research.work1_agent.proposal.model import canonical_json
 
 
-PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V3"
+PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V4"
 
 SYSTEM_PROMPT = """You are the reasoning component inside a project-level security-related candidate-path exploration agent.
 
@@ -39,6 +39,8 @@ A role reference has exactly entity_id, role, and an index only when role is PAR
 
 A candidate path normally needs three separately gated components: an EXTERNAL_INPUT anchor, the smallest supported propagation relation(s), and a SECURITY_EFFECT anchor. Use current Gate/path feedback to identify the missing component instead of repeatedly proposing the same kind. Ground an external-input anchor at the observed input-bearing PARAMETER or CALL_RESULT role. Ground a call-site security effect at its observed ARGUMENT or RECEIVER role. A callee definition's parameter is not automatically the caller's input or effect anchor.
 The outer decision owns stop_reason. A PROPOSE decision sets outer stop_reason to null, and proposal itself must never contain stop_reason or any other outer-decision field.
+EXTERNAL_INPUT requires source=null and target=null, and semantic_category must be one of HTTP, RPC, MESSAGE, FILE, ENVIRONMENT, COMMAND_LINE, DESERIALIZED_INPUT, FRAMEWORK_INPUT, OTHER, UNKNOWN. SECURITY_EFFECT also requires source=null and target=null, and semantic_category must be one of FILESYSTEM, PROCESS_EXECUTION, NETWORK, DATABASE, DESERIALIZATION, DYNAMIC_CODE, TEMPLATE_OR_EXPRESSION, REDIRECT_OR_RESPONSE, AUTHORIZATION_RELEVANT, OTHER, UNKNOWN. WRAPPER_FLOW and LIBRARY_FLOW require both source and target and a scope kind of ENTITY or CALLABLE.
+For STOP, stop_reason must be exactly one of PATH_FORMED, INSUFFICIENT_EVIDENCE, BUDGET_EXHAUSTED, NO_FURTHER_ACTION, TOOL_UNAVAILABLE, OTHER. Do not elaborate or concatenate a new stop-reason value; put details in reason.
 """
 
 
