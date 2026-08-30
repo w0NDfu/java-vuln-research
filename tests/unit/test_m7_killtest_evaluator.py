@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 from java_vuln_research.work1_agent.m7_killtest.evaluator import (
     _causal_shape,
     _classify_failure,
+    _detector_leakage_audit,
     _path_matches,
 )
 
@@ -39,3 +44,48 @@ def test_m7_failure_taxonomy_is_multi_label_and_not_detection_metric() -> None:
         "AGENT_FAILED_TO_FIND_SEMANTIC_RELATION",
         "MODEL_REASONING_STALLED",
     ]
+
+
+def test_m7_setup_failure_is_not_misreported_as_agent_discovery_failure() -> None:
+    labels = _classify_failure(
+        summary={
+            "failures": [
+                {
+                    "failure_class": "DETECTOR_SETUP_ERROR",
+                    "message": "SECURITY_BOUNDARY_VIOLATION: denied before read",
+                }
+            ]
+        },
+        proposals=[],
+        gates=[],
+        tools=[],
+        recovered=False,
+    )
+    assert labels == ["OTHER"]
+
+
+def test_fail_closed_boundary_denial_is_not_a_leak(tmp_path: Path) -> None:
+    project = tmp_path / "projects" / "P"
+    project.mkdir(parents=True)
+    project_manifest = {
+        "failure_manifest": [
+            {
+                "failure_class": "DETECTOR_SETUP_ERROR",
+                "message": "SECURITY_BOUNDARY_VIOLATION: denied before read",
+            }
+        ]
+    }
+    (project / "manifest.json").write_text(json.dumps(project_manifest), encoding="utf-8")
+    detector = {
+        "artifact_hashes": {
+            "manifest.json": hashlib.sha256((project / "manifest.json").read_bytes()).hexdigest(),
+        }
+    }
+    (project / "detector_manifest.json").write_text(json.dumps(detector), encoding="utf-8")
+    audit = _detector_leakage_audit(
+        output=tmp_path,
+        freeze={"project_detector_manifest_hashes": {"P": "not-used-by-this-audit"}},
+        selected=[],
+    )
+    assert audit["no_leakage_pass"] is True
+    assert audit["fail_closed_denied_input_projects"] == ["P"]

@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 至 `M7-9`。CloudStudio 已同时执行 deterministic controlled smoke 与真实 `claude-opus-5` controlled smoke；真实运行按严格契约 fail-closed，并保留完整 failure manifest。真实 kill test 的 detector input 已冻结且 no-leakage audit 通过；`M7-10` 尚未启动。
+当前完成 `M7-0` 至 `M7-10`。CloudStudio 已完成 deterministic controlled smoke、真实 `claude-opus-5` controlled smoke，以及冻结的 10-project autonomous kill test。正式 kill test 为 0 autonomous recovery；8 个项目在严格输出契约处 fail-closed，2 个项目在源码 symlink 的合法 `annotations` 目录被 runtime denylist 保守阻断。detector 输出先于 benchmark evaluator 冻结，未发生禁止输入读取；由于没有自主恢复，按预注册条件跳过 `M7-11`，不启动 Work2。
 
 ## M7-0 Git and worktree isolation
 
@@ -362,3 +362,81 @@ CloudStudio 最终冻结目录：
 `PROCEED_M7_10`。
 
 接受理由：selection 在 detector 外冻结；Agent 输入没有任何 benchmark answer；prompt/model/schema/tool/controller/budget/path 配置和 M1～M5/baseline lineage 全部绑定；secret/no-leakage/denylist/schema/full-regression 均通过。自此开始 M7-10 后，不再依据这 10 个正式运行对象的 benchmark 结果修改 prompt、schema、model、tool config、Gate 或 path builder。
+
+## M7-10 CloudStudio autonomous kill test（完成，0 recovery）
+
+正式 detector 在 CloudStudio commit `82200a5` 上执行。新增的 `m7_killtest.detector` 不 import M6 evaluator、selection manifest 或 benchmark annotation；它只读取 M7-9 冻结的 project-only detector manifest，逐项目登记 Java source、trusted schema/query、CodeQL DB/status，复用正式 controller、M2/M3 adapter、M4 Gate 与 M5 bounded graph/path builder。每个项目无论成功或失败都写出 canonical 12-file contract、artifact audit 和项目级 `detector_manifest.json`；10 个项目结束后才写 `detector_output_manifest.json`，其中包含 detector summary 与 10 个项目 manifest 的 SHA-256。后置 evaluator 首先重新验证这些 hash，然后才读取 M7 selection manifest 与 M6 `diagnostic_analysis.json` 的 annotation/mapped entity。
+
+反事实 evaluator 已实现为真实的同配置 M5 重跑：对每条 benchmark-consistent recovered path，逐一移除其非 anchor Agent semantic proposal edge，使用冻结的 depth 12 / paths 20 / expanded nodes 2000 再跑 `BoundedPathBuilder`；只有移除后匹配路径消失，才允许把 recovery 归因给该 proposal。本次没有 recovered path，因此反事实状态为 `NOT_APPLICABLE`，没有通过空跑制造因果结论。
+
+### Formal detector/evaluator result
+
+| metric | result |
+|---|---:|
+| frozen baseline-miss cases | 10 |
+| projects that entered model loop | 8 |
+| fail-closed setup blocks | 2 |
+| autonomous recovery count | 0 |
+| autonomous recovery rate | 0.0% |
+| recovered projects | 0 |
+| total rounds | 8 |
+| model calls | 16 |
+| repository / CodeQL tool calls | 0 |
+| proposals / ADMISSIBLE proposals | 0 / 0 |
+| candidate paths | 0 |
+| input / output tokens | 1,003,268 / 2,337 |
+| summed per-project wall-clock | 166.936611 s |
+| native preservation | PASS |
+| detector artifact freeze/hash validation | PASS |
+
+8 个进入模型循环的项目均在第 1 轮经历初始 response 与一次冻结的 same-round repair；两次输出都不是 strict bare JSON object，因而记录 `INVALID_JSON` 并 `STOP(OTHER)`。parser 没有剥离 code fence、解析自然语言或把非法文本变成 action，所以这些项目均为 2 model calls、0 tool calls、0 proposals、0 paths。D003 与 P006 没有进入模型：它们的 source root 是指向 `/workspace/datasets/cwe-bench-java/project-sources/...` 的 symlink，项目中合法测试源码目录名含 `annotations`；现有 path denylist 同时看到解析后的 `datasets` 与 `annotations`，以 `DENY_EVALUATOR_ANSWER_INPUT` 在读取前 fail-closed。该保守误判保留为正式失败证据，没有在同一 cohort 上修改 boundary 或重跑 detector。
+
+首轮后置审计曾把“被边界拒绝、未读取”的 D003/P006 也计作 leakage。该问题仅属于 evaluator 记账：detector artifacts 已冻结且没有重跑。修正后的 evaluator 将 fail-closed denial 单独记录为 `fail_closed_denied_input_projects`，只有实际 artifact forbidden-value/secret hit、已建立 runtime manifest 中的 violation，或无法审计的输入才令 no-leakage 失败；首轮 evaluator 输出保留在 Cloud artifact 的 `evaluation_attempts/attempt_1/`。
+
+### No-leakage and audit result
+
+- detector files scanned：138；selected-value hits：0；secret hits：0。
+- D003/P006：访问在读取前被 denylist 拒绝，属于 availability/setup failure，不是禁止数据进入 runtime；两个项目均未产生 model/tool call。
+- 其余 8 个项目的 runtime input manifests 全部 hashed、`benchmark_informed=false`，没有 boundary violation。
+- detector output 在 evaluator 读取 case ID、CVE/CWE、method/file/line annotation 前已冻结并通过逐文件 hash 验证。
+- proposals 为 0；因此不存在 benchmark-informed proposal、伪造 EvidenceRef 或不可追踪 recovered path。
+
+### Failure taxonomy
+
+正式多标签 taxonomy 为：
+
+- `MODEL_OUTPUT_INVALID`：8；
+- `AGENT_FAILED_TO_FIND_INPUT`：8；
+- `AGENT_FAILED_TO_FIND_EFFECT`：8；
+- `AGENT_FAILED_TO_FIND_SEMANTIC_RELATION`：8；
+- `OTHER`：2（D003/P006 fail-closed source-path denylist setup block）；
+- `INSUFFICIENT_PROGRAM_EVIDENCE`、`REPOSITORY_TOOL_LIMITATION`、`CODEQL_TOOL_UNAVAILABLE`、`CODEQL_ENTITY_ALIGNMENT_FAILURE`、`GATE_BLOCKED`、`PATH_NOT_CONNECTED`、`BUDGET_EXHAUSTED`、`MODEL_REASONING_STALLED`：0。
+
+这不是完整 benchmark Detection Rate。它只报告冻结 10-case baseline-miss cohort 的 `Autonomous Recovery Count/Rate`。
+
+### Required research questions
+
+1. Agent 的真实输入：project ID/name、source root/revision、source-ready、CodeQL DB path/status/identity、零 native candidate path 摘要、M1～M5 lineage、冻结 tool/prompt/schema/budget/path config；运行时再通过 M2/M3 bounded tools读取证据。
+2. benchmark CWE/CVE/patch/location：detector 未读取；后置 evaluator 在 output freeze 后才读取。
+3. M6 diagnostic proposal：detector 未读取，也未 import M6 evaluator；evaluator 只用 annotation/mapped entity 做匹配。
+4. 第一批 observation：repository-first inventory、package/file/entity count、CodeQL availability/native summary、bounded tool catalog、空 recent feedback；无 preloaded frontier/evidence/proposal。
+5. 实际工具：正式 run 为 0 次；模型在产生第一条合法 TOOL action 前即 strict-output failure。controlled smoke 曾真实使用 `SEARCH_SYMBOLS` 与 `INSPECT_METHOD`，但不作为 kill-test recovery 证据。
+6. 恢复案例轮数/调用/proposal：无恢复案例。
+7. Gate 拒绝/补证据：正式 run 没有合法 proposal，Gate 未被调用。
+8. 首次形成 Candidate Path：正式 run 从未形成。
+9. recovered support class：无 recovered path。
+10. CodeQL deterministic edge：无；模型未发出 CodeQL tool action。
+11. CodeQL unavailable：冻结 cohort DB 均 ready；本次没有 unavailable case 可用于正式机制比较。
+12. 失败位置：8 个项目在 model structured-output parse；D003/P006 在 source-path security boundary setup。
+13. Autonomous Recovery Count/Rate：`0 / 10 = 0.0%`。
+14. project/case-specific condition：实现中没有 project ID、case ID、CWE 或 API-specific branch。
+15. counterfactual：无 recovery，故 `NOT_APPLICABLE`；没有虚报 Agent 因果贡献。
+16. full feedback 是否优于 single-shot/no-feedback：无法回答；按 guard 跳过 M7-11。
+17. 成本：16 model calls、1,005,605 total tokens、166.936611 s；调用数有界，但长 repository-first observation 造成 1,003,268 input tokens，成本信号不理想。
+18. Work1/Work2 边界：严格停留在 candidate discovery；没有 sanitizer effectiveness、漏洞确认、最终 CWE 或 Work2 实现。
+
+### M7-10 acceptance decision
+
+`M7_COMPLETE_NO_PROCEED`。
+
+完整性 acceptance：detector/evaluator 分离、output-before-evaluation freeze、native preservation、artifact contract、full regression 和禁止信息未进入 runtime 均可审计。机制效果 acceptance 不满足：0 autonomous recovery，低于至少 3 个、2 个项目、2 类中间关系的建议门槛。按任务原则不调 prompt、不放宽 Gate、不加项目规则、不重跑同一 cohort 到成功。因为没有自主恢复，`M7-11` 的 E1/E2/E3 ablation 不执行；M7 在此停止，不启动 Work2。

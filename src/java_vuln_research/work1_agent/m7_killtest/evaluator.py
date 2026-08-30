@@ -224,9 +224,12 @@ def _classify_failure(
 ) -> list[str]:
     if recovered:
         return []
+    failure_rows = [dict(row) for row in summary.get("failures", ())]
+    if any(str(row.get("failure_class") or "") == "DETECTOR_SETUP_ERROR" for row in failure_rows):
+        return ["OTHER"]
     labels: list[str] = []
     types = {str(row.get("proposal_type") or row.get("relation_type") or "") for row in proposals}
-    failures = [str(row.get("failure_class") or "") for row in summary.get("failures", ())]
+    failures = [str(row.get("failure_class") or "") for row in failure_rows]
     stop = str(summary.get("stop_reason") or "")
     if "EXTERNAL_INPUT" not in types:
         labels.append("AGENT_FAILED_TO_FIND_INPUT")
@@ -287,6 +290,8 @@ def _detector_leakage_audit(
     value_hits: list[dict[str, str]] = []
     secret_hits: list[str] = []
     boundary_violations: list[str] = []
+    denied_input_projects: list[str] = []
+    unverified_input_projects: list[str] = []
     for project_id in sorted(freeze["project_detector_manifest_hashes"]):
         project_root = output / "projects" / project_id
         manifest = _read_json(project_root / "detector_manifest.json")
@@ -299,16 +304,31 @@ def _detector_leakage_audit(
                     value_hits.append({"project_id": project_id, "file": name, "value_sha256": hashlib.sha256(value.encode()).hexdigest()})
             if re.search(r"\bsk-[A-Za-z0-9_-]{16,}\b|authorization\s*[:=]\s*bearer\s+\S+", text, re.IGNORECASE):
                 secret_hits.append(f"{project_id}/{name}")
-        runtime_manifest = _read_json(project_root / "manifest.json").get("detector_input_manifest", {})
-        if runtime_manifest.get("violations") or runtime_manifest.get("no_leakage_pass") is not True:
-            boundary_violations.append(project_id)
+        project_manifest = _read_json(project_root / "manifest.json")
+        runtime_manifest = project_manifest.get("detector_input_manifest")
+        if isinstance(runtime_manifest, Mapping):
+            if runtime_manifest.get("violations") or runtime_manifest.get("no_leakage_pass") is not True:
+                boundary_violations.append(project_id)
+            continue
+        setup_failures = [dict(row) for row in project_manifest.get("failure_manifest", ())]
+        fail_closed_denial = any(
+            str(row.get("failure_class") or "") == "DETECTOR_SETUP_ERROR"
+            and "SECURITY_BOUNDARY_VIOLATION" in str(row.get("message") or "")
+            for row in setup_failures
+        )
+        if fail_closed_denial:
+            denied_input_projects.append(project_id)
+        else:
+            unverified_input_projects.append(project_id)
     return {
         "schema_version": 1,
         "detector_files_scanned": sum(len(_read_json(output / "projects" / pid / "detector_manifest.json")["artifact_hashes"]) for pid in freeze["project_detector_manifest_hashes"]),
         "forbidden_selected_value_hits": value_hits,
         "secret_hits": secret_hits,
         "runtime_boundary_violation_projects": boundary_violations,
-        "no_leakage_pass": not value_hits and not secret_hits and not boundary_violations,
+        "fail_closed_denied_input_projects": denied_input_projects,
+        "unverified_runtime_input_projects": unverified_input_projects,
+        "no_leakage_pass": not value_hits and not secret_hits and not boundary_violations and not unverified_input_projects,
     }
 
 
