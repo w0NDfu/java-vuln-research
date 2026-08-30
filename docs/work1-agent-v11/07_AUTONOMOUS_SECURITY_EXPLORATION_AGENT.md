@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 至 `M7-4`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit、provider-neutral LLM client、冻结 prompt/严格 structured parser，以及 repository-first observation 和全量 M2/M3 工具适配。尚未执行 proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
+当前完成 `M7-0` 至 `M7-5`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit、provider-neutral LLM client、冻结 prompt/严格 structured parser、repository-first observation、全量 M2/M3 工具适配，以及 tool → observation controller 闭环。尚未接入 proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
 
 ## M7-0 Git and worktree isolation
 
@@ -234,3 +234,25 @@ Prompt 不含项目名、case ID、已知 API、恢复答案或 root-cause 表�
 `PROCEED_M7_5`。
 
 接受理由：初始 observation 在无 frontier/native/CodeQL 情况下仍可启动；M2/M3 17 个动作均有统一的 bounded dispatcher、项目隔离、可追踪输入和保守 availability 语义；结构候选不会升级为确定性事实；本地与 CloudStudio 完整回归通过。下一阶段只实现 Agent controller 的 tool → observation 循环，不接 proposal；M4 Gate 留到 M7-6。
+
+## M7-5 Tool-to-observation controller loop
+
+新增 `AgentController`，每轮严格执行一条结构化 decision：begin round → 构建当前 repository-first observation → provider-neutral model call → strict parse → fixed tool dispatch → 将结构化 tool result 放入下一轮 observation。controller 没有项目/case 分支、CWE/API-specific 逻辑或 arbitrary query 通道；controller、state、CodeQL status 和 tool adapter 必须属于同一 `project_id` 且共享同一个 `RepositoryIndex`。
+
+每次 model call 记录 request ID、observation ID、冻结 prompt hash、provider/model ID、原始 structured response、token 与 wall-clock；每次 action、tool result、budget 和 STOP 都按连续 sequence 写入 `AgentTrace`。工具参数中的实体进入 inspected state，tool-call ID 保持唯一，最近 10 条完整反馈进入后续 observation。模型/解析失败被转成结构化 controller failure 并 fail-closed STOP；轮次或工具预算耗尽生成 BUDGET + STOP trace，不会额外调用模型。
+
+本 milestone 明确不接 proposal：即使 parser 返回一个形式上有效的正式 M4 `SecurityProposal`，controller 也以 `PROPOSAL_DISABLED_M7_5` 拒绝，proposal state 与 proposal budget 保持为零。M4 Gate、graph/path 和 proposal feedback 仍保持未连接状态，避免越过 milestone 边界。
+
+### M7-5 regression evidence
+
+- controller targeted：`5 passed`，返回码 0。
+- M7-1～M7-5 aggregate targeted：`59 passed, 2 warnings`，返回码 0。
+- local full regression：`210 passed, 1 skipped, 3 warnings`，返回码 0。
+
+warnings 仍仅为 `jsonschema.RefResolver` 上游 deprecation。
+
+### M7-5 acceptance decision
+
+`PROCEED_M7_6`。
+
+接受理由：工具结果确实成为下一轮 observation 的可见反馈；模型失败、预算耗尽、跨项目装配和提前 proposal 均 fail-closed；model/action/tool/budget/stop trace 连续且可 replay；定向和完整回归通过。下一阶段才接正式 M4 proposal 与独立 Evidence Gate，并返回 NEEDS_MORE_EVIDENCE / REJECTED 等 Gate feedback。

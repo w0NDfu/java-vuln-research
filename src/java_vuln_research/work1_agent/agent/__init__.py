@@ -2,6 +2,7 @@
 
 from .actions import AgentAction, ActionType, StopReason
 from .budget import AgentBudgetLimits, BudgetExceeded, BudgetTracker
+from .controller import AgentController, AgentControllerFailure, AgentControllerResult
 from .llm_client import (
     LLMClient,
     LLMClientConfig,
@@ -32,6 +33,9 @@ __all__ = [
     "ActionType",
     "AgentAction",
     "AgentBudgetLimits",
+    "AgentController",
+    "AgentControllerFailure",
+    "AgentControllerResult",
     "AgentState",
     "AgentObservation",
     "AgentToolResult",
