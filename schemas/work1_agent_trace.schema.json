@@ -11,7 +11,7 @@
     "sequence": {"type": "integer", "minimum": 1},
     "project_id": {"type": "string", "minLength": 1},
     "round": {"type": "integer", "minimum": 0},
-    "event_type": {"enum": ["INITIAL_OBSERVATION", "MODEL_CALL", "ACTION", "TOOL_RESULT", "EVIDENCE", "PROPOSAL", "GATE_RESULT", "PATH_FEEDBACK", "BUDGET", "SECURITY_BOUNDARY", "FAILURE", "STOP"]},
+    "event_type": {"enum": ["INITIAL_OBSERVATION", "MODEL_CALL", "MODEL_RETRY", "ACTION", "TOOL_RESULT", "EVIDENCE", "PROPOSAL", "GATE_RESULT", "PATH_FEEDBACK", "BUDGET", "SECURITY_BOUNDARY", "FAILURE", "STOP"]},
     "payload": {"type": "object"},
     "provenance": {"type": "object", "minProperties": 1}
   }

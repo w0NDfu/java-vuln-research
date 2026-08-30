@@ -16,7 +16,7 @@ from .actions import TOOL_ACTIONS, ActionType, StopReason
 from .budget import BudgetExceeded
 from .feedback import AgentGateFeedback, build_gate_feedback, evidence_from_tool_result
 from .graph_adapter import AgentGraphPathAdapter, AgentGraphPathResult
-from .llm_client import LLMClient, LLMRequest, ModelCallError
+from .llm_client import LLMClient, LLMRequest, ModelCallError, ModelFailureClass
 from .observation import AgentObservation, bounded_tool_catalog, build_repository_first_observation
 from .parser import StrictActionParser
 from .prompt import build_system_prompt, prompt_sha256
@@ -91,6 +91,7 @@ class AgentController:
         graph_path_adapter: AgentGraphPathAdapter | None = None,
         native_baseline_summary: Mapping[str, Any] | None = None,
         max_stagnant_rounds: int = 3,
+        max_model_output_retries: int = 1,
     ) -> None:
         if state.project_id != tool_adapter.project_id:
             raise ValueError("controller components are cross-project")
@@ -114,8 +115,11 @@ class AgentController:
                 raise ValueError("graph adapter is cross-project")
         if not 1 <= int(max_stagnant_rounds) <= 10:
             raise ValueError("max_stagnant_rounds must be between 1 and 10")
+        if not 0 <= int(max_model_output_retries) <= 2:
+            raise ValueError("max_model_output_retries must be between 0 and 2")
         self.graph_path_adapter = graph_path_adapter
         self.max_stagnant_rounds = int(max_stagnant_rounds)
+        self.max_model_output_retries = int(max_model_output_retries)
         self.stagnant_rounds = 0
         self.native_baseline_summary = dict(native_baseline_summary or {})
         self.trace = AgentTrace(state.project_id)
@@ -200,46 +204,79 @@ class AgentController:
             if len(self.observations) == 1:
                 self._append(TraceEventType.INITIAL_OBSERVATION, observation.to_dict())
 
-            request = LLMRequest.create(
-                project_id=self.state.project_id,
-                round=self.state.current_round,
-                system_prompt=self.system_prompt,
-                observation=observation.to_dict(),
-            )
-            try:
-                response = self.llm_client.complete(request)
-                self.state.budget.record_model_call(
-                    input_tokens=response.input_tokens,
-                    output_tokens=response.output_tokens,
-                )
-                self._append(
-                    TraceEventType.MODEL_CALL,
-                    {
-                        "request_id": request.request_id,
-                        "observation_id": observation.observation_id,
-                        "prompt_sha256": prompt_sha256(self.system_prompt),
-                        "response": response.to_dict(),
-                    },
-                )
-                action = self.parser.parse(
-                    response,
+            action = None
+            response = None
+            repair_failure: AgentControllerFailure | None = None
+            repairable = {
+                ModelFailureClass.INVALID_JSON,
+                ModelFailureClass.INVALID_ACTION,
+                ModelFailureClass.SCHEMA_VIOLATION,
+                ModelFailureClass.TOOL_ARGUMENT_INVALID,
+            }
+            for attempt in range(1, self.max_model_output_retries + 2):
+                request_observation = observation.to_dict()
+                if repair_failure is not None:
+                    request_observation = {
+                        **request_observation,
+                        "model_output_repair": {
+                            "attempt": attempt,
+                            "previous_failure_class": repair_failure.failure_class,
+                            "previous_failure_message": repair_failure.message,
+                            "instruction": "Return a fresh bare JSON decision that exactly satisfies the frozen action/proposal contract; do not repeat or quote the invalid response.",
+                        },
+                    }
+                request = LLMRequest.create(
                     project_id=self.state.project_id,
                     round=self.state.current_round,
-                    budget=self.state.budget,
-                    known_entity_ids=known_entities,
-                    known_evidence_refs=set(self.state.evidence_refs),
+                    system_prompt=self.system_prompt,
+                    observation=request_observation,
+                    attempt=attempt,
                 )
-            except ModelCallError as exc:
-                self._failure(
-                    AgentControllerFailure(
+                try:
+                    response = self.llm_client.complete(request)
+                    self.state.budget.record_model_call(
+                        input_tokens=response.input_tokens,
+                        output_tokens=response.output_tokens,
+                    )
+                    self._append(
+                        TraceEventType.MODEL_CALL,
+                        {
+                            "request_id": request.request_id,
+                            "observation_id": observation.observation_id,
+                            "attempt": attempt,
+                            "prompt_sha256": prompt_sha256(self.system_prompt),
+                            "response": response.to_dict(),
+                        },
+                    )
+                    action = self.parser.parse(
+                        response,
+                        project_id=self.state.project_id,
+                        round=self.state.current_round,
+                        budget=self.state.budget,
+                        known_entity_ids=known_entities,
+                        known_evidence_refs=set(self.state.evidence_refs),
+                    )
+                    break
+                except ModelCallError as exc:
+                    failure = AgentControllerFailure(
                         exc.failure_class.value,
                         str(exc).partition(": ")[2],
                         self.state.current_round,
                         exc.model_call_id,
                         exc.retryable,
                     )
-                )
+                    if exc.failure_class in repairable and attempt <= self.max_model_output_retries:
+                        repair_failure = failure
+                        self._append(
+                            TraceEventType.MODEL_RETRY,
+                            {**failure.to_dict(), "attempt": attempt, "next_attempt": attempt + 1},
+                        )
+                        continue
+                    self._failure(failure)
+                    break
+            if self.state.stopped:
                 break
+            assert action is not None and response is not None
 
             self._append(TraceEventType.ACTION, action.to_dict())
             if action.action_type is ActionType.PROPOSE:

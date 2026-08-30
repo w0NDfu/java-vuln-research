@@ -113,14 +113,33 @@ def test_controller_runs_tool_observation_loop_then_stops(tmp_path: Path) -> Non
 
 
 def test_controller_records_model_failure_and_stops_fail_closed(tmp_path: Path) -> None:
-    controller, _ = _controller(tmp_path, ["not-json"])
+    controller, client = _controller(tmp_path, ["not-json", "still-not-json"])
 
     result = controller.run()
 
     assert result.state.stop_reason is StopReason.OTHER
     assert result.failures[0].failure_class == "INVALID_JSON"
     assert [item.event_type for item in result.trace.events][-2:] == [TraceEventType.FAILURE, TraceEventType.STOP]
-    assert result.state.budget.model_calls == 1
+    assert result.state.budget.model_calls == 2
+    assert [request.attempt for request in client.requests] == [1, 2]
+    assert any(item.event_type is TraceEventType.MODEL_RETRY for item in result.trace.events)
+
+
+def test_controller_repairs_one_invalid_model_output_without_relaxing_parser(tmp_path: Path) -> None:
+    controller, client = _controller(
+        tmp_path,
+        ["```json\n{}\n```", _decision(ActionType.STOP, stop_reason=StopReason.INSUFFICIENT_EVIDENCE)],
+    )
+
+    result = controller.run()
+
+    assert result.state.stop_reason is StopReason.INSUFFICIENT_EVIDENCE
+    assert result.failures == ()
+    assert result.state.budget.model_calls == 2
+    assert [request.attempt for request in client.requests] == [1, 2]
+    repair = next(item for item in result.trace.events if item.event_type is TraceEventType.MODEL_RETRY)
+    assert repair.payload["failure_class"] == "INVALID_JSON"
+    assert "model_output_repair" in client.requests[1].observation
 
 
 def test_controller_enforces_round_budget_without_needing_an_extra_model_response(tmp_path: Path) -> None:
@@ -216,7 +235,7 @@ def test_controller_stops_after_frozen_stagnation_threshold(tmp_path: Path) -> N
 
 
 def test_runtime_writes_complete_artifacts_even_for_model_failure(tmp_path: Path) -> None:
-    controller, _ = _controller(tmp_path, ["not-json"])
+    controller, _ = _controller(tmp_path, ["not-json", "still-not-json"])
     result = controller.run()
     output = tmp_path / "run"
 
