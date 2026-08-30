@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "work1_agent_state.schema.json",
+  "title": "Work1 V11 M7 Agent State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "project_id", "repository_identity", "current_round", "budget",
+    "inspected_entity_ids", "executed_tool_call_ids", "evidence_refs", "proposal_ids", "gate_statuses",
+    "active_candidate_path_ids", "failed_hypotheses", "unresolved_questions", "current_exploration_focus",
+    "stop_reason", "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "repository_identity": {"type": "string", "minLength": 1},
+    "current_round": {"type": "integer", "minimum": 0},
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limits", "usage", "remaining", "exhausted"],
+      "properties": {
+        "limits": {"$ref": "#/$defs/nonnegativeIntegerMap"},
+        "usage": {"$ref": "#/$defs/nonnegativeIntegerMap"},
+        "remaining": {"$ref": "#/$defs/nonnegativeIntegerMap"},
+        "exhausted": {"type": "boolean"}
+      }
+    },
+    "inspected_entity_ids": {"$ref": "#/$defs/stringSet"},
+    "executed_tool_call_ids": {"$ref": "#/$defs/stringSet"},
+    "evidence_refs": {"$ref": "#/$defs/stringSet"},
+    "proposal_ids": {"$ref": "#/$defs/stringSet"},
+    "gate_statuses": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+    "active_candidate_path_ids": {"$ref": "#/$defs/stringSet"},
+    "failed_hypotheses": {"type": "array", "items": {"type": "object"}},
+    "unresolved_questions": {"type": "array", "items": {"type": "string"}},
+    "current_exploration_focus": {"type": ["string", "null"]},
+    "stop_reason": {"type": ["string", "null"], "enum": ["PATH_FORMED", "INSUFFICIENT_EVIDENCE", "BUDGET_EXHAUSTED", "NO_FURTHER_ACTION", "TOOL_UNAVAILABLE", "OTHER", null]},
+    "provenance": {"type": "object", "minProperties": 1}
+  },
+  "$defs": {
+    "stringSet": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "nonnegativeIntegerMap": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "integer", "minimum": 0}}
+  }
+}

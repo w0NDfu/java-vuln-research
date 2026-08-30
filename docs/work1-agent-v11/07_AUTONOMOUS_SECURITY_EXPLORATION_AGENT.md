@@ -2,7 +2,7 @@
 
 ## Status
 
-当前仅完成 `M7-0`：Git/worktree 隔离、M1-M5 API inventory 与基线回归。尚未实现 Agent 业务逻辑，尚未运行 controlled Agent smoke 或真实 autonomous kill test。
+当前完成 `M7-0` 与 `M7-1`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约及其回归。尚未接入真实 LLM、工具执行、proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
 
 ## M7-0 Git and worktree isolation
 
@@ -94,3 +94,26 @@ M7 PROPOSE action 必须直接解析为这一正式 `SecurityProposal`，不会�
 接受理由：两端 dirty worktree 已隔离；M7 分支/工作树干净；M1-M5 正式 API 与 schema 已盘点；M2 façade 缺口和 M3 identity/availability 语义已显式记录；本阶段未写 Agent 业务逻辑；local/cloud full regression 均通过。
 
 下一 milestone 只实现 action/state/trace/budget schema、纯 Python contracts 与 deterministic mock tests。
+
+## M7-1 Agent contracts
+
+新增 `work1_agent.agent` 契约层与三份 JSON schema：
+
+- `AgentAction`：固定 allow-list 覆盖 M2、M3、`PROPOSE` 与 `STOP`；action ID 由规范化 payload 稳定散列；`PROPOSE` 直接解析正式 M4 `SecurityProposal`；`STOP` 只接受冻结的 stop reason。
+- `AgentBudgetLimits` / `BudgetTracker`：默认 15 rounds、每轮 4 次工具、总计 40 次工具、10 个 proposals、8 个 admissible、每轮 1 个 proposal；默认值同时是 hard ceiling，超限立即拒绝。
+- `AgentState`：只保存单一 `project_id` 的 inspected/visited entity、工具调用、proposal、admissible proposal、path 和失败历史；序列化前强制规范化排序。
+- `AgentTraceEvent` / `AgentTrace`：project-local、round-local、sequence 连续的 JSONL trace；trace ID 稳定且 replay 时重新验证，拒绝跨项目和序列断裂。
+- schemas：`work1_agent_action.schema.json`、`work1_agent_state.schema.json`、`work1_agent_trace.schema.json`；action schema 通过正式 `security_proposal.schema.json` 引用 M4 proposal。
+
+M7-1 没有引入 LLM SDK、benchmark selection、M6 diagnostic artifacts 或任何 CVE/CWE/patch/location 字段，也没有实现工具 dispatcher，因此该阶段仍是纯 deterministic contracts。
+
+### M7-1 regression evidence
+
+- targeted：`9 passed, 3 skipped`，返回码 0。
+- local full regression：`157 passed, 6 skipped`，返回码 0。
+
+### M7-1 acceptance decision
+
+`PROCEED_M7_2`。
+
+接受理由：action/state/trace/budget 的稳定 round-trip、schema validation、项目隔离、显式 STOP、冻结默认预算与 hard ceiling 均有定向测试；完整回归通过；尚未越过 M7-1 边界接入真实模型或执行工具。

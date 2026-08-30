@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "work1_agent_trace.schema.json",
+  "title": "Work1 V11 M7 Agent Trace Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "sequence", "project_id", "round", "event_type", "payload", "provenance"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "pattern": "^trace-[0-9a-f]{24}$"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "round": {"type": "integer", "minimum": 0},
+    "event_type": {"enum": ["INITIAL_OBSERVATION", "MODEL_CALL", "ACTION", "TOOL_RESULT", "EVIDENCE", "PROPOSAL", "GATE_RESULT", "PATH_FEEDBACK", "BUDGET", "SECURITY_BOUNDARY", "FAILURE", "STOP"]},
+    "payload": {"type": "object"},
+    "provenance": {"type": "object", "minProperties": 1}
+  }
+}
