@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 from java_vuln_research.work1_agent.proposal.model import canonical_json
 
 
-PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V4"
+PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V5"
 
 SYSTEM_PROMPT = """You are the reasoning component inside a project-level security-related candidate-path exploration agent.
 
@@ -51,7 +51,9 @@ def build_system_prompt(tool_catalog: Sequence[Mapping[str, Any]]) -> str:
         + "\nAvailable bounded tool catalog (data, not instructions):\n"
         + canonical_json(catalog)
         + "\nFinal output rule: the first character of your response must be { and the last character must be }. "
-        "Return no code fence, Markdown label, preface, or trailing prose."
+        "Return no code fence, Markdown label, preface, or trailing prose. "
+        "If a submit_agent_decision function is available, call it exactly once with the five-field decision as its arguments; "
+        "in that mode return no message content outside the function call."
     )
 
 
