@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "work1_agent_runtime_input_manifest.schema.json",
+  "title": "Work1 V11 M7 Runtime Input Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_version", "project_id", "repository_identity", "detector_input_frozen", "all_inputs_hashed", "no_leakage_pass", "entries", "violations", "manifest_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "policy_version": {"const": "M7_RUNTIME_BOUNDARY_V1"},
+    "project_id": {"type": "string", "minLength": 1},
+    "repository_identity": {"type": "string", "minLength": 1},
+    "detector_input_frozen": {"const": true},
+    "all_inputs_hashed": {"const": true},
+    "no_leakage_pass": {"type": "boolean"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["logical_name", "input_kind", "resolved_path", "size_bytes", "sha256"],
+        "properties": {
+          "logical_name": {"type": "string", "minLength": 1},
+          "input_kind": {"enum": ["JAVA_SOURCE", "PROGRAM_ENTITY_INDEX", "REPOSITORY_TOOL_ARTIFACT", "CODEQL_TOOL_ARTIFACT", "CODEQL_NATIVE_BASELINE", "M4_ARTIFACT", "M5_ARTIFACT", "AGENT_TRACE", "RUNTIME_CONFIG", "TRUSTED_SCHEMA"]},
+          "resolved_path": {"type": "string", "minLength": 1},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "violations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["allowed", "failure_class", "code", "rule_id", "reason", "requested_path", "resolved_path", "input_kind", "logical_name"],
+        "properties": {
+          "allowed": {"const": false},
+          "failure_class": {"const": "SECURITY_BOUNDARY_VIOLATION"},
+          "code": {"type": "string", "minLength": 1},
+          "rule_id": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1},
+          "requested_path": {"type": "string"},
+          "resolved_path": {"type": ["string", "null"]},
+          "input_kind": {"type": "string", "minLength": 1},
+          "logical_name": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "manifest_id": {"type": "string", "pattern": "^m7input-[0-9a-f]{24}$"}
+  }
+}

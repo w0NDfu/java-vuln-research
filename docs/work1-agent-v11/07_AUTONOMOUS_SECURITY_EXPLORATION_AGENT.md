@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 与 `M7-1`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约及其回归。尚未接入真实 LLM、工具执行、proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
+当前完成 `M7-0`、`M7-1` 与 `M7-2`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约，以及 fail-closed runtime security boundary/no-leakage audit。尚未接入真实 LLM、工具执行、proposal Gate 或 graph，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
 
 ## M7-0 Git and worktree isolation
 
@@ -117,3 +117,42 @@ M7-1 没有引入 LLM SDK、benchmark selection、M6 diagnostic artifacts 或任
 `PROCEED_M7_2`。
 
 接受理由：action/state/trace/budget 的稳定 round-trip、schema validation、项目隔离、显式 STOP、冻结默认预算与 hard ceiling 均有定向测试；完整回归通过；尚未越过 M7-1 边界接入真实模型或执行工具。
+
+## M7-2 Runtime security boundary and no-leakage
+
+新增 `work1_agent.agent.security_boundary` 作为 detector runtime 的唯一文件输入闸门。输入不是因为文件名“看起来安全”就被信任，而是必须同时满足：
+
+- input kind 对应的显式 allowed root confinement；lexical path 与 symlink-resolved path 都接受检查；
+- 目标存在且是 regular file，并满足 128 MiB 单文件 hard ceiling；
+- 路径不命中 M6 diagnostic、benchmark answer/annotation/fix/patch、evaluator answer input、ground-truth 等 denylist；
+- JSON、JSONL、YAML 与 CSV 结构化内容不含 benchmark CWE/CVE/patch/location、mapped callable、root cause、proposal sequence 或 diagnostic metadata；
+- `benchmark_informed` 必须为 false，`allowed_for_agent_runtime` 必须为 true；嵌入在普通字段中的禁止 artifact path 同样拒绝；
+- 每次成功读取都按 logical name、kind、resolved path、byte size 与 SHA-256 登记；同一 logical name 的身份或 hash 改变立即拒绝；
+- detector 结束后 `seal()` 冻结 manifest，冻结后拒绝新增读取；`audit()` 复核每个已登记文件 hash。
+
+Java source 与正式 trusted schema 仍记录路径、大小和 hash，但跳过 benchmark-metadata key 扫描：这避免把源码注释中的 CVE/CWE 字样误判为 evaluator 泄漏，也允许正式 M4 schema 声明 `benchmark_informed=false` 约束。它们不能绕过 root confinement 或 path denylist。
+
+显式 denylist 至少覆盖：
+
+- `m6_killtest/diagnostic_proposals/**`；
+- 任意 basename 为 `diagnostic_analysis.json`；
+- `benchmark_answers`、`benchmark_annotations`、`benchmark_fixes`、`benchmark_patches`、`evaluator_inputs`、`ground_truth` 等 answer 目录；
+- evaluator/benchmark/dataset 上下文中的 annotation/fix/patch/CVE/CWE 目录和 patch/diff 文件；
+- `project_info.csv` 等 evaluator annotation 输入。
+
+拒绝事件带统一 `failure_class=SECURITY_BOUNDARY_VIOLATION`，并保留细分 code、rule ID、requested/resolved path、input kind 与 logical name，可直接写入既有 `SECURITY_BOUNDARY` trace event。新增 `work1_agent_runtime_input_manifest.schema.json`，冻结 manifest 明确记录 `detector_input_frozen`、`all_inputs_hashed`、`no_leakage_pass`、全部 entries、violations 与稳定 manifest ID。
+
+静态 import boundary 也扩展到整个 M7 Agent package：禁止导入 `m6_killtest`、`evaluation` 或 `evaluator`，从 Python dependency graph 层面隔离 detector 与答案侧。
+
+### M7-2 regression evidence
+
+- targeted security boundary + import isolation：`18 passed, 1 skipped`，返回码 0。
+- local full regression：`174 passed, 7 skipped`，返回码 0。
+
+测试覆盖直接/改名/嵌入路径的 M6 diagnostic、JSON/JSONL/YAML/CSV 内容泄漏、benchmark flags、root escape、freeze 后读取、manifest schema、输入 hash、读取后篡改、Java source 非误报和 runtime/evaluator import separation。
+
+### M7-2 acceptance decision
+
+`PROCEED_M7_3`。
+
+接受理由：runtime input 已具备统一 fail-closed entry point、显式 denylist、内容级反伪装检查、逐文件 hash ledger、冻结语义、审计输出与结构化 violation；定向和完整回归通过；M7 runtime 未导入 M6 diagnostic/evaluator，也未接入任何 benchmark artifact。
