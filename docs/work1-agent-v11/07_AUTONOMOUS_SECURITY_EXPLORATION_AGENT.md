@@ -248,6 +248,7 @@ Prompt 不含项目名、case ID、已知 API、恢复答案或 root-cause 表�
 - controller targeted：`5 passed`，返回码 0。
 - M7-1～M7-5 aggregate targeted：`59 passed, 2 warnings`，返回码 0。
 - local full regression：`210 passed, 1 skipped, 3 warnings`，返回码 0。
+- CloudStudio full regression（commit `16db2ee`）：`210 passed, 1 skipped, 3 warnings`，返回码 0，耗时 4.72 秒。
 
 warnings 仍仅为 `jsonschema.RefResolver` 上游 deprecation。
 
@@ -255,4 +256,4 @@ warnings 仍仅为 `jsonschema.RefResolver` 上游 deprecation。
 
 `PROCEED_M7_6`。
 
-接受理由：工具结果确实成为下一轮 observation 的可见反馈；模型失败、预算耗尽、跨项目装配和提前 proposal 均 fail-closed；model/action/tool/budget/stop trace 连续且可 replay；定向和完整回归通过。下一阶段才接正式 M4 proposal 与独立 Evidence Gate，并返回 NEEDS_MORE_EVIDENCE / REJECTED 等 Gate feedback。
+接受理由：工具结果确实成为下一轮 observation 的可见反馈；模型失败、预算耗尽、跨项目装配和提前 proposal 均 fail-closed；model/action/tool/budget/stop trace 连续且可 replay；本地与 CloudStudio 完整回归通过。下一阶段才接正式 M4 proposal 与独立 Evidence Gate，并返回 NEEDS_MORE_EVIDENCE / REJECTED 等 Gate feedback。
