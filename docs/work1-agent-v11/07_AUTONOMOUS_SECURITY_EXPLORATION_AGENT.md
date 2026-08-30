@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 至 `M7-7`，并完成 `M7-8` 的 deterministic controlled smoke/artifact audit。CloudStudio controlled real-LLM smoke 尚未执行：云环境没有配置任何 `M7_LLM_*` 或 `OPENAI_API_KEY` 凭证，因此 M7-8 尚未验收，M7-9 及以后未启动。
+当前完成 `M7-0` 至 `M7-8`。CloudStudio 已同时执行 deterministic controlled smoke 与真实 `claude-opus-5` controlled smoke；真实运行按严格契约 fail-closed，并保留完整 failure manifest。`M7-9` 及以后尚未启动。
 
 ## M7-0 Git and worktree isolation
 
@@ -310,21 +310,24 @@ controller 仅在显式注入正式 `EvidenceGate` 时启用 `PROPOSE`；未注�
 
 接受理由：路径只在 input proposal、effect proposal 和有 EvidenceRef 的中间关系共同存在时形成；native path identity 不变；new path/anchor/truncation feedback 可追踪；显式 PATH_FORMED STOP 与 stagnation/budget STOP 都有测试；本地与 CloudStudio 完整回归通过。下一阶段运行 controlled deterministic mock smoke 与不含 benchmark 答案的 controlled real-LLM smoke，并生成 artifacts/audit。
 
-## M7-8 Controlled smoke and artifacts（进行中）
+## M7-8 Controlled smoke and artifacts（完成）
 
-新增可执行 `run_work1_v11_m7_controlled.sh`、controlled runner 与统一 runtime artifact writer。deterministic mock 使用非 benchmark 合成 fixture，完成 3 轮：ADMISSIBLE input proposal → ADMISSIBLE effect proposal → 形成 1 条有 structural EvidenceRef 中间边的 hybrid path → 显式 `STOP(PATH_FORMED)`。
+新增可执行 `run_work1_v11_m7_controlled.sh`、controlled runner 与统一 runtime artifact writer。deterministic mock 使用独立的非 benchmark 合成 fixture，且不预载 EvidenceRef、proposal 或 graph edge。Agent 完成 `SEARCH_SYMBOLS → INSPECT_METHOD → EXTERNAL_INPUT → LIBRARY_FLOW → SECURITY_EFFECT → STOP(PATH_FORMED)`：2 次工具调用产生模型可见 EvidenceRef，3 个 proposal 全部经正式 Gate 判为 ADMISSIBLE，随后形成 1 条 hybrid candidate path。
 
-CloudStudio 权威输出位于 `/workspace/experiment-output/artifacts/work1-agent-v11/m7_agent/CONTROLLED/`，包含 `agent_trace.jsonl`、model/tool calls、EvidenceRef、proposals、Gate results、graph nodes/edges、candidate paths、path diagnostics、summary、manifest 和 artifact audit。模型失败测试也验证同一文件契约仍完整生成 failure manifest。input manifest 对 controlled Java source 逐文件登记 hash，`no_leakage_pass=true`。
+CloudStudio 权威输出位于 `/workspace/experiment-output/artifacts/work1-agent-v11/m7_agent/CONTROLLED/` 与 `CONTROLLED_REAL_LLM/`，包含 `agent_trace.jsonl`、model/tool calls、EvidenceRef、proposals、Gate results、graph nodes/edges、candidate paths、path diagnostics、summary、manifest 和 artifact audit。失败尝试保留于 `CONTROLLED_REAL_LLM_ATTEMPTS/`。input manifest 对 controlled Java source 逐文件登记 hash，所有最终运行均为 `no_leakage_pass=true`；secret 只以 `api_key_present=true` 记录，值不进入 artifact、trace 或 Git。
+
+真实模型接入使用显式 exact endpoint，不由客户端拼接 URL。兼容性验证结果：`claude-opus-5` 可用并返回 HTTP 200；`claude-opus-5[1M]` 在当前路由没有可用 channel。客户端支持 OpenAI Chat Completions 与 Anthropic Messages 两种协议、JSON object 与强制 tool-call 两种结构化传输，并对同轮结构错误提供最多 1 次有 `MODEL_RETRY` trace 的修复请求。parser 始终只接受 bare JSON 且继续执行完整 decision/proposal schema、实体、EvidenceRef、scope 与预算校验；没有代码围栏剥离或自然语言 fallback。
 
 ### M7-8 current evidence
 
-- artifact writer + controlled integration targeted：`8 passed`，返回码 0。
-- local full regression：`219 passed, 1 skipped, 3 warnings`，返回码 0。
-- CloudStudio deterministic controlled smoke（commit `f4eaccd`）：2 proposals、2 ADMISSIBLE、1 candidate path、3 model calls、`PATH_FORMED`、artifact audit pass、no-leakage pass。
-- CloudStudio full regression（commit `f4eaccd`）：`220 passed, 1 skipped, 3 warnings`，返回码 0，耗时 5.31 秒。
+- deterministic controlled smoke：2 tool calls、3 proposals、3 ADMISSIBLE、1 candidate path、6 rounds/model calls、`PATH_FORMED`、artifact audit pass、no-leakage pass。
+- real-LLM controlled smoke（commit `464e64f`，OpenAI exact endpoint、`claude-opus-5`、temperature 0、seed omitted）：4 rounds、6 model calls（含 bounded repair）、2 repository tool calls、1 proposal、1 ADMISSIBLE；随后两次连续非 bare JSON，最终 `INVALID_JSON` + `STOP(OTHER)`，0 candidate path。failure manifest、artifact audit 与 no-leakage audit 均完整且通过。
+- 原生 Anthropic `tool_use` 与 OpenAI `tool_calls` 的小请求均返回 HTTP 200；但完整长提示下网关会随机忽略强制 tool choice 并回退 text，因此该通道不作为成功路径证据，只作为明确的 provider compatibility 风险记录。
+- local full regression（commit `464e64f`）：`227 passed, 1 skipped, 3 warnings`，返回码 0，耗时 9.77 秒。
+- CloudStudio full regression（commit `464e64f`）：`227 passed, 1 skipped, 3 warnings`，返回码 0，耗时 5.07 秒。
 
-### M7-8 blocking condition
+### M7-8 acceptance decision
 
-CloudStudio presence-only 检查结果：`M7_LLM_PROVIDER=false`、`M7_LLM_MODEL=false`、`M7_LLM_BASE_URL=false`、`M7_LLM_API_KEY=false`、`OPENAI_API_KEY=false`。检查没有打印、读取或落盘任何 secret 内容。
+`PROCEED_M7_9_WITH_MODEL_OUTPUT_RISK`。
 
-因此当前决策为 `BLOCKED_M7_8_REAL_LLM_CONFIGURATION`，不是 `PROCEED_M7_9`。缺失的是外部模型 endpoint/model/API key 授权信息，无法通过安装软件补齐；在 controlled real-LLM smoke 完成前不会冻结 kill-test manifest，也不会启动真实 benchmark。
+接受理由：真实 endpoint/model/auth 已验证；deterministic 闭环证明 tool→EvidenceRef→proposal→Gate→graph/path 的完整机制；真实模型确实自主执行工具并产生一个 ADMISSIBLE proposal；非法输出没有进入 Evidence Graph；失败仍生成完整可审计 artifacts；no-leakage 与完整回归均通过。M7 不预设模型一定成功，因此 provider 输出不稳定作为冻结前风险进入 M7-9 manifest，而不是通过放宽 parser、增加项目特例或查看 benchmark 答案来“调到成功”。
