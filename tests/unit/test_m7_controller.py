@@ -193,3 +193,21 @@ def test_controller_rejects_cross_project_components(tmp_path: Path) -> None:
         assert "cross-project" in str(error)
     else:
         raise AssertionError("cross-project controller components must be rejected")
+
+
+def test_controller_stops_after_frozen_stagnation_threshold(tmp_path: Path) -> None:
+    controller, client = _controller(
+        tmp_path,
+        [
+            _decision(ActionType.SEARCH_CODE, arguments={"query": "definitely-absent-1"}),
+            _decision(ActionType.SEARCH_CODE, arguments={"query": "definitely-absent-2"}),
+            _decision(ActionType.SEARCH_CODE, arguments={"query": "definitely-absent-3"}),
+        ],
+    )
+
+    result = controller.run()
+
+    assert result.state.stop_reason is StopReason.NO_FURTHER_ACTION
+    assert len(client.requests) == 3
+    assert result.state.budget.tool_calls_total == 3
+    assert result.trace.events[-1].payload["details"] == {"stagnant_rounds": 3, "threshold": 3}

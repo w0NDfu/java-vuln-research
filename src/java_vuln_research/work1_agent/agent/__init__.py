@@ -4,6 +4,7 @@ from .actions import AgentAction, ActionType, StopReason
 from .budget import AgentBudgetLimits, BudgetExceeded, BudgetTracker
 from .controller import AgentController, AgentControllerFailure, AgentControllerResult
 from .feedback import AgentGateFeedback, build_gate_feedback, evidence_from_tool_result
+from .graph_adapter import AgentGraphPathAdapter, AgentGraphPathResult, AgentGraphRelation
 from .llm_client import (
     LLMClient,
     LLMClientConfig,
@@ -38,6 +39,9 @@ __all__ = [
     "AgentControllerFailure",
     "AgentControllerResult",
     "AgentGateFeedback",
+    "AgentGraphPathAdapter",
+    "AgentGraphPathResult",
+    "AgentGraphRelation",
     "AgentState",
     "AgentObservation",
     "AgentToolResult",

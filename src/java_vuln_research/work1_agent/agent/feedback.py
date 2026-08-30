@@ -84,7 +84,7 @@ def evidence_from_tool_result(
     evidence: list[EvidenceRef] = []
     for position, item in enumerate(result.items):
         ids: set[str] = set()
-        _entity_ids(item, known, ids)
+        _entity_ids({"item": item, "arguments": result.provenance.get("arguments", {})}, known, ids)
         path, start, end = _location(item)
         if not ids and path is not None and start is not None and end is not None:
             ids.update(
@@ -158,6 +158,9 @@ def build_gate_feedback(
     candidate_path_ids_after: Sequence[str],
     tool_results: Sequence[AgentToolResult],
     budget: BudgetTracker,
+    new_connected_anchors: Sequence[Mapping[str, Any]] = (),
+    path_truncated: bool = False,
+    graph_update_enabled: bool = False,
 ) -> AgentGateFeedback:
     before = set(candidate_path_ids_before)
     after = set(candidate_path_ids_after)
@@ -181,14 +184,14 @@ def build_gate_feedback(
         "candidate_path_count_before": len(before),
         "candidate_path_count_after": len(after),
         "new_path_ids": sorted(after - before),
-        "new_connected_anchors": [],
+        "new_connected_anchors": [dict(item) for item in new_connected_anchors],
         "unresolved_semantics": sorted(set(result.missing_evidence + result.rejection_reasons)),
         "search_truncated": any(item.truncated for item in tool_results[-10:]),
-        "path_truncated": False,
+        "path_truncated": bool(path_truncated),
         "tool_availability_or_error": tool_errors,
         "remaining_budget": dict(budget.to_dict()["remaining"]),
         "gate_result": result.to_dict(),
-        "graph_update_enabled": False,
+        "graph_update_enabled": bool(graph_update_enabled),
     }
     identity = {"project_id": project_id, "round": round, "payload": payload}
     return AgentGateFeedback(stable_digest("gatefeedback", identity), project_id, round, payload)

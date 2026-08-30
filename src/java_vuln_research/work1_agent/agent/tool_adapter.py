@@ -260,5 +260,10 @@ class RepositoryCodeQLToolAdapter:
             truncated,
             warnings,
             failure,
-            {"bounded": True, "repository_first": True, "codeql_unavailable_is_not_absence": True},
+            {
+                "bounded": True,
+                "repository_first": True,
+                "codeql_unavailable_is_not_absence": True,
+                "arguments": dict(arguments),
+            },
         )

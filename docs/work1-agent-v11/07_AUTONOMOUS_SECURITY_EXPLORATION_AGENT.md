@@ -2,7 +2,7 @@
 
 ## Status
 
-当前完成 `M7-0` 至 `M7-6`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit、provider-neutral LLM client、冻结 prompt/严格 structured parser、repository-first observation、全量 M2/M3 工具适配、tool → observation controller，以及正式 M4 proposal/Evidence Gate 反馈闭环。尚未接入 M5 graph/path，也尚未运行 controlled Agent smoke 或真实 autonomous kill test。
+当前完成 `M7-0` 至 `M7-7`：Git/worktree 隔离、M1-M5 API inventory、Agent action/state/trace/budget 稳定契约、fail-closed runtime security boundary/no-leakage audit、provider-neutral LLM client、冻结 prompt/严格 structured parser、repository-first observation、全量 M2/M3 工具适配、tool → observation controller、正式 M4 proposal/Evidence Gate，以及 M5 graph/path/stopping 反馈闭环。尚未运行 controlled Agent smoke 或真实 autonomous kill test。
 
 ## M7-0 Git and worktree isolation
 
@@ -286,3 +286,25 @@ controller 仅在显式注入正式 `EvidenceGate` 时启用 `PROPOSE`；未注�
 `PROCEED_M7_7`。
 
 接受理由：已真实验证 NEEDS_MORE_EVIDENCE → repository tool → 新 EvidenceRef → 同一 proposal 补强 → ADMISSIBLE；REJECTED proposal 不进入 active proposal 或 graph；CodeQL unavailable 不生成否定证据；Gate feedback 字段完整并进入下一轮 observation；本地与 CloudStudio 完整回归通过。下一阶段接 M5 graph/path、path feedback、停止条件和防候选爆炸预算，不改变 Gate admission 标准。
+
+## M7-7 M5 graph/path feedback, stopping, and explosion controls
+
+新增 `AgentGraphPathAdapter`，直接复用 M5 `HybridEvidenceGraphBuilder`、`BoundedPathBuilder` 和冻结 `SearchLimits`：默认 max depth 12、每 anchor pair 最多 20 paths、最多展开 2000 nodes，hard ceiling 仍是 20/20/10000。native CandidatePath schema-v2 通过原 `NativePathAdapter` 原样保留，Agent augmentation 只做加法。
+
+图的中间关系不能由 controller 猜测。`AgentGraphRelation` 只接受两类显式输入：带匹配 CodeQL EvidenceRef/tool-call 的 `DETERMINISTIC_FACT`，或带覆盖两端实体 EvidenceRef 的 M2 `STRUCTURAL_EVIDENCE`；semantic proposal edge 仍只能由 ADMISSIBLE M4 proposal 产生。没有已验证中间边时，input/effect anchors 保持断开，绝不为了形成路径硬连。
+
+每次新 ADMISSIBLE proposal 触发 bounded graph rebuild/path search。controller 对比 before/after path IDs，写入 PATH_FEEDBACK trace，并把 new path IDs、connected input/effect anchors、search truncation、nodes expanded、cycle prevention、dedupe 和 no-path pair 反馈给下一轮 observation。形成路径不会自动宣告漏洞或自动结束；受控回归验证模型随后显式 `STOP(PATH_FORMED)`。
+
+停止/防爆策略现在覆盖：冻结 round/tool/proposal/admissible budgets；模型显式 STOP；budget exhausted；以及连续 3 轮没有新 EvidenceRef、新 ADMISSIBLE proposal 或新 path 时 `NO_FURTHER_ACTION`。stagnation 阈值有 1～10 hard bound，默认 3；不会改变 Gate 或 M5 path limit。
+
+### M7-7 regression evidence
+
+- controller graph/path + Gate feedback targeted：`12 passed`，返回码 0。
+- M7-7 + existing M5 regression targeted：`42 passed, 1 warning`，返回码 0。
+- local full regression：`218 passed, 1 skipped, 3 warnings`，返回码 0。
+
+### M7-7 acceptance decision
+
+`PROCEED_M7_8`。
+
+接受理由：路径只在 input proposal、effect proposal 和有 EvidenceRef 的中间关系共同存在时形成；native path identity 不变；new path/anchor/truncation feedback 可追踪；显式 PATH_FORMED STOP 与 stagnation/budget STOP 都有测试；完整回归通过。下一阶段运行 controlled deterministic mock smoke 与不含 benchmark 答案的 controlled real-LLM smoke，并生成 artifacts/audit。

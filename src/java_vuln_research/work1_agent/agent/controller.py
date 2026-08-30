@@ -1,7 +1,7 @@
 """M7 project-local controller.
 
-M7-5 intentionally supports only the model -> bounded tool -> next observation
-loop.  Proposal, Gate, and path handling are added by later milestones.
+The same controller is feature-gated by injected deterministic components:
+tool-only, Evidence Gate, then bounded graph/path feedback.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from java_vuln_research.work1_agent.repository.indexer import RepositoryIndex
 from .actions import TOOL_ACTIONS, ActionType, StopReason
 from .budget import BudgetExceeded
 from .feedback import AgentGateFeedback, build_gate_feedback, evidence_from_tool_result
+from .graph_adapter import AgentGraphPathAdapter, AgentGraphPathResult
 from .llm_client import LLMClient, LLMRequest, ModelCallError
 from .observation import AgentObservation, bounded_tool_catalog, build_repository_first_observation
 from .parser import StrictActionParser
@@ -54,6 +55,7 @@ class AgentControllerResult:
     proposals: tuple[SecurityProposal, ...]
     gate_results: tuple[EvidenceGateResult, ...]
     gate_feedback: tuple[AgentGateFeedback, ...]
+    graph_results: tuple[AgentGraphPathResult, ...]
     failures: tuple[AgentControllerFailure, ...]
     proposal_handling_enabled: bool
 
@@ -86,7 +88,9 @@ class AgentController:
         parser: StrictActionParser,
         tool_adapter: RepositoryCodeQLToolAdapter,
         evidence_gate: EvidenceGate | None = None,
+        graph_path_adapter: AgentGraphPathAdapter | None = None,
         native_baseline_summary: Mapping[str, Any] | None = None,
+        max_stagnant_rounds: int = 3,
     ) -> None:
         if state.project_id != tool_adapter.project_id:
             raise ValueError("controller components are cross-project")
@@ -103,6 +107,16 @@ class AgentController:
         self.evidence_gate = evidence_gate
         if evidence_gate is not None and evidence_gate.repository_root != repository_index.repository_root.resolve():
             raise ValueError("controller and Evidence Gate repository roots differ")
+        if graph_path_adapter is not None:
+            if evidence_gate is None or graph_path_adapter.evidence_gate is not evidence_gate:
+                raise ValueError("graph adapter must share the controller Evidence Gate")
+            if graph_path_adapter.project_id != state.project_id:
+                raise ValueError("graph adapter is cross-project")
+        if not 1 <= int(max_stagnant_rounds) <= 10:
+            raise ValueError("max_stagnant_rounds must be between 1 and 10")
+        self.graph_path_adapter = graph_path_adapter
+        self.max_stagnant_rounds = int(max_stagnant_rounds)
+        self.stagnant_rounds = 0
         self.native_baseline_summary = dict(native_baseline_summary or {})
         self.trace = AgentTrace(state.project_id)
         self.observations: list[AgentObservation] = []
@@ -110,6 +124,7 @@ class AgentController:
         self.proposals: list[SecurityProposal] = []
         self.gate_results: list[EvidenceGateResult] = []
         self.gate_feedback: list[AgentGateFeedback] = []
+        self.graph_results: list[AgentGraphPathResult] = []
         self.admissible_proposals: dict[str, SecurityProposal] = {}
         self.failures: list[AgentControllerFailure] = []
         self.recent_feedback: list[Mapping[str, Any]] = []
@@ -149,9 +164,20 @@ class AgentController:
             tuple(self.proposals),
             tuple(self.gate_results),
             tuple(self.gate_feedback),
+            tuple(self.graph_results),
             tuple(self.failures),
             self.evidence_gate is not None,
         )
+
+    def _record_progress(self, progress: bool) -> bool:
+        self.stagnant_rounds = 0 if progress else self.stagnant_rounds + 1
+        if self.stagnant_rounds < self.max_stagnant_rounds:
+            return False
+        self._stop(
+            StopReason.NO_FURTHER_ACTION,
+            details={"stagnant_rounds": self.stagnant_rounds, "threshold": self.max_stagnant_rounds},
+        )
+        return True
 
     def run(self) -> AgentControllerResult:
         known_entities = {item.entity_id for item in self.repository_index.entities}
@@ -233,7 +259,8 @@ class AgentController:
                     self.state.budget.record_proposal()
                     paths_before = tuple(self.state.active_candidate_path_ids)
                     gate_result = self.evidence_gate.evaluate(proposal)
-                    if gate_result.status is GateStatus.ADMISSIBLE and proposal.proposal_id not in self.admissible_proposals:
+                    new_admissible = gate_result.status is GateStatus.ADMISSIBLE and proposal.proposal_id not in self.admissible_proposals
+                    if new_admissible:
                         self.state.budget.record_admissible_proposal()
                         self.admissible_proposals[proposal.proposal_id] = proposal
                 except (BudgetExceeded, OSError, UnicodeError, ValueError) as exc:
@@ -255,6 +282,34 @@ class AgentController:
                     gate_status=gate_result.status.value,
                 )
                 self._append(TraceEventType.PROPOSAL, proposal.to_dict())
+                connected_anchors: list[Mapping[str, Any]] = []
+                path_truncated = False
+                if new_admissible and self.graph_path_adapter is not None:
+                    graph_result = self.graph_path_adapter.rebuild(
+                        proposals=tuple(self.admissible_proposals.values()),
+                        gate_results=tuple(self.gate_results),
+                    )
+                    self.graph_results.append(graph_result)
+                    self.state.active_candidate_path_ids.update(graph_result.candidate_path_ids)
+                    new_ids = set(graph_result.candidate_path_ids) - set(paths_before)
+                    for path in graph_result.path_search.hybrid_paths:
+                        if path.candidate_path_id in new_ids:
+                            connected_anchors.append(
+                                {
+                                    "candidate_path_id": path.candidate_path_id,
+                                    "input_anchor": dict(path.input_anchor),
+                                    "effect_anchor": dict(path.effect_anchor),
+                                }
+                            )
+                    path_truncated = graph_result.path_search.search_truncation_count > 0
+                    self._append(
+                        TraceEventType.PATH_FEEDBACK,
+                        {
+                            **graph_result.summary(),
+                            "new_path_ids": sorted(new_ids),
+                            "new_connected_anchors": connected_anchors,
+                        },
+                    )
                 feedback = build_gate_feedback(
                     project_id=self.state.project_id,
                     round=self.state.current_round,
@@ -264,11 +319,16 @@ class AgentController:
                     candidate_path_ids_after=tuple(self.state.active_candidate_path_ids),
                     tool_results=self.tool_results,
                     budget=self.state.budget,
+                    new_connected_anchors=connected_anchors,
+                    path_truncated=path_truncated,
+                    graph_update_enabled=self.graph_path_adapter is not None and new_admissible,
                 )
                 self.gate_feedback.append(feedback)
                 self.recent_feedback.append(feedback.to_dict())
                 self._append(TraceEventType.GATE_RESULT, feedback.to_dict())
                 self._append(TraceEventType.BUDGET, self.state.budget.to_dict())
+                if self._record_progress(new_admissible or bool(set(self.state.active_candidate_path_ids) - set(paths_before))):
+                    break
                 continue
             if action.action_type is ActionType.STOP:
                 self._stop(action.stop_reason or StopReason.OTHER, details={"action_id": action.action_id})
@@ -311,6 +371,7 @@ class AgentController:
                 entity_ids=entity_ids,
             )
             self.tool_results.append(tool_result)
+            prior_evidence_count = len(self.state.evidence_refs)
             tool_evidence = evidence_from_tool_result(tool_result, self.repository_index)
             for evidence in tool_evidence:
                 self.state.record_evidence(evidence.evidence_id, project_id=self.state.project_id)
@@ -324,5 +385,7 @@ class AgentController:
             self.recent_feedback.append(feedback)
             self._append(TraceEventType.TOOL_RESULT, feedback)
             self._append(TraceEventType.BUDGET, self.state.budget.to_dict())
+            if self._record_progress(len(self.state.evidence_refs) > prior_evidence_count):
+                break
 
         return self._result()
