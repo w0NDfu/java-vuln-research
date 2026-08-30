@@ -13,6 +13,7 @@ from java_vuln_research.work1_agent.hybrid_graph.path import SearchLimits
 from java_vuln_research.work1_agent.proposal.model import canonical_json, stable_digest
 
 from .budget import AgentBudgetLimits
+from .controller import CONTROLLER_VERSION
 from .llm_client import LLMClientConfig
 from .observation import bounded_tool_catalog
 from .prompt import PROMPT_VERSION, build_system_prompt, prompt_sha256
@@ -105,6 +106,9 @@ def freeze_killtest_manifest(
         for name, root in sorted(component_roots.items())
     }
     baseline_identity = _tree_identity(Path(baseline_root).resolve())
+    baseline_manifest_path = Path(baseline_root).resolve() / "run_manifest.json"
+    baseline_manifest = json.loads(baseline_manifest_path.read_text(encoding="utf-8")) if baseline_manifest_path.is_file() else {}
+    baseline_identity["codeql_version"] = baseline_manifest.get("codeql_version") or baseline_manifest.get("CodeQL_version") or "UNKNOWN"
     projects: list[dict[str, Any]] = []
     for selected_row in selected:
         project_id = str(selected_row["project_id"])
@@ -156,6 +160,11 @@ def freeze_killtest_manifest(
         "schemas": _schema_hashes(schemas),
         "tool_catalog_sha256": hashlib.sha256(canonical_json(bounded_tool_catalog()).encode("utf-8")).hexdigest(),
         "budget": limits.to_dict(),
+        "controller": {
+            "version": CONTROLLER_VERSION,
+            "max_stagnant_rounds": 3,
+            "max_model_output_retries": 1,
+        },
         "path_bounds": {
             "max_depth": path_limits.max_depth,
             "max_paths": path_limits.max_paths,
@@ -218,6 +227,10 @@ def freeze_killtest_manifest(
     _write_json(output / "detector_manifest.json", detector_manifest)
     _write_json(output / "selection_manifest.json", selection_manifest)
     _write_json(output / "no_leakage_audit.json", audit)
+    artifact_hashes = {
+        name: _sha256(output / name)
+        for name in ("detector_manifest.json", "selection_manifest.json", "no_leakage_audit.json")
+    }
     aggregate = {
         "schema_version": 1,
         "detector_manifest_id": detector_manifest["manifest_id"],
@@ -226,6 +239,7 @@ def freeze_killtest_manifest(
         "detector_input_frozen": True,
         "no_leakage_pass": audit["no_leakage_pass"],
         "killtest_started": False,
+        "artifact_hashes": artifact_hashes,
     }
     _write_json(output / "manifest.json", aggregate)
     return aggregate
