@@ -245,27 +245,11 @@ class OpenAICompatibleLLMClient:
                     "function": {
                         "name": "submit_agent_decision",
                         "description": "Submit exactly one structured M7 agent decision.",
-                        "parameters": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["action_type", "arguments", "proposal", "stop_reason", "reason"],
-                            "properties": {
-                                "action_type": {
-                                    "enum": [
-                                        "SEARCH_CODE", "SEARCH_SYMBOLS", "INSPECT_METHOD", "INSPECT_TYPE", "READ_FILE_RANGE",
-                                        "GET_CALLERS", "GET_CALLEES", "GET_IMPLEMENTATIONS", "GET_OVERRIDES", "GET_FIELDS", "GET_ANNOTATIONS",
-                                        "CODEQL_ENTITY_FACTS", "CODEQL_CALLERS", "CODEQL_CALLEES", "CODEQL_LOCAL_FLOW",
-                                        "CODEQL_DATAFLOW_NEIGHBORS", "CODEQL_CFG_NEIGHBORS", "PROPOSE", "STOP",
-                                    ]
-                                },
-                                "arguments": {"type": "object"},
-                                "proposal": {"type": ["object", "null"]},
-                                "stop_reason": {
-                                    "enum": ["PATH_FORMED", "INSUFFICIENT_EVIDENCE", "BUDGET_EXHAUSTED", "NO_FURTHER_ACTION", "TOOL_UNAVAILABLE", "OTHER", None]
-                                },
-                                "reason": {"type": "string"},
-                            },
-                        },
+                        # Some OpenAI-compatible gateways silently discard tools
+                        # with complex schemas. The function is only a transport
+                        # envelope; StrictActionParser remains the authoritative
+                        # full decision/proposal schema validator.
+                        "parameters": {"type": "object"},
                     },
                 }
             ]

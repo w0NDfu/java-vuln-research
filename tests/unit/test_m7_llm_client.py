@@ -164,7 +164,7 @@ def test_tool_call_mode_forces_and_reads_one_structured_decision(tool_arguments:
     body = captured["body"]
     assert "response_format" not in body
     assert body["tool_choice"]["function"]["name"] == "submit_agent_decision"
-    assert body["tools"][0]["function"]["parameters"]["additionalProperties"] is False
+    assert body["tools"][0]["function"]["parameters"] == {"type": "object"}
     assert json.loads(response.raw_text) == _stop()
 
 
