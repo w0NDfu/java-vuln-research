@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "work1_agent_killtest_detector_manifest.schema.json",
+  "title": "Work1 V11 M7 frozen autonomous kill-test detector manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "manifest_id", "run_kind", "git_sha", "selection_count", "projects",
+    "model", "prompt", "schemas", "tool_catalog_sha256", "budget", "path_bounds",
+    "component_lineage", "baseline_lineage", "detector_input_frozen", "benchmark_informed",
+    "selection_manifest_allowed_for_agent_runtime", "m6_diagnostic_allowed_for_agent_runtime",
+    "evaluator_allowed_during_detector_run"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "manifest_id": {"type": "string", "pattern": "^m7detector-[0-9a-f]{24}$"},
+    "run_kind": {"const": "M7_AUTONOMOUS_KILLTEST_DETECTOR_INPUT"},
+    "git_sha": {"type": "string", "minLength": 1},
+    "selection_count": {"const": 10},
+    "projects": {
+      "type": "array", "minItems": 10, "maxItems": 10,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["project_id", "project_name", "repository_root", "repository_revision", "source_ready", "codeql_db_path", "codeql_db_ready", "codeql_db_identity", "native_baseline", "benchmark_informed"],
+        "properties": {
+          "project_id": {"type": "string", "minLength": 1},
+          "project_name": {"type": "string", "minLength": 1},
+          "repository_root": {"type": "string", "minLength": 1},
+          "repository_revision": {"type": "string", "minLength": 1},
+          "source_ready": {"const": true},
+          "codeql_db_path": {"type": "string"},
+          "codeql_db_ready": {"type": "boolean"},
+          "codeql_db_identity": {"type": "object"},
+          "native_baseline": {"type": "object"},
+          "benchmark_informed": {"const": false}
+        }
+      }
+    },
+    "model": {"type": "object"},
+    "prompt": {"type": "object"},
+    "schemas": {"type": "object"},
+    "tool_catalog_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "budget": {"type": "object"},
+    "path_bounds": {"type": "object"},
+    "component_lineage": {"type": "object"},
+    "baseline_lineage": {"type": "object"},
+    "detector_input_frozen": {"const": true},
+    "benchmark_informed": {"const": false},
+    "selection_manifest_allowed_for_agent_runtime": {"const": false},
+    "m6_diagnostic_allowed_for_agent_runtime": {"const": false},
+    "evaluator_allowed_during_detector_run": {"const": false}
+  }
+}
