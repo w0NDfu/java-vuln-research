@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .contracts import FailureReason
-from .io import read_jsonl, write_jsonl
+from .io import read_jsonl, sha256_file, write_json, write_jsonl
 
 
 def _parameter_count(signature: str) -> int:
@@ -52,6 +52,19 @@ def build_hints(compact_fix_jsonl: str | Path, output_jsonl: str | Path) -> list
     rows = [_hint(row) for row in read_jsonl(compact_fix_jsonl)]
     rows.sort(key=lambda item: (item["project_id"], item["case_id"]))
     write_jsonl(output_jsonl, rows)
+    write_json(
+        Path(output_jsonl).parent / "manifest.json",
+        {
+            "schema_version": 1,
+            "producer": "WORK1_V11_M6_DIAGNOSTIC_HINT_BUILDER_V1",
+            "source_path": str(Path(compact_fix_jsonl).resolve()),
+            "source_hash": sha256_file(compact_fix_jsonl),
+            "hint_count": len(rows),
+            "benchmark_informed": True,
+            "allowed_for_agent_runtime": False,
+            "eligible_for_detection_metric": False,
+        },
+    )
     return rows
 
 

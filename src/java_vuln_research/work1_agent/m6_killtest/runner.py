@@ -163,6 +163,9 @@ def run_killtest(
                 output_root=case_root,
             )
             proposal_rows = read_jsonl(case_root / "proposals.jsonl")
+            diagnostic_proposal_root = root / "diagnostic_proposals"
+            diagnostic_proposal_root.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(case_root / "proposals.jsonl", diagnostic_proposal_root / f"{_case_key(project_id, case_id)}.proposals.jsonl")
             evaluation_annotation = {**hint, "mapped_entity_id": analysis["mapped_callable"]["entity_id"]}
             if len(proposal_rows) > M6_PROPOSAL_BUDGET:
                 raise ValueError("proposal budget exceeded")
@@ -334,7 +337,18 @@ def run_killtest(
             failures.append(failure)
             case_results.append(failure)
             for name, value in (
-                ("diagnostic_analysis.json", {"status": "FAILED", **failure}),
+                (
+                    "diagnostic_analysis.json",
+                    {
+                        "status": "FAILED",
+                        "proposal_origin": "BENCHMARK_INFORMED_DIAGNOSTIC",
+                        "benchmark_informed": True,
+                        "allowed_for_agent_runtime": False,
+                        "eligible_for_detection_metric": False,
+                        "diagnostic_cause": "UNCERTAIN",
+                        **failure,
+                    },
+                ),
                 ("evaluation.json", {"mechanism_recovered": False, **failure}),
                 ("counterfactual.json", {"not_run": True, **failure}),
                 ("minimality.json", {"not_run": True, **failure}),
@@ -345,7 +359,36 @@ def run_killtest(
             for name in ("proposals.jsonl", "gate_results.jsonl", "graph_nodes.jsonl", "graph_edges.jsonl", "candidate_paths.jsonl"):
                 if not (case_root / name).exists():
                     write_jsonl(case_root / name, [])
-            write_json(case_root / "case_manifest.json", {"schema_version": 1, **failure, "artifact_hashes": artifact_hashes(case_root, tuple(path.name for path in case_root.iterdir() if path.is_file()))})
+            diagnostic_proposal_root = root / "diagnostic_proposals"
+            diagnostic_proposal_root.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(case_root / "proposals.jsonl", diagnostic_proposal_root / f"{_case_key(project_id, case_id)}.proposals.jsonl")
+            write_json(
+                case_root / "case_manifest.json",
+                {
+                    "schema_version": 1,
+                    "project_id": project_id,
+                    "case_id": case_id,
+                    "selection_rank": row["selection_rank"],
+                    "git_sha": git_sha,
+                    "project_revision": baseline["source_revision"],
+                    "codeql_version": baseline["codeql_version"],
+                    "codeql_db_identity": baseline["codeql_db_identity"],
+                    "bound_schema_versions": {
+                        "M1_ProgramEntity": 1,
+                        "M2_RepositoryTools": 1,
+                        "M3_CodeQLTools": 1,
+                        "M4_SecurityProposal": 1,
+                        "M4_EvidenceGate": "WORK1_V11_M4_EVIDENCE_GATE_V1",
+                        "M5_HybridEvidenceGraph": 1,
+                        "M5_HybridCandidatePath": 1,
+                        "LegacyCandidatePath": 2,
+                    },
+                    "e0_frozen_before_proposals": True,
+                    "detector_evaluator_separation": True,
+                    **failure,
+                    "artifact_hashes": artifact_hashes(case_root, tuple(path.name for path in case_root.iterdir() if path.is_file())),
+                },
+            )
     write_csv(root / "case_results.csv", case_results)
     write_jsonl(root / "proposal_results.jsonl", proposal_results)
     write_jsonl(root / "recovery_paths.jsonl", recovery_paths)
