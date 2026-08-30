@@ -302,9 +302,10 @@ controller 仅在显式注入正式 `EvidenceGate` 时启用 `PROPOSE`；未注�
 - controller graph/path + Gate feedback targeted：`12 passed`，返回码 0。
 - M7-7 + existing M5 regression targeted：`42 passed, 1 warning`，返回码 0。
 - local full regression：`218 passed, 1 skipped, 3 warnings`，返回码 0。
+- CloudStudio full regression（commit `64a37bc`）：`218 passed, 1 skipped, 3 warnings`，返回码 0，耗时 4.94 秒。
 
 ### M7-7 acceptance decision
 
 `PROCEED_M7_8`。
 
-接受理由：路径只在 input proposal、effect proposal 和有 EvidenceRef 的中间关系共同存在时形成；native path identity 不变；new path/anchor/truncation feedback 可追踪；显式 PATH_FORMED STOP 与 stagnation/budget STOP 都有测试；完整回归通过。下一阶段运行 controlled deterministic mock smoke 与不含 benchmark 答案的 controlled real-LLM smoke，并生成 artifacts/audit。
+接受理由：路径只在 input proposal、effect proposal 和有 EvidenceRef 的中间关系共同存在时形成；native path identity 不变；new path/anchor/truncation feedback 可追踪；显式 PATH_FORMED STOP 与 stagnation/budget STOP 都有测试；本地与 CloudStudio 完整回归通过。下一阶段运行 controlled deterministic mock smoke 与不含 benchmark 答案的 controlled real-LLM smoke，并生成 artifacts/audit。
