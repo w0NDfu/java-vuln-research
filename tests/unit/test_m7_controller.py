@@ -8,12 +8,14 @@ from java_vuln_research.work1_agent.agent import (
     AgentController,
     AgentState,
     MockLLMClient,
+    PROJECT_ARTIFACT_FILES,
     RepositoryCodeQLToolAdapter,
     RuntimeSecurityBoundary,
     StopReason,
     StrictActionParser,
     TraceEventType,
     runtime_roots,
+    write_controller_artifacts,
 )
 from java_vuln_research.work1_agent.repository.entity import ProgramEntityKind
 from java_vuln_research.work1_agent.repository.indexer import build_repository_index
@@ -211,3 +213,21 @@ def test_controller_stops_after_frozen_stagnation_threshold(tmp_path: Path) -> N
     assert len(client.requests) == 3
     assert result.state.budget.tool_calls_total == 3
     assert result.trace.events[-1].payload["details"] == {"stagnant_rounds": 3, "threshold": 3}
+
+
+def test_runtime_writes_complete_artifacts_even_for_model_failure(tmp_path: Path) -> None:
+    controller, _ = _controller(tmp_path, ["not-json"])
+    result = controller.run()
+    output = tmp_path / "run"
+
+    audit = write_controller_artifacts(
+        result,
+        output,
+        run_manifest={"git_sha": "TEST", "system_prompt_sha256": "0" * 64},
+        input_manifest={"no_leakage_pass": True, "entries": []},
+    )
+
+    assert audit["required_files_present"] is True
+    assert all((output / name).is_file() for name in PROJECT_ARTIFACT_FILES)
+    assert (output / "artifact_audit.json").is_file()
+    assert "INVALID_JSON" in (output / "manifest.json").read_text(encoding="utf-8")

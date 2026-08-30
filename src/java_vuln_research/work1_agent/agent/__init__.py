@@ -18,6 +18,7 @@ from .llm_client import (
 from .parser import StrictActionParser, validate_tool_arguments
 from .observation import AgentObservation, build_repository_first_observation, bounded_tool_catalog
 from .prompt import PROMPT_VERSION, SYSTEM_PROMPT, build_system_prompt, prompt_sha256
+from .runtime import PROJECT_ARTIFACT_FILES, write_controller_artifacts
 from .state import AgentState
 from .security_boundary import (
     BoundaryDecision,
@@ -61,6 +62,7 @@ __all__ = [
     "ModelFailureClass",
     "OpenAICompatibleLLMClient",
     "PROMPT_VERSION",
+    "PROJECT_ARTIFACT_FILES",
     "RuntimeInputEntry",
     "RuntimeInputKind",
     "RuntimeSecurityBoundary",
@@ -78,4 +80,5 @@ __all__ = [
     "prompt_sha256",
     "runtime_roots",
     "validate_tool_arguments",
+    "write_controller_artifacts",
 ]
