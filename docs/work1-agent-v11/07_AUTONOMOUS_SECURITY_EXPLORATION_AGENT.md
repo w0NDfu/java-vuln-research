@@ -279,9 +279,10 @@ controller 仅在显式注入正式 `EvidenceGate` 时启用 `PROPOSE`；未注�
 - M4 Gate + M7-6 controller/feedback targeted：`28 passed`，返回码 0。
 - M7-1～M7-6 + M4 Gate aggregate targeted：`82 passed, 2 warnings`，返回码 0。
 - local full regression：`214 passed, 1 skipped, 3 warnings`，返回码 0。
+- CloudStudio full regression（commit `b83b9c7`）：`214 passed, 1 skipped, 3 warnings`，返回码 0，耗时 4.93 秒。
 
 ### M7-6 acceptance decision
 
 `PROCEED_M7_7`。
 
-接受理由：已真实验证 NEEDS_MORE_EVIDENCE → repository tool → 新 EvidenceRef → 同一 proposal 补强 → ADMISSIBLE；REJECTED proposal 不进入 active proposal 或 graph；CodeQL unavailable 不生成否定证据；Gate feedback 字段完整并进入下一轮 observation；完整回归通过。下一阶段接 M5 graph/path、path feedback、停止条件和防候选爆炸预算，不改变 Gate admission 标准。
+接受理由：已真实验证 NEEDS_MORE_EVIDENCE → repository tool → 新 EvidenceRef → 同一 proposal 补强 → ADMISSIBLE；REJECTED proposal 不进入 active proposal 或 graph；CodeQL unavailable 不生成否定证据；Gate feedback 字段完整并进入下一轮 observation；本地与 CloudStudio 完整回归通过。下一阶段接 M5 graph/path、path feedback、停止条件和防候选爆炸预算，不改变 Gate admission 标准。
