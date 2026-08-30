@@ -406,6 +406,8 @@ def test_one_step_neighbor_tools_reject_depth_above_one(tmp_path: Path) -> None:
         ("could not resolve module java", FailureReason.QUERY_COMPILE_ERROR),
         ("Java heap space", FailureReason.OOM),
         ("evaluation failed", FailureReason.QUERY_EXECUTION_ERROR),
+        ("Compiled query. Starting evaluation. Invalid checksum on pool file /db/cache/x", FailureReason.DB_CACHE_CORRUPTION),
+        ("Compiling query plan. Compiled query. evaluation failed", FailureReason.QUERY_EXECUTION_ERROR),
     ],
 )
 def test_executor_classifies_query_failures(tmp_path: Path, stderr: str, reason: FailureReason) -> None:

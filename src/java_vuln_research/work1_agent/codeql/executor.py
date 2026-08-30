@@ -46,7 +46,11 @@ def _classify_failure(output: str) -> FailureReason:
     lowered = output.casefold()
     if any(token in lowered for token in ("out of memory", "java heap space", "exit code 137", "killed")):
         return FailureReason.OOM
-    if any(token in lowered for token in ("could not resolve", "compiling query", "compile error", "query compilation")):
+    if any(token in lowered for token in ("invalid checksum on pool file", "invalid checksum on cache")):
+        return FailureReason.DB_CACHE_CORRUPTION
+    # "Compiling query plan" is normal progress output and can precede a later
+    # evaluation failure.  Only explicit compiler diagnostics belong here.
+    if any(token in lowered for token in ("could not resolve", "compile error", "query compilation failed")):
         return FailureReason.QUERY_COMPILE_ERROR
     return FailureReason.QUERY_EXECUTION_ERROR
 

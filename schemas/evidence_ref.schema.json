@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evidence_ref.schema.json",
+  "title": "Work1 V11 M4 EvidenceRef",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["evidence_id", "source_kind", "entity_ids", "repository_relative_path", "start_line", "end_line", "tool_call_id", "artifact_ref", "content_hash", "result_hash", "confidence", "provenance"],
+  "properties": {
+    "evidence_id": {"type": "string", "pattern": "^evidence-[0-9a-f]{24}$"},
+    "source_kind": {"enum": ["SOURCE_SNIPPET", "PROGRAM_ENTITY", "REPOSITORY_RELATION", "REPOSITORY_TOOL_RESULT", "CODEQL_ENTITY_FACT", "CODEQL_CALL", "CODEQL_LOCAL_FLOW", "CODEQL_DATAFLOW", "CODEQL_CFG", "TYPE_DECLARATION", "ANNOTATION_TEXT"]},
+    "entity_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^entity-[0-9a-f]{24}$"}},
+    "repository_relative_path": {"type": ["string", "null"], "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"},
+    "start_line": {"type": ["integer", "null"], "minimum": 1},
+    "end_line": {"type": ["integer", "null"], "minimum": 1},
+    "tool_call_id": {"type": ["string", "null"]},
+    "artifact_ref": {"type": ["string", "null"]},
+    "content_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "result_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "confidence": {"enum": ["DIRECT", "STRONG_STRUCTURAL", "SUPPORTING", "WEAK"]},
+    "provenance": {"type": "object", "minProperties": 1}
+  }
+}
