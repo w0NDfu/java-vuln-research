@@ -148,6 +148,7 @@ Java source 与正式 trusted schema 仍记录路径、大小和 hash，但跳�
 
 - targeted security boundary + import isolation：`18 passed, 1 skipped`，返回码 0。
 - local full regression：`174 passed, 7 skipped`，返回码 0。
+- CloudStudio full regression（commit `ee8e1c1`）：`180 passed, 1 skipped, 2 warnings`，返回码 0。
 
 测试覆盖直接/改名/嵌入路径的 M6 diagnostic、JSON/JSONL/YAML/CSV 内容泄漏、benchmark flags、root escape、freeze 后读取、manifest schema、输入 hash、读取后篡改、Java source 非误报和 runtime/evaluator import separation。
 
