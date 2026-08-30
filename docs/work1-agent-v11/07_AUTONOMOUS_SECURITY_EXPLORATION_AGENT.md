@@ -225,6 +225,7 @@ Prompt 不含项目名、case ID、已知 API、恢复答案或 root-cause 表�
 
 - observation + tool adapter targeted：`7 passed`，返回码 0。
 - local full regression：`205 passed, 1 skipped, 3 warnings`，返回码 0。
+- CloudStudio full regression（commit `90e955c`）：`205 passed, 1 skipped, 3 warnings`，返回码 0，耗时 4.80 秒。
 
 唯一 skip 与 warnings 均为前述环境项和 `jsonschema.RefResolver` 上游 deprecation；没有新增失败。
 
@@ -232,4 +233,4 @@ Prompt 不含项目名、case ID、已知 API、恢复答案或 root-cause 表�
 
 `PROCEED_M7_5`。
 
-接受理由：初始 observation 在无 frontier/native/CodeQL 情况下仍可启动；M2/M3 17 个动作均有统一的 bounded dispatcher、项目隔离、可追踪输入和保守 availability 语义；结构候选不会升级为确定性事实；定向及完整回归通过。下一阶段接入正式 M4 Gate，序列化 proposal feedback，并保持 Gate 为 Agent 外部的确定性独立组件。
+接受理由：初始 observation 在无 frontier/native/CodeQL 情况下仍可启动；M2/M3 17 个动作均有统一的 bounded dispatcher、项目隔离、可追踪输入和保守 availability 语义；结构候选不会升级为确定性事实；本地与 CloudStudio 完整回归通过。下一阶段只实现 Agent controller 的 tool → observation 循环，不接 proposal；M4 Gate 留到 M7-6。
