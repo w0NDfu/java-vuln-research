@@ -15,8 +15,14 @@ from java_vuln_research.work1_agent.proposal.model import canonical_json, stable
 from .budget import AgentBudgetLimits
 from .controller import CONTROLLER_VERSION
 from .llm_client import LLMClientConfig
-from .observation import bounded_tool_catalog
+from .observation import (
+    MAX_BOOTSTRAP_OBSERVATION_CHARS,
+    MAX_TOOL_GROUNDED_OBSERVATION_CHARS,
+    OBSERVATION_VERSION,
+    bounded_tool_catalog,
+)
 from .prompt import PROMPT_VERSION, build_system_prompt, prompt_sha256
+from .structured_output import NORMALIZER_VERSION
 
 
 DETECTOR_MANIFEST_VERSION = 1
@@ -157,6 +163,12 @@ def freeze_killtest_manifest(
         "projects": projects,
         "model": model_config.to_manifest_dict(),
         "prompt": {"version": PROMPT_VERSION, "sha256": prompt_sha256(prompt)},
+        "structured_output_normalizer": {"version": NORMALIZER_VERSION},
+        "observation": {
+            "schema_version": OBSERVATION_VERSION,
+            "bootstrap_max_chars": MAX_BOOTSTRAP_OBSERVATION_CHARS,
+            "tool_grounded_max_chars": MAX_TOOL_GROUNDED_OBSERVATION_CHARS,
+        },
         "schemas": _schema_hashes(schemas),
         "tool_catalog_sha256": hashlib.sha256(canonical_json(bounded_tool_catalog()).encode("utf-8")).hexdigest(),
         "budget": limits.to_dict(),

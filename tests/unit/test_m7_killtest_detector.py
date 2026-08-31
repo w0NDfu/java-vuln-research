@@ -1,12 +1,88 @@
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 from pathlib import Path
 
 from java_vuln_research.work1_agent.agent import AgentBudgetLimits, MockLLMClient
+from java_vuln_research.work1_agent.agent.controller import CONTROLLER_VERSION
 from java_vuln_research.work1_agent.agent.llm_client import LLMClientConfig
+from java_vuln_research.work1_agent.agent.observation import (
+    MAX_BOOTSTRAP_OBSERVATION_CHARS,
+    MAX_TOOL_GROUNDED_OBSERVATION_CHARS,
+    OBSERVATION_VERSION,
+    bounded_tool_catalog,
+)
+from java_vuln_research.work1_agent.agent.prompt import build_system_prompt, prompt_sha256
+from java_vuln_research.work1_agent.agent.structured_output import NORMALIZER_VERSION
 from java_vuln_research.work1_agent.hybrid_graph.path import SearchLimits
-from java_vuln_research.work1_agent.m7_killtest.detector import run_detector_project
+from java_vuln_research.work1_agent.m7_killtest.detector import (
+    _validate_frozen_contract,
+    run_detector_project,
+)
+from java_vuln_research.work1_agent.proposal.model import canonical_json
+
+
+def test_frozen_contract_rejects_runtime_protocol_drift(tmp_path: Path) -> None:
+    config = LLMClientConfig(provider="test", model_id="test", base_url="https://example.invalid/v1", api_key="test")
+    catalog = bounded_tool_catalog()
+    manifest = {
+        "detector_input_frozen": True,
+        "benchmark_informed": False,
+        "git_sha": "abc123",
+        "model": config.to_manifest_dict(),
+        "prompt": {"sha256": prompt_sha256(build_system_prompt(catalog))},
+        "structured_output_normalizer": {"version": NORMALIZER_VERSION},
+        "observation": {
+            "schema_version": OBSERVATION_VERSION,
+            "bootstrap_max_chars": MAX_BOOTSTRAP_OBSERVATION_CHARS,
+            "tool_grounded_max_chars": MAX_TOOL_GROUNDED_OBSERVATION_CHARS,
+        },
+        "tool_catalog_sha256": hashlib.sha256(canonical_json(catalog).encode("utf-8")).hexdigest(),
+        "controller": {
+            "version": CONTROLLER_VERSION,
+            "max_stagnant_rounds": 3,
+            "max_model_output_retries": 2,
+        },
+        "schemas": {},
+        "budget": AgentBudgetLimits().to_dict(),
+        "path_bounds": {
+            "max_depth": SearchLimits().max_depth,
+            "max_paths": SearchLimits().max_paths,
+            "max_nodes_expanded": SearchLimits().max_nodes_expanded,
+        },
+    }
+    limits, path_limits = _validate_frozen_contract(
+        manifest,
+        config=config,
+        schema_root=tmp_path,
+        git_sha="abc123",
+    )
+    assert limits == AgentBudgetLimits()
+    assert path_limits == SearchLimits()
+
+    mutations = (
+        ("git_sha", "different"),
+        ("structured_output_normalizer", {"version": "different"}),
+        ("observation", {**manifest["observation"], "bootstrap_max_chars": 1}),
+        ("tool_catalog_sha256", "0" * 64),
+        ("controller", {**manifest["controller"], "version": "different"}),
+    )
+    for field, value in mutations:
+        drifted = copy.deepcopy(manifest)
+        drifted[field] = value
+        try:
+            _validate_frozen_contract(
+                drifted,
+                config=config,
+                schema_root=tmp_path,
+                git_sha="abc123",
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"frozen contract drift was accepted: {field}")
 
 
 def test_formal_detector_project_freezes_without_benchmark_input(tmp_path: Path) -> None:

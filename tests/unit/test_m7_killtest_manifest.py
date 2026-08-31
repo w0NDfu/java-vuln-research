@@ -98,5 +98,13 @@ def test_freeze_separates_benchmark_selection_from_detector_input(tmp_path: Path
     assert "secret_CVE-2026-0000" in selection_text
     assert detector["selection_manifest_allowed_for_agent_runtime"] is False
     assert detector["controller"]["max_model_output_retries"] == 2
+    assert detector["structured_output_normalizer"] == {
+        "version": "M7_STRUCTURED_OUTPUT_NORMALIZER_V1"
+    }
+    assert detector["observation"] == {
+        "schema_version": 2,
+        "bootstrap_max_chars": 16 * 1024,
+        "tool_grounded_max_chars": 24 * 1024,
+    }
     assert detector["baseline_lineage"]["codeql_version"] == "UNKNOWN"
     assert all(item["native_baseline"]["preservation_required"] for item in detector["projects"])

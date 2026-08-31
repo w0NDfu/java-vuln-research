@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from java_vuln_research.work1_agent.agent.budget import AgentBudgetLimits
-from java_vuln_research.work1_agent.agent.controller import AgentController
+from java_vuln_research.work1_agent.agent.controller import CONTROLLER_VERSION, AgentController
 from java_vuln_research.work1_agent.agent.graph_adapter import AgentGraphPathAdapter
 from java_vuln_research.work1_agent.agent.llm_client import (
     AnthropicMessagesLLMClient,
@@ -26,7 +26,12 @@ from java_vuln_research.work1_agent.agent.llm_client import (
     LLMClientConfig,
     OpenAICompatibleLLMClient,
 )
-from java_vuln_research.work1_agent.agent.observation import bounded_tool_catalog
+from java_vuln_research.work1_agent.agent.observation import (
+    MAX_BOOTSTRAP_OBSERVATION_CHARS,
+    MAX_TOOL_GROUNDED_OBSERVATION_CHARS,
+    OBSERVATION_VERSION,
+    bounded_tool_catalog,
+)
 from java_vuln_research.work1_agent.agent.parser import StrictActionParser
 from java_vuln_research.work1_agent.agent.prompt import (
     build_system_prompt,
@@ -42,6 +47,7 @@ from java_vuln_research.work1_agent.agent.security_boundary import (
     runtime_roots,
 )
 from java_vuln_research.work1_agent.agent.state import AgentState
+from java_vuln_research.work1_agent.agent.structured_output import NORMALIZER_VERSION
 from java_vuln_research.work1_agent.agent.tool_adapter import (
     RepositoryCodeQLToolAdapter,
 )
@@ -92,14 +98,32 @@ def _validate_frozen_contract(
     *,
     config: LLMClientConfig,
     schema_root: Path,
+    git_sha: str,
 ) -> tuple[AgentBudgetLimits, SearchLimits]:
     if not detector_manifest.get("detector_input_frozen") or detector_manifest.get("benchmark_informed") is not False:
         raise ValueError("M7 detector input is not a frozen annotation-blind manifest")
     if dict(detector_manifest.get("model") or {}) != config.to_manifest_dict():
         raise ValueError("runtime model configuration differs from the frozen M7-9 contract")
+    if str(detector_manifest.get("git_sha") or "") != git_sha:
+        raise ValueError("runtime Git SHA differs from the frozen M7-9 contract")
     prompt = build_system_prompt(bounded_tool_catalog())
     if prompt_sha256(prompt) != str(detector_manifest["prompt"]["sha256"]):
         raise ValueError("runtime system prompt differs from the frozen M7-9 contract")
+    if dict(detector_manifest.get("structured_output_normalizer") or {}) != {"version": NORMALIZER_VERSION}:
+        raise ValueError("runtime structured-output normalizer differs from the frozen M7-9 contract")
+    expected_observation = {
+        "schema_version": OBSERVATION_VERSION,
+        "bootstrap_max_chars": MAX_BOOTSTRAP_OBSERVATION_CHARS,
+        "tool_grounded_max_chars": MAX_TOOL_GROUNDED_OBSERVATION_CHARS,
+    }
+    if dict(detector_manifest.get("observation") or {}) != expected_observation:
+        raise ValueError("runtime observation contract differs from the frozen M7-9 contract")
+    tool_catalog_hash = hashlib.sha256(canonical_json(bounded_tool_catalog()).encode("utf-8")).hexdigest()
+    if str(detector_manifest.get("tool_catalog_sha256") or "") != tool_catalog_hash:
+        raise ValueError("runtime tool catalog differs from the frozen M7-9 contract")
+    controller = dict(detector_manifest.get("controller") or {})
+    if str(controller.get("version") or "") != CONTROLLER_VERSION:
+        raise ValueError("runtime controller differs from the frozen M7-9 contract")
     for name, expected in dict(detector_manifest.get("schemas") or {}).items():
         path = schema_root / name
         if not path.is_file() or _sha256(path) != expected:
@@ -315,9 +339,14 @@ def run_detector(
     if freeze_path.exists():
         raise ValueError("formal detector output is already frozen; refusing to overwrite it")
     frozen = _read_json(manifest_path)
-    resolved_config = config or LLMClientConfig.from_environment()
-    limits, path_limits = _validate_frozen_contract(frozen, config=resolved_config, schema_root=schemas)
     git_sha = _git_sha(repo)
+    resolved_config = config or LLMClientConfig.from_environment()
+    limits, path_limits = _validate_frozen_contract(
+        frozen,
+        config=resolved_config,
+        schema_root=schemas,
+        git_sha=git_sha,
+    )
     rows: list[dict[str, Any]] = []
     project_manifests: dict[str, str] = {}
     for project in frozen["projects"]:

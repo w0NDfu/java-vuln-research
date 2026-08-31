@@ -98,7 +98,7 @@ attempt 11 证明仅有文本 preview 仍不足以让模型可靠绑定 M4 role�
 
 ### M7-F6 Controlled real-model preflight
 
-状态：两项目 preflight runner、冻结配置与自动门槛审计已实现并通过机制回归；CloudStudio 已保留 15 次逐步诊断。attempt 15 中 V022 已单项目通过；V011 在两个合法 repository tool action 后连续返回两个可修复的结构化输出错误，超过原 1 次 output-repair 上限，因此整体仍为 `freeze_allowed=false`，继续禁止进入 F7/F8。控制器保持 strict parser/fail-closed，并把修复上限有界提升为 2 次，等待 attempt 16 验证。
+状态：完成。两项目 preflight runner、冻结配置与自动门槛审计已实现；CloudStudio attempt 16 在 commit `9d65664` 上以真实模型通过全部门槛，`pass=true`、`freeze_allowed=true`。控制器保持 strict parser/fail-closed，output repair 上限固定为 2 次。
 
 preflight 不再只使用合成 fixture。冻结配置按 `FROZEN_PROJECT_INVENTORY_JAVA_FILE_COUNT` 选择两个不属于正式 10-project kill-test 的真实开源项目：SMALL 为 V011 OWASP/json-sanitizer（6 个 Java 文件），MEDIUM 为 V022 ESAPI/esapi-java-legacy（351 个 Java 文件）。配置只含公共项目身份、source root、精确 revision、Java 文件数与模型传输契约；`benchmark_informed=false`，不含 CVE、CWE、patch、known location、M6 proposal 或 evaluator 输入。运行前会校验 project ID 安全性、40-hex revision、Git HEAD、RepositoryIndex 规范 Java 文件数以及 small/medium 唯一性。
 
@@ -126,5 +126,12 @@ CloudStudio 诊断尝试（均未读取 benchmark answer，也未进入 F7）：
 - attempt 13，commit `388c7a4`：补齐 provider/model/base/exact endpoint/protocol/output-mode 等非秘密变量，但 API key 仍未导出给 Python 子进程，在模型调用前 fail-closed。
 - attempt 14，commit `388c7a4`：确认新终端实际没有 API key；静默重新输入前的运行仍在模型调用前 fail-closed。attempt 12--14 均作为环境审计保留，不计作模型能力证据。
 - attempt 15，commit `388c7a4`，artifact root `.../388c7a40a246a860de4c911a31b578d7e1675b5f-attempt15`：CloudStudio 同 commit 全量回归 `260 passed, 1 skipped, 3 warnings`。真实模型运行产物 17 个，secret absence、no-leakage、artifact contract 与 normalization accounting 全部通过。V022 为 12 rounds、12 model calls、10 repository tools、1 个 schema-valid proposal，Gate sequence 为 `REJECTED`，单项目 preflight `pass=true`；V011 已完成 2 个 repository tools，但下一轮首次输出含额外字段，唯一一次 output repair 又把非 STOP 动作的 `stop_reason` 写成非空字符串，strict parser 连续拒绝并 fail-closed，单项目 `pass=false`。这证明 role discoverability 修复有效，剩余问题是通用的 bounded output-repair 容错深度，而非 Gate 或项目特例。修复保持 parser/schema 不变，将 preflight 和待冻结 detector 的 `max_model_output_retries` 从 1 有界提升为 2，并把修复反馈明确为五字段及 action-specific nullability；本地新增双重修复测试，targeted `14 passed`、full `260 passed, 2 skipped`。
+- attempt 16，commit `9d65664`，artifact root `.../9d656647a5901e426763abff55aa963ae9962edd-attempt16`：CloudStudio 同 commit 全量回归 `261 passed, 1 skipped, 3 warnings`。真实模型 preflight 产生 32 个文件，aggregate `pass=true`、`freeze_allowed=true`，secret absence、no-leakage、normalization accounting 与 artifact contract 全部通过。V011 为 14 model calls、11 repository tools、2 个 schema-valid proposals，Gate sequence 为 `ADMISSIBLE, DUPLICATE`；V022 为 12 model calls、10 repository tools、1 个 schema-valid proposal，Gate sequence 为 `REJECTED`。两者均以 `INSUFFICIENT_EVIDENCE` 保守停止；preflight 不要求形成 candidate path，因此这是预期允许的结束状态。F6 至此通过，允许进入 F7。
 
-- M7-F7 至 M7-F10：待前置阶段通过后执行。
+### M7-F7 Detector-input freeze
+
+状态：进行中。commit `9d65664` 上的首次 freeze 尝试保存在 `.../m7_agent/runs/9d656647a5901e426763abff55aa963ae9962edd/killtest_freeze`，命令成功且 no-leakage 通过，但事后逐项审计发现 detector manifest 只通过 schema hashes 间接绑定 normalizer/observation 实现，没有显式冻结 `StructuredOutputNormalizer` 版本和 observation schema/字符上限。该目录保持不可变并标记为不完整尝试，不用于 detector，也不覆盖或删除。
+
+后续修复在 manifest/schema/runtime validator 中显式绑定 normalizer version、observation schema version、16 KiB bootstrap 与 24 KiB tool-grounded 上限，并补齐 Git SHA、tool catalog 和 controller version 的启动时 fail-closed 校验。只有新 commit 在 CloudStudio 同 SHA 全量回归通过并生成全新的 freeze 目录后，才允许启动 F8。
+
+- M7-F8 至 M7-F10：待新的 F7 freeze 完成并通过逐项审计后执行。

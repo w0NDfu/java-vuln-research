@@ -6,7 +6,8 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "manifest_id", "run_kind", "git_sha", "selection_count", "projects",
-    "model", "prompt", "schemas", "tool_catalog_sha256", "budget", "controller", "path_bounds",
+    "model", "prompt", "structured_output_normalizer", "observation", "schemas",
+    "tool_catalog_sha256", "budget", "controller", "path_bounds",
     "component_lineage", "baseline_lineage", "detector_input_frozen", "benchmark_informed",
     "selection_manifest_allowed_for_agent_runtime", "m6_diagnostic_allowed_for_agent_runtime",
     "evaluator_allowed_during_detector_run"
@@ -38,6 +39,22 @@
     },
     "model": {"type": "object"},
     "prompt": {"type": "object"},
+    "structured_output_normalizer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {"const": "M7_STRUCTURED_OUTPUT_NORMALIZER_V1"}
+      }
+    },
+    "observation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "bootstrap_max_chars", "tool_grounded_max_chars"],
+      "properties": {
+        "schema_version": {"const": 2},
+        "bootstrap_max_chars": {"const": 16384},
+        "tool_grounded_max_chars": {"const": 24576}
+      }
+    },
     "schemas": {"type": "object"},
     "tool_catalog_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "budget": {"type": "object"},
