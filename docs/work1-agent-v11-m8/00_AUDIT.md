@@ -328,5 +328,6 @@ M8 至少记录：`INPUT_NOT_FOUND`、`EFFECT_NOT_FOUND`、`SEMANTIC_BRIDGE_NOT_
 - full regression：`261 passed, 2 skipped, 3 warnings`；warnings 均为既有 `jsonschema.RefResolver` deprecation。
 - `python -m compileall -q src tests`：通过。
 - `git diff --check`：通过。
+- CloudStudio `/workspace/java-vuln-research-m8` 在 exact commit `1a695bf8f682b3c247f2d02517fc4c81967895c4`：`262 passed, 1 skipped, 3 warnings`；Linux 多执行一个本地因权限跳过的 symlink 测试；compileall、diff-check、clean-status 和 HEAD 核验均通过。
 
-只有上述门全部通过、M8-0 commit/push 后在 CloudStudio exact commit full regression 通过，才开始 M8-1。
+M8-0 gate：`PASS`。上述门已全部通过，后续可以开始 M8-1；仍不得跳过任一后续 milestone。
