@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "preflight_version": "M7_REAL_MODEL_PREFLIGHT_V1",
+  "selection_basis": "FROZEN_PROJECT_INVENTORY_JAVA_FILE_COUNT",
+  "benchmark_informed": false,
+  "allowed_for_agent_runtime": true,
+  "required_model": {
+    "provider": "openlux",
+    "exact_model_id": "claude-opus-5",
+    "base_url": "https://api.openlux.ai/v1",
+    "endpoint_url": "https://api.openlux.ai/v1",
+    "api_protocol": "OPENAI",
+    "structured_output_mode": "TOOL_CALL",
+    "temperature": 0.0,
+    "max_output_tokens": 2048,
+    "seed": null
+  },
+  "projects": [
+    {
+      "project_id": "V011",
+      "project_name": "OWASP/json-sanitizer",
+      "size_class": "SMALL",
+      "source_root": "/workspace/w1-e1-dev16/projects/V011",
+      "repository_revision": "fc612ab374de73d03864d56fb87b6a103b234489",
+      "expected_java_file_count": 6
+    },
+    {
+      "project_id": "V022",
+      "project_name": "ESAPI/esapi-java-legacy",
+      "size_class": "MEDIUM",
+      "source_root": "/workspace/w1-e1-dev16/projects/V022",
+      "repository_revision": "2e8694c6beb3bbdb2645b882eba72ce41bc63242",
+      "expected_java_file_count": 351
+    }
+  ]
+}

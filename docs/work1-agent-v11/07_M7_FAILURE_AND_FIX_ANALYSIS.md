@@ -92,5 +92,16 @@ controller 另附 Gate 前证据摘要：evidence count、最多 5 个 EvidenceR
 
 本地验证（2026-08-31）：targeted 21 passed；controlled smoke integration 2 passed；full 248 passed、2 skipped；compileall 与 `diff --check` 通过。deterministic smoke 的 tool/proposal/Gate/path 行为保持不变。
 
-- M7-F6 controlled real-model preflight：待执行；失败则不 freeze 正式 detector。
+### M7-F6 Controlled real-model preflight
+
+状态：两项目 preflight runner、冻结配置与自动门槛审计已在本地实现并通过机制回归；CloudStudio 真实 `claude-opus-5` 运行尚未执行，因此 `freeze_allowed` 仍未成立，禁止进入 F7/F8。
+
+preflight 不再只使用合成 fixture。冻结配置按 `FROZEN_PROJECT_INVENTORY_JAVA_FILE_COUNT` 选择两个不属于正式 10-project kill-test 的真实开源项目：SMALL 为 V011 OWASP/json-sanitizer（6 个 Java 文件），MEDIUM 为 V022 ESAPI/esapi-java-legacy（351 个 Java 文件）。配置只含公共项目身份、source root、精确 revision、Java 文件数与模型传输契约；`benchmark_informed=false`，不含 CVE、CWE、patch、known location、M6 proposal 或 evaluator 输入。运行前会校验 project ID 安全性、40-hex revision、Git HEAD、RepositoryIndex 规范 Java 文件数以及 small/medium 唯一性。
+
+模型契约冻结为 provider `openlux`、exact model ID `claude-opus-5`、OpenAI protocol、`TOOL_CALL` structured output、temperature 0、max output 2048、seed omitted。`base_url` 与 exact `endpoint_url` 都是 `https://api.openlux.ai/v1`；runner 要求二者严格相等并要求 `endpoint_mode=EXACT`，因此 client 不会拼接 `/chat/completions` 或 `/messages`。
+
+每项目自动检查：round 1 是否实际完成 `SEARCH_CODE`/`SEARCH_SYMBOLS`；tool calls 是否至少 2 次；是否至少产生 1 条经 schema/parser 接受的 proposal；是否至少进入 Gate 1 次；每个 `NEEDS_MORE_EVIDENCE` 后是否存在实际 tool result；detector input manifest、artifact contract 与 secret/no-leakage 是否通过；每个 model call 是否被带显式 StructuredOutputNormalizer provenance 的 action 或明确 retry/failure 完整记账。只有两个项目全部通过才写 `freeze_allowed=true`；不要求形成 candidate path，也不运行 benchmark evaluator。
+
+本地验证（2026-08-31）：F6 targeted 2 passed；F1–F6 related targeted 41 passed；full 250 passed、2 skipped；compileall 与 `diff --check` 通过。机制测试构造 1-file SMALL 与 100-file MEDIUM 项目，分别完成 2 个 repository tools、1 个 schema-valid proposal、1 次 Gate，并验证 API key 不进入任何 artifact。真实 Cloud run 结果必须单独记录，不能用该 mock 结果替代。
+
 - M7-F7 至 M7-F10：待前置阶段通过后执行。
