@@ -132,6 +132,8 @@ CloudStudio 诊断尝试（均未读取 benchmark answer，也未进入 F7）：
 
 状态：进行中。commit `9d65664` 上的首次 freeze 尝试保存在 `.../m7_agent/runs/9d656647a5901e426763abff55aa963ae9962edd/killtest_freeze`，命令成功且 no-leakage 通过，但事后逐项审计发现 detector manifest 只通过 schema hashes 间接绑定 normalizer/observation 实现，没有显式冻结 `StructuredOutputNormalizer` 版本和 observation schema/字符上限。该目录保持不可变并标记为不完整尝试，不用于 detector，也不覆盖或删除。
 
-后续修复在 manifest/schema/runtime validator 中显式绑定 normalizer version、observation schema version、16 KiB bootstrap 与 24 KiB tool-grounded 上限，并补齐 Git SHA、tool catalog 和 controller version 的启动时 fail-closed 校验。只有新 commit 在 CloudStudio 同 SHA 全量回归通过并生成全新的 freeze 目录后，才允许启动 F8。
+commit `30b976d` 上的第二次 freeze 尝试保存在 `.../m7_agent/runs/30b976d2d0290ec57288e456d39a431af24552bc/killtest_freeze`。该 commit 在 CloudStudio 全量回归为 `262 passed, 1 skipped, 3 warnings`；freeze 命令成功且 no-leakage 通过，但逐项对照 F7 原始要求时发现项目项只保存 lexical `repository_root`，没有单独保存 symlink 解析后的 source root。该目录同样保持不可变并标记为不完整尝试，不用于 detector。
+
+后续修复在 manifest/schema/runtime validator 中显式绑定 normalizer version、observation schema version、16 KiB bootstrap 与 24 KiB tool-grounded 上限，并补齐 Git SHA、tool catalog、controller version、source lexical root 与 source resolved root 的启动时 fail-closed 校验。只有新 commit 在 CloudStudio 同 SHA 全量回归通过并生成全新的 freeze 目录后，才允许启动 F8。
 
 - M7-F8 至 M7-F10：待新的 F7 freeze 完成并通过逐项审计后执行。

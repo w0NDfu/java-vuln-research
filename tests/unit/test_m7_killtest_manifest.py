@@ -106,5 +106,10 @@ def test_freeze_separates_benchmark_selection_from_detector_input(tmp_path: Path
         "bootstrap_max_chars": 16 * 1024,
         "tool_grounded_max_chars": 24 * 1024,
     }
+    assert all(
+        Path(project["repository_root"]).resolve()
+        == Path(project["repository_resolved_root"])
+        for project in detector["projects"]
+    )
     assert detector["baseline_lineage"]["codeql_version"] == "UNKNOWN"
     assert all(item["native_baseline"]["preservation_required"] for item in detector["projects"])

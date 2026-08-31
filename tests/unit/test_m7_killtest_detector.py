@@ -27,6 +27,8 @@ from java_vuln_research.work1_agent.proposal.model import canonical_json
 def test_frozen_contract_rejects_runtime_protocol_drift(tmp_path: Path) -> None:
     config = LLMClientConfig(provider="test", model_id="test", base_url="https://example.invalid/v1", api_key="test")
     catalog = bounded_tool_catalog()
+    source_root = tmp_path / "source"
+    source_root.mkdir()
     manifest = {
         "detector_input_frozen": True,
         "benchmark_informed": False,
@@ -52,6 +54,13 @@ def test_frozen_contract_rejects_runtime_protocol_drift(tmp_path: Path) -> None:
             "max_paths": SearchLimits().max_paths,
             "max_nodes_expanded": SearchLimits().max_nodes_expanded,
         },
+        "projects": [
+            {
+                "project_id": "PTEST",
+                "repository_root": str(source_root),
+                "repository_resolved_root": str(source_root.resolve()),
+            }
+        ],
     }
     limits, path_limits = _validate_frozen_contract(
         manifest,
@@ -68,6 +77,10 @@ def test_frozen_contract_rejects_runtime_protocol_drift(tmp_path: Path) -> None:
         ("observation", {**manifest["observation"], "bootstrap_max_chars": 1}),
         ("tool_catalog_sha256", "0" * 64),
         ("controller", {**manifest["controller"], "version": "different"}),
+        (
+            "projects",
+            [{**manifest["projects"][0], "repository_resolved_root": str(tmp_path / "different")}],
+        ),
     )
     for field, value in mutations:
         drifted = copy.deepcopy(manifest)
@@ -120,6 +133,7 @@ def test_formal_detector_project_freezes_without_benchmark_input(tmp_path: Path)
         project={
             "project_id": "PTEST",
             "repository_root": str(source_root),
+            "repository_resolved_root": str(source_root.resolve()),
             "repository_revision": "abc",
             "codeql_db_path": "",
             "codeql_db_ready": False,

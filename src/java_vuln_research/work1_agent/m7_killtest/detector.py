@@ -124,6 +124,14 @@ def _validate_frozen_contract(
     controller = dict(detector_manifest.get("controller") or {})
     if str(controller.get("version") or "") != CONTROLLER_VERSION:
         raise ValueError("runtime controller differs from the frozen M7-9 contract")
+    for project in detector_manifest.get("projects") or ():
+        project_id = str(project.get("project_id") or "UNKNOWN")
+        lexical_root = Path(str(project.get("repository_root") or ""))
+        frozen_resolved_root = Path(str(project.get("repository_resolved_root") or ""))
+        if not lexical_root.is_absolute() or not lexical_root.is_dir():
+            raise ValueError(f"frozen project source root is not ready: {project_id}")
+        if not frozen_resolved_root.is_absolute() or str(lexical_root.resolve()) != str(frozen_resolved_root):
+            raise ValueError(f"runtime project source resolution differs from the frozen M7-9 contract: {project_id}")
     for name, expected in dict(detector_manifest.get("schemas") or {}).items():
         path = schema_root / name
         if not path.is_file() or _sha256(path) != expected:
@@ -215,7 +223,8 @@ def run_detector_project(
 ) -> dict[str, Any]:
     started = time.monotonic()
     project_id = str(project["project_id"])
-    source_root = Path(str(project["repository_root"])).resolve()
+    source_lexical_root = Path(str(project["repository_root"]))
+    source_root = Path(str(project["repository_resolved_root"]))
     database = Path(str(project.get("codeql_db_path") or "")).resolve()
     db_ready = bool(project.get("codeql_db_ready"))
     output.mkdir(parents=True, exist_ok=True)
@@ -224,7 +233,7 @@ def run_detector_project(
         project_id=project_id,
         repository_identity=f"{project_id}@{project.get('repository_revision', 'UNKNOWN')}",
         allowed_roots=runtime_roots(
-            source_roots=[source_root],
+            source_roots=[source_lexical_root, source_root],
             artifact_roots=[frozen_manifest_path.parent, output],
             schema_roots=[schema_root, query_root],
         ),

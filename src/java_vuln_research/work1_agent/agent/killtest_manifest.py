@@ -125,7 +125,8 @@ def freeze_killtest_manifest(
         db_path = str(row.get("codeql_db_path") or "")
         source_ready = str(row.get("source_exists") or row.get("source_ready") or "").casefold() == "true"
         db_ready = str(row.get("codeql_db_ready") or row.get("db_ready") or "").casefold() == "true"
-        if not source_root or not source_ready:
+        source_path = Path(source_root)
+        if not source_root or not source_ready or not source_path.is_dir():
             raise ValueError(f"selected project source is not ready: {project_id}")
         metadata = Path(db_path) / "codeql-database.yml"
         projects.append(
@@ -133,6 +134,7 @@ def freeze_killtest_manifest(
                 "project_id": project_id,
                 "project_name": str(row.get("project_name") or row.get("name") or project_id),
                 "repository_root": source_root,
+                "repository_resolved_root": str(source_path.resolve()),
                 "repository_revision": str(selected_row.get("source_revision") or "UNKNOWN"),
                 "source_ready": source_ready,
                 "codeql_db_path": db_path,

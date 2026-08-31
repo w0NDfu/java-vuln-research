@@ -22,11 +22,12 @@
       "type": "array", "minItems": 10, "maxItems": 10,
       "items": {
         "type": "object", "additionalProperties": false,
-        "required": ["project_id", "project_name", "repository_root", "repository_revision", "source_ready", "codeql_db_path", "codeql_db_ready", "codeql_db_identity", "native_baseline", "benchmark_informed"],
+        "required": ["project_id", "project_name", "repository_root", "repository_resolved_root", "repository_revision", "source_ready", "codeql_db_path", "codeql_db_ready", "codeql_db_identity", "native_baseline", "benchmark_informed"],
         "properties": {
           "project_id": {"type": "string", "minLength": 1},
           "project_name": {"type": "string", "minLength": 1},
           "repository_root": {"type": "string", "minLength": 1},
+          "repository_resolved_root": {"type": "string", "minLength": 1},
           "repository_revision": {"type": "string", "minLength": 1},
           "source_ready": {"const": true},
           "codeql_db_path": {"type": "string"},
