@@ -57,6 +57,8 @@ manifest schema 升级到 version 2。每个输入除 SHA-256 外新增 `artifac
 
 本地验证（2026-08-31）：targeted 33 passed、1 skipped；full 244 passed、2 skipped；`diff --check` 通过。新增 symlink 回归在本地 Windows 因创建 symlink 权限不足而 skip，必须由 CloudStudio/Linux 实际通过后才能把 F2 标记完成。
 
+后续 deterministic 闭环还发现：同一已信任 Java 文件可先以相对路径登记、再由工具以绝对路径读取。V2 因审计字段 `requested_path` 不同而错误触发 `INPUT_CHANGED`。现已将逻辑输入身份限定为 kind、role、resolved path、trusted root、size 和 hash；requested lexical path 只保留作审计。同一文件的合法 lexical alias 回归通过，resolved identity、root containment 或内容任一变化仍 fail-closed。
+
 ### Remaining stages
 
 - M7-F3 compact bootstrap/tool-grounded observation：待实现。

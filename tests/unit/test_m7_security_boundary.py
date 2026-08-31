@@ -108,6 +108,20 @@ def test_input_kind_cannot_use_a_different_roles_trusted_root(tmp_path: Path) ->
     assert caught.value.decision.code is BoundaryViolationCode.ROOT_ESCAPE
 
 
+def test_same_resolved_source_accepts_distinct_lexical_paths_for_one_logical_input(tmp_path: Path) -> None:
+    boundary = _boundary(tmp_path)
+    source = tmp_path / "source" / "Same.java"
+    source.write_text("class Same {}\n", encoding="utf-8")
+    (source.parent / "nested").mkdir()
+    lexical_alias = source.parent / "nested" / ".." / source.name
+
+    first = boundary.read_bytes(source, kind=RuntimeInputKind.JAVA_SOURCE, logical_name="java:Same.java")
+    second = boundary.read_bytes(lexical_alias, kind=RuntimeInputKind.JAVA_SOURCE, logical_name="java:Same.java")
+
+    assert first == second
+    assert boundary.seal()["no_leakage_pass"] is True
+
+
 @pytest.mark.parametrize(
     "relative",
     [

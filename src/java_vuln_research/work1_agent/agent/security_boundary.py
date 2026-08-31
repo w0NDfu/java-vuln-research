@@ -440,16 +440,26 @@ class RuntimeSecurityBoundary:
             sha256=_sha256_bytes(raw),
         )
         previous = self._entries.get(logical_name)
-        if previous is not None and previous != entry:
-            raise self._deny(
-                code=BoundaryViolationCode.INPUT_CHANGED,
-                rule_id="LOGICAL_INPUT_IDENTITY_CHANGED",
-                reason="logical runtime input changed path, kind, size, or hash",
-                path=path,
-                resolved=resolved,
-                kind=kind,
-                logical_name=logical_name,
+        if previous is not None:
+            stable_identity = (
+                "input_kind",
+                "artifact_role",
+                "resolved_path",
+                "trusted_root",
+                "size_bytes",
+                "sha256",
             )
+            if any(getattr(previous, name) != getattr(entry, name) for name in stable_identity):
+                raise self._deny(
+                    code=BoundaryViolationCode.INPUT_CHANGED,
+                    rule_id="LOGICAL_INPUT_IDENTITY_CHANGED",
+                    reason="logical runtime input changed resolved path, kind, role, trusted root, size, or hash",
+                    path=path,
+                    resolved=resolved,
+                    kind=kind,
+                    logical_name=logical_name,
+                )
+            entry = previous
         self._entries[logical_name] = entry
         self._decisions.append(
             BoundaryDecision(True, None, "ALLOW_HASHED_RUNTIME_INPUT", "runtime input accepted and hashed", str(path), str(resolved), kind, logical_name)
