@@ -44,7 +44,7 @@ CloudStudio 上的历史正式运行基于 detector commit `82200a5`，10 个 fr
 
 ### M7-F2 Security boundary false-positive fix
 
-状态：本地实现与回归通过，等待 CloudStudio 同 commit 全量回归和真实 symlink 用例。
+状态：完成。真实 Linux symlink 用例及后续 CloudStudio 全量回归均通过；合法 `annotations` 源码目录与 resolved `datasets/.../project-sources` 不再被误伤，禁止的 evaluator/M6/annotation artifacts 仍 fail-closed。
 
 边界策略升级为 `M7_RUNTIME_BOUNDARY_V2`。每个输入先由 `RuntimeInputKind` 映射到不可由调用者自由伪造的 `artifact_role`，再在该 kind 的显式 trusted root 内做 lexical/resolved containment：
 
@@ -63,7 +63,7 @@ manifest schema 升级到 version 2。每个输入除 SHA-256 外新增 `artifac
 
 ### M7-F3 Compact bootstrap and tool-grounded observation
 
-状态：本地实现与回归通过，等待 GitHub 网络恢复后执行 CloudStudio 同 commit 全量回归。
+状态：完成。本地与 CloudStudio 同 commit 全量回归通过，真实模型 attempts 的 observation 均保持在分层硬上限内；超限压缩路径也已由 attempt 10 验证不再因长 trace setup-fail。
 
 observation schema 升级到 version 2，并拆为两个确定性层级：
 
@@ -76,7 +76,7 @@ observation schema 升级到 version 2，并拆为两个确定性层级：
 
 ### M7-F4 Phased controller constraints
 
-状态：本地实现与回归通过，等待 GitHub 网络恢复后执行 CloudStudio 同 commit 全量回归。
+状态：完成。本地与 CloudStudio 同 commit 全量回归通过；后续真实 attempts 已实际执行 discovery、inspection、controller feedback 与 hypothesis 阶段。
 
 controller 升级为 `M7_CONTROLLER_V2`，显式维护 `DISCOVERY`、`INSPECTION`、`HYPOTHESIS`、`PATH_SEARCH`。phase 写入每个 trace event，并进入 model-visible observation。非空项目第 1 轮只接受 `SEARCH_CODE` 或 `SEARCH_SYMBOLS`；越界 action 返回 `ROUND1_DISCOVERY_ACTION_REQUIRED` structured controller feedback。无 EvidenceRef 的 proposal 在 Gate 前返回 `PROPOSAL_BEFORE_EVIDENCE`；input/effect anchor 必须位于已执行 `INSPECT_METHOD` 的 method/constructor 中；传播 proposal 的 EvidenceRef grounding 必须同时覆盖 source 与 target，否则返回 `PROPOSAL_EVIDENCE_COVERAGE_INCOMPLETE`。这些反馈不扣 proposal budget、不进入 Gate/graph，并受 stagnation ceiling 约束。
 
@@ -84,17 +84,21 @@ controller 升级为 `M7_CONTROLLER_V2`，显式维护 `DISCOVERY`、`INSPECTION
 
 ### M7-F5 Enriched bounded tool summaries
 
-状态：本地实现与全量回归通过；本阶段以独立 Git commit 推送，随后由 CloudStudio 拉取同一 commit 执行云端回归。
+状态：基础摘要完成并经 CloudStudio 验证；attempt 11 进一步暴露了 inspect 结构化实体信息不足，补充修复已在 commit `1d01ff1` 实现并推送，等待 CloudStudio attempt 12 验证。
 
 每个 M2/M3 tool result 现在包含确定性的 `summary`，供下一轮 observation 使用，而不是把完整原始 items 再次发送给模型。摘要只保留 tool status、bounded result count、最多 5 个 linked entity IDs、最多 5 个 source locations、relation/evidence-kind 计数、truncation、warning count、结构化 failure reason，以及最多 2,000 字符的首个源码/文本 preview。事实与 preview 的递归扫描各有 2,000-node hard ceiling，防止异常嵌套结果造成无界压缩成本。
 
 controller 另附 Gate 前证据摘要：evidence count、最多 5 个 EvidenceRef IDs、最多 5 个 covered entity IDs、source-kind counts 和 truncation。`TOOL_GROUNDED` observation 允许这两个摘要字段进入最近反馈，但仍受 M7-F3 的 24 KiB 整体硬上限约束。原始 tool items、EvidenceRef 和 trace artifact 保持完整审计语义；摘要不被当作新证据，也不绕过 Gate。
 
+attempt 11 证明仅有文本 preview 仍不足以让模型可靠绑定 M4 role。`INSPECT_METHOD` 因此新增 bounded neutral structure：parameters 与其精确 `parameter_role_refs`、`return_type` 与 `return_role_ref`、owner type、方法内 lexical call sites、annotations、以及中性 lexical field-reference candidates；`INSPECT_TYPE` 同样返回 bounded callable members、declared fields、annotations 与 owner type。每类关联实体最多 20 个并记录 omitted count，进入模型的 observation 仍只保留最多 5 个 item 且受 24 KiB 总上限。CALL 与 field reference 明确标注为结构/词法候选，不升级为 runtime dataflow。
+
+同一修复让误绑定 anchor 的 controller feedback 返回最多 10 个已检查 callables、最多 20 个可复制 PARAMETER role refs 与对应 RETURN role refs。它只改进 entity alignment 反馈，不自动选择语义、不接受 proposal、不扣减 Gate 标准，也不构造 input-to-effect shortcut。prompt 升级为 benchmark-agnostic `M7_SECURITY_EXPLORATION_V9`，明确要求复制工具给出的 role refs，禁止把附近 FILE/CALL/FIELD/owner TYPE 当作 callable role。
+
 本地验证（2026-08-31）：targeted 21 passed；controlled smoke integration 2 passed；full 248 passed、2 skipped；compileall 与 `diff --check` 通过。deterministic smoke 的 tool/proposal/Gate/path 行为保持不变。
 
 ### M7-F6 Controlled real-model preflight
 
-状态：两项目 preflight runner、冻结配置与自动门槛审计已实现并通过机制回归；CloudStudio 已执行两次保留产物的真实启动诊断，但尚无通过的 `claude-opus-5` preflight，因此 `freeze_allowed` 仍未成立，禁止进入 F7/F8。
+状态：两项目 preflight runner、冻结配置与自动门槛审计已实现并通过机制回归；CloudStudio 已保留 11 次逐步诊断。attempt 11 已证明 framing、round-1 discovery、工具循环、normalization 记账与 no-leakage 全部可运行，但双项目仍未同时产生可进入 Gate 的 proposal，因此 `freeze_allowed=false`，继续禁止进入 F7/F8。
 
 preflight 不再只使用合成 fixture。冻结配置按 `FROZEN_PROJECT_INVENTORY_JAVA_FILE_COUNT` 选择两个不属于正式 10-project kill-test 的真实开源项目：SMALL 为 V011 OWASP/json-sanitizer（6 个 Java 文件），MEDIUM 为 V022 ESAPI/esapi-java-legacy（351 个 Java 文件）。配置只含公共项目身份、source root、精确 revision、Java 文件数与模型传输契约；`benchmark_informed=false`，不含 CVE、CWE、patch、known location、M6 proposal 或 evaluator 输入。运行前会校验 project ID 安全性、40-hex revision、Git HEAD、RepositoryIndex 规范 Java 文件数以及 small/medium 唯一性。
 
@@ -109,5 +113,14 @@ CloudStudio 诊断尝试（均未读取 benchmark answer，也未进入 F7）：
 - attempt 1，detector commit `3902ee8`：在模型调用前因环境缺省 seed 被客户端静默解释为 `0`、与冻结 `null` 不一致而 fail-closed。提交 `66ec477` 将未配置 seed 确定性保留为 `None`，并补回归测试。
 - attempt 2，detector commit `66ec477`：V011 首轮 exact-base POST 返回 transport failure，0 tool call、0 proposal；独立最小探针确认 `POST https://api.openlux.ai/v1` 返回 HTTP 400。V022 在模型调用前发现冻结 revision 两字符转置；真实 Git HEAD 为 `2e8694c6beb3bdbb2645b882eba72ce41bc63242`。提交 `c8e00ad` 修正该身份并让 HTTP 状态以不含响应体/凭据的形式进入失败 artifact。
 - 根据服务公开的接口契约，后续尝试使用 exact OpenAI endpoint `/v1/chat/completions`；这只是冻结完整 URL，不允许 client 在运行时猜测或拼接路径。attempt 1/2 的目录和日志继续保留，不覆盖。
+- attempt 3，commit `35a8145`：改用 exact OpenAI endpoint 后仍遇到一次瞬时 HTTP 400；独立 exact transport probe 随后成功，证明需要保留 provider transient failure 分类而不是改写 endpoint。
+- attempt 4，commit `35a8145`：两个项目首次真实进入工具循环。V011 连续 3 次空 literal search；V022 找到 interface method，但未继续到 override/implementation，也没有 proposal/Gate。
+- attempt 5，commit `8a12a96`：启动命令缺少 `PYTHONPATH=src`，在 artifact/model 前 import fail；仅保留外部日志，不伪造 preflight artifact。
+- attempt 6，commit `8a12a96`：V011 仍停在 framework searches；V022 的较长反馈触发 24 KiB observation hard-ceiling setup error，证明需要确定性二次压缩。
+- attempt 7，commit `d8020b1`：V022 完成 6 个 tools、1 个 proposal 并实际进入 Gate（REJECTED 对 preflight 是允许的）；V011 第 5 轮返回多个 fenced objects，strict normalizer 以 `STRUCTURED_OUTPUT_AMBIGUOUS` 拒绝，未 silent-pick。
+- attempt 8，commit `d8020b1`：分别出现一次 retryable `MODEL_TIMEOUT` 与 `MODEL_UNAVAILABLE`，controller 当时未对 transport failure 做 bounded retry；提交 `b963686` 增加同轮、有限、可审计的 transient retry。
+- attempt 9，commit `b963686`：V011 完成 6 tools 后保守 STOP；V022 再次由长 trace 触发 observation ceiling。提交 `1f71c0f` 增加 deterministic latest-feedback-summary compaction。
+- attempt 10，commit `1f71c0f`：两个项目均不再出现 observation ceiling。V011 完成 7 tools 后因搜索结果暴露 CALL 而未暴露其 owning callable ID，且大型 TYPE 检查超过 250 行而停止；V022 完成 6 tools，但 provider 在强制 tool mode 下输出多个 fenced decision objects，normalizer 正确拒绝。提交 `b97c2b1` 增加浅层五字段 decision tool schema、CALL→owner callable 可发现性、大型 entity 的确定性 bounded prefix，以及错误调用中的 owner suggestion。
+- attempt 11，commit `b97c2b1`，artifact root `.../b97c2b173407298fa5f732c2c39fc2819d76f6be8-attempt11`：CloudStudio 全量回归 `259 passed, 1 skipped, 3 warnings`。产物共 32 个，selection/no-leakage、normalization accounting、artifact contract 与 secret absence 均通过。V011 为 11 rounds、11 model calls、10 repository tools、0 Gate-entered proposal，`INSUFFICIENT_EVIDENCE`；V022 为 14 rounds、14 model calls、11 repository tools，产生 3 次 parsed `ACTION/PROPOSE`，但都把 PARAMETER 语义绑到非 callable entity，controller 以 `ANCHOR_BEFORE_CALLABLE_INSPECTION` 在 Gate 前拒绝，最终 0 Gate-entered proposal、`NO_FURTHER_ACTION`。这将剩余工程原因明确收敛为 inspect role discoverability 与不可执行 controller feedback，而非 transport/parser/setup failure；commit `1d01ff1` 据此补齐精确 role refs。本地 targeted `30 passed`、full `259 passed, 2 skipped`、compileall 与 `diff --check` 通过。
 
 - M7-F7 至 M7-F10：待前置阶段通过后执行。
