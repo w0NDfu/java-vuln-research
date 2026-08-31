@@ -15,6 +15,8 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from java_vuln_research.work1_agent.proposal.model import canonical_json, stable_digest
 
+from .actions import ActionType, StopReason
+
 
 class ModelFailureClass(str, Enum):
     MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
@@ -36,6 +38,41 @@ class StructuredOutputMode(str, Enum):
 class LLMAPIProtocol(str, Enum):
     OPENAI = "OPENAI"
     ANTHROPIC = "ANTHROPIC"
+
+
+# Keep the provider-facing schema deliberately shallow: it is only the
+# transport envelope that makes one decision unambiguous. StrictActionParser
+# remains authoritative for action arguments and the complete proposal schema.
+DECISION_TOOL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "action_type": {
+            "type": "string",
+            "enum": [item.value for item in ActionType],
+            "description": "Exactly one M7 action type.",
+        },
+        "arguments": {
+            "type": "object",
+            "description": "Tool arguments for a tool action; otherwise an empty object.",
+        },
+        "proposal": {
+            "type": ["object", "null"],
+            "description": "One SecurityProposal for PROPOSE; otherwise null.",
+        },
+        "stop_reason": {
+            "type": ["string", "null"],
+            "enum": [None, *(item.value for item in StopReason)],
+            "description": "One stop reason for STOP; otherwise null.",
+        },
+        "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A concise grounded reason for this single decision.",
+        },
+    },
+    "required": ["action_type", "arguments", "proposal", "stop_reason", "reason"],
+    "additionalProperties": False,
+}
 
 
 class ModelCallError(RuntimeError):
@@ -265,11 +302,7 @@ class OpenAICompatibleLLMClient:
                     "function": {
                         "name": "submit_agent_decision",
                         "description": "Submit exactly one structured M7 agent decision.",
-                        # Some OpenAI-compatible gateways silently discard tools
-                        # with complex schemas. The function is only a transport
-                        # envelope; StrictActionParser remains the authoritative
-                        # full decision/proposal schema validator.
-                        "parameters": {"type": "object"},
+                        "parameters": DECISION_TOOL_SCHEMA,
                     },
                 }
             ]
@@ -363,7 +396,7 @@ class AnthropicMessagesLLMClient:
                 {
                     "name": "submit_agent_decision",
                     "description": "Submit exactly one structured M7 agent decision.",
-                    "input_schema": {"type": "object"},
+                    "input_schema": DECISION_TOOL_SCHEMA,
                 }
             ]
             payload["tool_choice"] = {"type": "tool", "name": "submit_agent_decision"}

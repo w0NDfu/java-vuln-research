@@ -133,6 +133,40 @@ def test_tool_grounded_observation_caps_entities_evidence_and_large_text(tmp_pat
     assert len(observation.to_json()) <= MAX_TOOL_GROUNDED_OBSERVATION_CHARS
 
 
+def test_compacted_search_feedback_keeps_owner_callable_for_call_hits(tmp_path: Path) -> None:
+    call = _entity(1, "CALL")
+    owner = _entity(2, "METHOD")
+    index = RepositoryIndex(tmp_path, [call, owner], [], 1, 0.01)
+    state = AgentState.create(project_id="P", repository_identity="repo@abc", provenance={"producer": "test"})
+    state.budget.begin_round()
+    feedback = [{
+        "tool_call_id": "toolcall-owner",
+        "tool_name": "SEARCH_CODE",
+        "status": "OK",
+        "items": [{
+            "entity": {
+                **call.to_dict(),
+                "owner_callable": owner.to_dict(),
+            },
+            "snippet": "owner();",
+        }],
+    }]
+
+    observation = build_repository_first_observation(
+        state=state,
+        repository_index=index,
+        codeql_status={"project_id": "P", "ready": False, "status": "UNAVAILABLE"},
+        recent_feedback=feedback,
+    )
+
+    compact = observation.payload["recent_feedback"][0]["items"][0]["entity"]
+    assert compact["owner_callable"]["entity_id"] == owner.entity_id
+    recent_ids = {
+        item["entity_id"] for item in observation.payload["tool_grounded_context"]["recent_entities"]
+    }
+    assert owner.entity_id in recent_ids
+
+
 def test_tool_grounded_observation_falls_back_to_latest_summary_when_needed(tmp_path: Path) -> None:
     entities = [_entity(index) for index in range(4)]
     index = RepositoryIndex(tmp_path, entities, [], 4, 0.01)

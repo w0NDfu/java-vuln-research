@@ -34,7 +34,7 @@ def _limit(value: int) -> int:
     return resolved
 
 
-def _entity_ref(entity: ProgramEntity) -> dict[str, Any]:
+def _base_entity_ref(entity: ProgramEntity) -> dict[str, Any]:
     return {
         "entity_id": entity.entity_id,
         "kind": entity.kind.value,
@@ -44,7 +44,40 @@ def _entity_ref(entity: ProgramEntity) -> dict[str, Any]:
         "repository_relative_path": entity.repository_relative_path,
         "start_line": entity.start_line,
         "end_line": entity.end_line,
+        "enclosing_type": entity.enclosing_type,
+        "enclosing_callable": entity.enclosing_callable,
     }
+
+
+def _callable_identity(entity: ProgramEntity) -> str:
+    if entity.signature and entity.signature.startswith(entity.simple_name):
+        return entity.qualified_name + entity.signature[len(entity.simple_name) :]
+    return entity.qualified_name
+
+
+def _owning_callable(index: RepositoryIndex, entity: ProgramEntity) -> ProgramEntity | None:
+    identity = entity.enclosing_callable
+    if not identity:
+        return None
+    candidates = [
+        item
+        for item in index.entities
+        if item.kind in {ProgramEntityKind.METHOD, ProgramEntityKind.CONSTRUCTOR}
+        and item.repository_relative_path == entity.repository_relative_path
+        and item.start_line <= entity.start_line <= item.end_line
+        and _callable_identity(item) == identity
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: (item.end_line - item.start_line, item.entity_id))
+
+
+def _entity_ref(index: RepositoryIndex, entity: ProgramEntity) -> dict[str, Any]:
+    value = _base_entity_ref(entity)
+    owner = _owning_callable(index, entity)
+    if owner is not None:
+        value["owner_callable"] = _base_entity_ref(owner)
+    return value
 
 
 def _nearest_entity(entities: Iterable[ProgramEntity], line: int) -> ProgramEntity | None:
@@ -106,7 +139,7 @@ def search_code(
                 entity = _nearest_entity(by_file[relative_path], line_number)
                 results.append(
                     {
-                        "entity": _entity_ref(entity) if entity else None,
+                        "entity": _entity_ref(index, entity) if entity else None,
                         "location": {
                             "repository_relative_path": relative_path,
                             "line": line_number,
@@ -161,7 +194,7 @@ def search_symbols(
             line = ""
         results.append(
             {
-                "entity": _entity_ref(entity),
+                "entity": _entity_ref(index, entity),
                 "location": {
                     "repository_relative_path": entity.repository_relative_path,
                     "line": entity.start_line,

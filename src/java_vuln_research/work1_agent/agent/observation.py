@@ -118,6 +118,8 @@ def _compact_entity(entity: ProgramEntity) -> dict[str, Any]:
         "repository_relative_path": _text(entity.repository_relative_path),
         "start_line": entity.start_line,
         "end_line": entity.end_line,
+        "enclosing_type": _text(entity.enclosing_type),
+        "enclosing_callable": _text(entity.enclosing_callable),
     }
 
 
@@ -125,7 +127,7 @@ def _compact_tool_item(item: Mapping[str, Any]) -> dict[str, Any]:
     selected: dict[str, Any] = {}
     entity = item.get("entity")
     if isinstance(entity, Mapping):
-        selected["entity"] = {
+        compact_entity = {
             key: _bounded_value(entity[key])
             for key in (
                 "entity_id",
@@ -135,9 +137,27 @@ def _compact_tool_item(item: Mapping[str, Any]) -> dict[str, Any]:
                 "repository_relative_path",
                 "start_line",
                 "end_line",
+                "enclosing_type",
+                "enclosing_callable",
             )
             if key in entity
         }
+        owner = entity.get("owner_callable")
+        if isinstance(owner, Mapping):
+            compact_entity["owner_callable"] = {
+                key: _bounded_value(owner[key])
+                for key in (
+                    "entity_id",
+                    "kind",
+                    "qualified_name",
+                    "signature",
+                    "repository_relative_path",
+                    "start_line",
+                    "end_line",
+                )
+                if key in owner
+            }
+        selected["entity"] = compact_entity
     for key in (
         "entity_id",
         "kind",

@@ -224,6 +224,37 @@ def test_neutral_search_is_bounded_and_has_auditable_shape(repository_index) -> 
         serialised = json.dumps(hit, sort_keys=True)
         assert "VULNERABLE" not in serialised
         assert "CWE-" not in serialised
+    code_entity = code_hits[0]["entity"]
+    assert code_entity["enclosing_type"]
+    if code_entity["kind"] == ProgramEntityKind.CALL.value:
+        assert code_entity["owner_callable"]["kind"] in {
+            ProgramEntityKind.METHOD.value,
+            ProgramEntityKind.CONSTRUCTOR.value,
+        }
+        assert code_entity["owner_callable"]["entity_id"].startswith("entity-")
+
+
+def test_inspect_large_entity_returns_deterministic_bounded_prefix(tmp_path: Path) -> None:
+    source = tmp_path / "Huge.java"
+    source.write_text(
+        "class Huge {\n" + "".join(f"  void m{i}() {{}}\n" for i in range(300)) + "}\n",
+        encoding="utf-8",
+    )
+    index = build_repository_index(tmp_path)
+    huge = next(
+        entity
+        for entity in index.entities
+        if entity.kind is ProgramEntityKind.TYPE and entity.simple_name == "Huge"
+    )
+
+    result = inspect_entity(tmp_path, huge, max_lines=25)
+
+    assert len(result["lines"]) == 25
+    assert result["start_line"] == huge.start_line
+    assert result["end_line"] == huge.start_line + 24
+    assert result["requested_end_line"] == huge.end_line
+    assert result["truncated"] is True
+    assert result["provenance"]["entity_range_truncated"] is True
 
 
 def test_schema_required_fields_match_serialized_entity(repository_index) -> None:

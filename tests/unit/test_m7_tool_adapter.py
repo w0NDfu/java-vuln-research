@@ -88,10 +88,20 @@ def test_repository_tools_are_bounded_audited_and_relation_candidates_are_not_fa
     assert search.summary["outcome"].startswith("OK:")
     assert search.summary["query"] == "helper"
     assert search.summary["query_semantics"] == "ONE_LITERAL_CASE_INSENSITIVE_SUBSTRING"
+    call_hit = next(item for item in search.items if item["entity"]["kind"] == "CALL")
+    owner = call_hit["entity"]["owner_callable"]
+    assert owner["kind"] in {"METHOD", "CONSTRUCTOR"}
+    assert owner["entity_id"] in search.summary["linked_entity_ids"]
     inspect = adapter.execute(_action(ActionType.INSPECT_METHOD, {"entity_id": run.entity_id, "context_lines": 1}))
     assert inspect.status is AgentToolStatus.OK
     assert len(inspect.summary["content_preview"]) <= 2000
     assert "GET_OVERRIDES" in inspect.summary["next_step_hint"]
+
+    wrong_inspect = adapter.execute(
+        _action(ActionType.INSPECT_METHOD, {"entity_id": call_hit["entity"]["entity_id"]})
+    )
+    assert wrong_inspect.status is AgentToolStatus.ERROR
+    assert f"owner callable entity_id={owner['entity_id']}" in wrong_inspect.failure["message"]
 
     callers = adapter.execute(_action(ActionType.GET_CALLERS, {"entity_id": run.entity_id, "max_results": 10}))
     callees = adapter.execute(_action(ActionType.GET_CALLEES, {"entity_id": run.entity_id, "max_results": 10}))

@@ -141,18 +141,26 @@ def inspect_entity(
         raise SourceReadError("INVALID_RANGE", "context_lines must be an integer") from error
     if context < 0 or context > 100:
         raise SourceReadError("INVALID_RANGE", "context_lines must be between 0 and 100")
+    line_limit = _bounded_limit(max_lines, name="max_lines", absolute_maximum=ABSOLUTE_MAX_LINES)
+    requested_start = max(1, entity.start_line - context)
+    requested_end = entity.end_line + context
+    bounded_end = min(requested_end, requested_start + line_limit - 1)
     result = read_file_range(
         repository_root,
         entity.repository_relative_path,
-        max(1, entity.start_line - context),
-        entity.end_line + context,
-        max_lines=max_lines,
+        requested_start,
+        bounded_end,
+        max_lines=line_limit,
         max_bytes=max_bytes,
     )
+    result["requested_start_line"] = requested_start
+    result["requested_end_line"] = requested_end
+    result["truncated"] = bool(result["truncated"] or bounded_end < requested_end)
     result["entity"] = entity.to_dict()
     result["provenance"] = {
         **result["provenance"],
         "entity_id": entity.entity_id,
         "context_lines": context,
+        "entity_range_truncated": bounded_end < requested_end,
     }
     return result

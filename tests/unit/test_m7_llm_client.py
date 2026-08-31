@@ -206,7 +206,10 @@ def test_tool_call_mode_forces_and_reads_one_structured_decision(tool_arguments:
     body = captured["body"]
     assert "response_format" not in body
     assert body["tool_choice"]["function"]["name"] == "submit_agent_decision"
-    assert body["tools"][0]["function"]["parameters"] == {"type": "object"}
+    schema = body["tools"][0]["function"]["parameters"]
+    assert schema["required"] == ["action_type", "arguments", "proposal", "stop_reason", "reason"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == set(schema["required"])
     assert StructuredOutputNormalizer().normalize(response).normalized_object == _stop()
 
 
@@ -236,7 +239,9 @@ def test_anthropic_messages_tool_mode_reads_tool_use_input() -> None:
 
     assert captured["url"] == "https://api.openlux.ai/v1/messages"
     assert captured["body"]["tool_choice"] == {"type": "tool", "name": "submit_agent_decision"}
-    assert captured["body"]["tools"][0]["input_schema"] == {"type": "object"}
+    schema = captured["body"]["tools"][0]["input_schema"]
+    assert schema["required"] == ["action_type", "arguments", "proposal", "stop_reason", "reason"]
+    assert schema["additionalProperties"] is False
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
     assert StructuredOutputNormalizer().normalize(response).normalized_object == _stop()
     assert response.input_tokens == 20 and response.output_tokens == 8

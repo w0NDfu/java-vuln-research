@@ -247,6 +247,22 @@ class RepositoryCodeQLToolAdapter:
         except KeyError as exc:
             raise ValueError("entity_id is absent from the project-local RepositoryIndex") from exc
 
+    def _owning_callable(self, entity: ProgramEntity) -> ProgramEntity | None:
+        identity = entity.enclosing_callable
+        if not identity:
+            return None
+        candidates = [
+            item
+            for item in self.index.entities
+            if item.kind in {ProgramEntityKind.METHOD, ProgramEntityKind.CONSTRUCTOR}
+            and item.repository_relative_path == entity.repository_relative_path
+            and item.start_line <= entity.start_line <= item.end_line
+            and _callable_identity(item) == identity
+        ]
+        if not candidates:
+            return None
+        return min(candidates, key=lambda item: (item.end_line - item.start_line, item.entity_id))
+
     @staticmethod
     def _bounded(rows: list[dict[str, Any]], limit: int) -> tuple[tuple[Mapping[str, Any], ...], bool]:
         return tuple(rows[:limit]), len(rows) > limit
@@ -276,7 +292,18 @@ class RepositoryCodeQLToolAdapter:
         if action_type in {ActionType.INSPECT_METHOD, ActionType.INSPECT_TYPE}:
             expected = {ProgramEntityKind.METHOD, ProgramEntityKind.CONSTRUCTOR} if action_type is ActionType.INSPECT_METHOD else {ProgramEntityKind.TYPE}
             if entity.kind not in expected:
-                raise ValueError(f"{action_type.value} requires {sorted(item.value for item in expected)} entity")
+                suggestion = ""
+                if action_type is ActionType.INSPECT_METHOD:
+                    owner = self._owning_callable(entity)
+                    if owner is not None:
+                        suggestion = (
+                            f"; use owner callable entity_id={owner.entity_id} "
+                            f"({owner.kind.value} {owner.qualified_name})"
+                        )
+                raise ValueError(
+                    f"{action_type.value} requires {sorted(item.value for item in expected)} entity; "
+                    f"received {entity.kind.value} {entity.entity_id}{suggestion}"
+                )
             self._register_source(entity)
             value = inspect_entity(
                 self.index.repository_root,
