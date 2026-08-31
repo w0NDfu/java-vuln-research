@@ -122,14 +122,53 @@ def test_tool_grounded_observation_caps_entities_evidence_and_large_text(tmp_pat
     context = observation.payload["tool_grounded_context"]
     assert len(context["recent_entities"]) == MAX_RECENT_ENTITIES
     assert len(context["recent_evidence_refs"]) == MAX_RECENT_EVIDENCE
-    assert len(observation.payload["recent_feedback"][0]["items"]) == 3
+    assert all("items" not in row for row in observation.payload["recent_feedback"][:-1])
+    assert len(observation.payload["recent_feedback"][-1]["items"]) == 3
     assert all(
         len(item["content"]) <= 1200
         for row in observation.payload["recent_feedback"]
-        for item in row["items"]
+        for item in row.get("items", [])
     )
     assert observation.payload["observation_metrics"]["serialized_chars"] == len(observation.to_json())
     assert len(observation.to_json()) <= MAX_TOOL_GROUNDED_OBSERVATION_CHARS
+
+
+def test_tool_grounded_observation_falls_back_to_latest_summary_when_needed(tmp_path: Path) -> None:
+    entities = [_entity(index) for index in range(4)]
+    index = RepositoryIndex(tmp_path, entities, [], 4, 0.01)
+    state = AgentState.create(project_id="P", repository_identity="repo@abc", provenance={"producer": "test"})
+    state.budget.begin_round()
+    huge_items = [
+        {
+            "entity": entity.to_dict(),
+            "content": "x" * 20000,
+            "nodes": [{f"key-{n}": "y" * 500 for n in range(12)} for _ in range(5)],
+        }
+        for entity in entities
+    ]
+    feedback = [
+        {
+            "tool_call_id": f"toolcall-{index}",
+            "tool_name": "INSPECT_METHOD",
+            "status": "OK",
+            "items": huge_items,
+            "summary": {f"summary-{n}": "z" * 1000 for n in range(12)},
+        }
+        for index in range(3)
+    ]
+
+    observation = build_repository_first_observation(
+        state=state,
+        repository_index=index,
+        codeql_status={"project_id": "P", "ready": True, "status": "READY"},
+        recent_feedback=feedback,
+    )
+
+    assert len(observation.to_json()) <= MAX_TOOL_GROUNDED_OBSERVATION_CHARS
+    if observation.payload["tool_grounded_context"].get("observation_compaction"):
+        assert observation.payload["tool_grounded_context"]["observation_compaction"] == "LATEST_FEEDBACK_SUMMARY_ONLY"
+        assert len(observation.payload["recent_feedback"]) == 1
+        assert "items" not in observation.payload["recent_feedback"][0]
 
 
 def test_observation_rejects_cross_project_codeql_status(tmp_path: Path) -> None:

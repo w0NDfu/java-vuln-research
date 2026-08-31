@@ -385,6 +385,9 @@ def build_repository_first_observation(
     all_feedback = [dict(item) for item in recent_feedback]
     selected_feedback = all_feedback[-MAX_RECENT_FEEDBACK:]
     level = "TOOL_GROUNDED" if all_feedback else "BOOTSTRAP"
+    compact_feedback = [_compact_feedback(item) for item in selected_feedback]
+    for prior in compact_feedback[:-1]:
+        prior.pop("items", None)
     payload: dict[str, Any] = {
         "observation_level": level,
         "controller_phase": controller_phase or "DISCOVERY",
@@ -403,7 +406,7 @@ def build_repository_first_observation(
         },
         "current_exploration_focus": state.current_exploration_focus,
         "unresolved_questions": [_text(item) for item in state.unresolved_questions[-3:]],
-        "recent_feedback": [_compact_feedback(item) for item in selected_feedback],
+        "recent_feedback": compact_feedback,
         "runtime_rules": {
             "repository_first": True,
             "frontier_required": False,
@@ -447,9 +450,25 @@ def build_repository_first_observation(
         if level == "BOOTSTRAP"
         else MAX_TOOL_GROUNDED_OBSERVATION_CHARS
     )
-    return _finalize_observation(
-        state=state,
-        level=level,
-        payload=payload,
-        hard_ceiling_chars=ceiling,
-    )
+    try:
+        return _finalize_observation(
+            state=state,
+            level=level,
+            payload=payload,
+            hard_ceiling_chars=ceiling,
+        )
+    except ValueError:
+        if level != "TOOL_GROUNDED" or not compact_feedback:
+            raise
+        latest = compact_feedback[-1]
+        latest.pop("items", None)
+        payload["recent_feedback"] = [latest]
+        context = payload.get("tool_grounded_context")
+        if isinstance(context, dict):
+            context["observation_compaction"] = "LATEST_FEEDBACK_SUMMARY_ONLY"
+        return _finalize_observation(
+            state=state,
+            level=level,
+            payload=payload,
+            hard_ceiling_chars=ceiling,
+        )
