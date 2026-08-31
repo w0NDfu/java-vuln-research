@@ -61,7 +61,19 @@ manifest schema 升级到 version 2。每个输入除 SHA-256 外新增 `artifac
 
 ### Remaining stages
 
-- M7-F3 compact bootstrap/tool-grounded observation：待实现。
+### M7-F3 Compact bootstrap and tool-grounded observation
+
+状态：本地实现与回归通过，等待 GitHub 网络恢复后执行 CloudStudio 同 commit 全量回归。
+
+observation schema 升级到 version 2，并拆为两个确定性层级：
+
+- `BOOTSTRAP`：只发送 Java 文件数、ProgramEntity 总数与 kind counts、最多 10 个 top packages、紧凑 CodeQL/native 状态、当前预算，以及 17 个工具的 exact name 与一行 purpose；不再预先发送最多 30 types、30 methods 和完整工具 bounds；
+- `TOOL_GROUNDED`：保留同一轻量 bootstrap，并附最近 3 条压缩反馈、最后一次工具的状态/数量摘要、最多 5 个最近实体和最多 5 个最近 EvidenceRef。大源码只保留一次 bounded preview，不在 last-tool summary 中重复；EvidenceRef 去重时优先保留带 entity grounding 的完整版本。
+
+硬上限分别为 16 KiB 和 24 KiB。每个 observation 通过稳定迭代记录 exact `serialized_chars`、`ceil(chars/4)` token estimate、估算方法与适用 ceiling；若实际 canonical serialization 超限则在 model call 前 fail-closed。通用 mapping/sequence/text、工具 items、源码 content/snippet 和 Gate feedback 均有独立确定性上限。
+
+本地验证（2026-08-31）：targeted 25 passed；full 246 passed、2 skipped；compileall、未定义引用检查和 `diff --check` 通过。极端测试使用 12 个实体、12 个 EvidenceRef 和每项 20,000 字符源码，验证反馈为 3、实体为 5、EvidenceRef 为 5 且最终 observation 不超过 24 KiB。deterministic controlled smoke 为 6 rounds、2 tools、3 proposals、3 ADMISSIBLE、1 path、`PATH_FORMED`，artifact audit 与 no-leakage 均通过。
+
 - M7-F4 phased controller constraints：待实现。
 - M7-F5 enriched bounded tool summaries：待实现。
 - M7-F6 controlled real-model preflight：待执行；失败则不 freeze 正式 detector。

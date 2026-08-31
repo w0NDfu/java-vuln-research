@@ -90,6 +90,17 @@ def _observed_evidence(
             evidence_ids.append(str(evidence["evidence_id"]))
             if evidence.get("tool_call_id"):
                 tool_call_ids.append(str(evidence["tool_call_id"]))
+    grounded = request.observation.get("tool_grounded_context", {})
+    if isinstance(grounded, Mapping):
+        for evidence in grounded.get("recent_evidence_refs", ()):
+            if not isinstance(evidence, Mapping):
+                continue
+            entity_ids_in_evidence = {str(value) for value in evidence.get("entity_ids", ())}
+            if not entity_ids_in_evidence.intersection(wanted):
+                continue
+            evidence_ids.append(str(evidence["evidence_id"]))
+            if evidence.get("tool_call_id"):
+                tool_call_ids.append(str(evidence["tool_call_id"]))
     if not evidence_ids:
         raise ValueError("controlled reasoner could not find model-visible evidence for requested entities")
     return tuple(dict.fromkeys(evidence_ids)), tuple(dict.fromkeys(tool_call_ids))
