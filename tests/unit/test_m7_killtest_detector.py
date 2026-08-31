@@ -7,6 +7,7 @@ from pathlib import Path
 
 from java_vuln_research.work1_agent.agent import AgentBudgetLimits, MockLLMClient
 from java_vuln_research.work1_agent.agent.controller import CONTROLLER_VERSION
+from java_vuln_research.work1_agent.agent.killtest_manifest import resolved_source_root_identity
 from java_vuln_research.work1_agent.agent.llm_client import LLMClientConfig
 from java_vuln_research.work1_agent.agent.observation import (
     MAX_BOOTSTRAP_OBSERVATION_CHARS,
@@ -58,7 +59,7 @@ def test_frozen_contract_rejects_runtime_protocol_drift(tmp_path: Path) -> None:
             {
                 "project_id": "PTEST",
                 "repository_root": str(source_root),
-                "repository_resolved_root": str(source_root.resolve()),
+                "repository_resolved_root_identity": resolved_source_root_identity(source_root),
             }
         ],
     }
@@ -79,7 +80,15 @@ def test_frozen_contract_rejects_runtime_protocol_drift(tmp_path: Path) -> None:
         ("controller", {**manifest["controller"], "version": "different"}),
         (
             "projects",
-            [{**manifest["projects"][0], "repository_resolved_root": str(tmp_path / "different")}],
+            [
+                {
+                    **manifest["projects"][0],
+                    "repository_resolved_root_identity": {
+                        **manifest["projects"][0]["repository_resolved_root_identity"],
+                        "sha256": "0" * 64,
+                    },
+                }
+            ],
         ),
     )
     for field, value in mutations:
@@ -133,7 +142,7 @@ def test_formal_detector_project_freezes_without_benchmark_input(tmp_path: Path)
         project={
             "project_id": "PTEST",
             "repository_root": str(source_root),
-            "repository_resolved_root": str(source_root.resolve()),
+            "repository_resolved_root_identity": resolved_source_root_identity(source_root),
             "repository_revision": "abc",
             "codeql_db_path": "",
             "codeql_db_ready": False,

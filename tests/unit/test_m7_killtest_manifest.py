@@ -7,7 +7,10 @@ from pathlib import Path
 import jsonschema
 
 from java_vuln_research.work1_agent.agent import LLMClientConfig
-from java_vuln_research.work1_agent.agent.killtest_manifest import freeze_killtest_manifest
+from java_vuln_research.work1_agent.agent.killtest_manifest import (
+    freeze_killtest_manifest,
+    resolved_source_root_identity,
+)
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -107,8 +110,8 @@ def test_freeze_separates_benchmark_selection_from_detector_input(tmp_path: Path
         "tool_grounded_max_chars": 24 * 1024,
     }
     assert all(
-        Path(project["repository_root"]).resolve()
-        == Path(project["repository_resolved_root"])
+        project["repository_resolved_root_identity"]
+        == resolved_source_root_identity(project["repository_root"])
         for project in detector["projects"]
     )
     assert detector["baseline_lineage"]["codeql_version"] == "UNKNOWN"

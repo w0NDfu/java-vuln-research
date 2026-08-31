@@ -134,6 +134,8 @@ CloudStudio 诊断尝试（均未读取 benchmark answer，也未进入 F7）：
 
 commit `30b976d` 上的第二次 freeze 尝试保存在 `.../m7_agent/runs/30b976d2d0290ec57288e456d39a431af24552bc/killtest_freeze`。该 commit 在 CloudStudio 全量回归为 `262 passed, 1 skipped, 3 warnings`；freeze 命令成功且 no-leakage 通过，但逐项对照 F7 原始要求时发现项目项只保存 lexical `repository_root`，没有单独保存 symlink 解析后的 source root。该目录同样保持不可变并标记为不完整尝试，不用于 detector。
 
-后续修复在 manifest/schema/runtime validator 中显式绑定 normalizer version、observation schema version、16 KiB bootstrap 与 24 KiB tool-grounded 上限，并补齐 Git SHA、tool catalog、controller version、source lexical root 与 source resolved root 的启动时 fail-closed 校验。只有新 commit 在 CloudStudio 同 SHA 全量回归通过并生成全新的 freeze 目录后，才允许启动 F8。
+commit `fbbf3db` 上的第三次 freeze 尝试在写 artifact 前 fail-closed：新增的 plaintext resolved root 中至少有一个包含 selection case 标识，因此触发 benchmark-derived value no-leakage 审计。其 SHA 专属目录保持原状，不复用、不关闭审计，也不把该路径带入 agent runtime。resolved root 改为版本化 SHA-256 身份；detector 从冻结 lexical root 重新解析实际路径并比对身份，既绑定 symlink 目标又不向 manifest 暴露路径中的 case 标识。
+
+后续修复在 manifest/schema/runtime validator 中显式绑定 normalizer version、observation schema version、16 KiB bootstrap 与 24 KiB tool-grounded 上限，并补齐 Git SHA、tool catalog、controller version、source lexical root 与不泄漏的 source resolved-root identity 的启动时 fail-closed 校验。只有新 commit 在 CloudStudio 同 SHA 全量回归通过并生成全新的 freeze 目录后，才允许启动 F8。
 
 - M7-F8 至 M7-F10：待新的 F7 freeze 完成并通过逐项审计后执行。

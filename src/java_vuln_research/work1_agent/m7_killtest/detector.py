@@ -26,6 +26,7 @@ from java_vuln_research.work1_agent.agent.llm_client import (
     LLMClientConfig,
     OpenAICompatibleLLMClient,
 )
+from java_vuln_research.work1_agent.agent.killtest_manifest import resolved_source_root_identity
 from java_vuln_research.work1_agent.agent.observation import (
     MAX_BOOTSTRAP_OBSERVATION_CHARS,
     MAX_TOOL_GROUNDED_OBSERVATION_CHARS,
@@ -127,10 +128,9 @@ def _validate_frozen_contract(
     for project in detector_manifest.get("projects") or ():
         project_id = str(project.get("project_id") or "UNKNOWN")
         lexical_root = Path(str(project.get("repository_root") or ""))
-        frozen_resolved_root = Path(str(project.get("repository_resolved_root") or ""))
         if not lexical_root.is_absolute() or not lexical_root.is_dir():
             raise ValueError(f"frozen project source root is not ready: {project_id}")
-        if not frozen_resolved_root.is_absolute() or str(lexical_root.resolve()) != str(frozen_resolved_root):
+        if dict(project.get("repository_resolved_root_identity") or {}) != resolved_source_root_identity(lexical_root):
             raise ValueError(f"runtime project source resolution differs from the frozen M7-9 contract: {project_id}")
     for name, expected in dict(detector_manifest.get("schemas") or {}).items():
         path = schema_root / name
@@ -224,7 +224,7 @@ def run_detector_project(
     started = time.monotonic()
     project_id = str(project["project_id"])
     source_lexical_root = Path(str(project["repository_root"]))
-    source_root = Path(str(project["repository_resolved_root"]))
+    source_root = source_lexical_root.resolve()
     database = Path(str(project.get("codeql_db_path") or "")).resolve()
     db_ready = bool(project.get("codeql_db_ready"))
     output.mkdir(parents=True, exist_ok=True)

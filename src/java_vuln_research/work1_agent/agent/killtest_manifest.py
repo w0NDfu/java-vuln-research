@@ -26,6 +26,7 @@ from .structured_output import NORMALIZER_VERSION
 
 
 DETECTOR_MANIFEST_VERSION = 1
+RESOLVED_SOURCE_ROOT_IDENTITY_VERSION = "M7_RESOLVED_SOURCE_ROOT_SHA256_V1"
 FORBIDDEN_FIELD_NAMES = frozenset(
     {
         "case_id", "cve", "cwe", "patch", "fix", "fix_method", "vulnerable_location",
@@ -37,6 +38,14 @@ FORBIDDEN_TEXT_TOKENS = ("cve-", "cwe-", "diagnostic_proposal", "root_cause", "b
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def resolved_source_root_identity(path: str | Path) -> dict[str, str]:
+    resolved = str(Path(path).resolve())
+    return {
+        "version": RESOLVED_SOURCE_ROOT_IDENTITY_VERSION,
+        "sha256": hashlib.sha256(resolved.encode("utf-8")).hexdigest(),
+    }
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -134,7 +143,7 @@ def freeze_killtest_manifest(
                 "project_id": project_id,
                 "project_name": str(row.get("project_name") or row.get("name") or project_id),
                 "repository_root": source_root,
-                "repository_resolved_root": str(source_path.resolve()),
+                "repository_resolved_root_identity": resolved_source_root_identity(source_path),
                 "repository_revision": str(selected_row.get("source_revision") or "UNKNOWN"),
                 "source_ready": source_ready,
                 "codeql_db_path": db_path,
