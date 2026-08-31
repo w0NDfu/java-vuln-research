@@ -94,14 +94,20 @@ controller 另附 Gate 前证据摘要：evidence count、最多 5 个 EvidenceR
 
 ### M7-F6 Controlled real-model preflight
 
-状态：两项目 preflight runner、冻结配置与自动门槛审计已在本地实现并通过机制回归；CloudStudio 真实 `claude-opus-5` 运行尚未执行，因此 `freeze_allowed` 仍未成立，禁止进入 F7/F8。
+状态：两项目 preflight runner、冻结配置与自动门槛审计已实现并通过机制回归；CloudStudio 已执行两次保留产物的真实启动诊断，但尚无通过的 `claude-opus-5` preflight，因此 `freeze_allowed` 仍未成立，禁止进入 F7/F8。
 
 preflight 不再只使用合成 fixture。冻结配置按 `FROZEN_PROJECT_INVENTORY_JAVA_FILE_COUNT` 选择两个不属于正式 10-project kill-test 的真实开源项目：SMALL 为 V011 OWASP/json-sanitizer（6 个 Java 文件），MEDIUM 为 V022 ESAPI/esapi-java-legacy（351 个 Java 文件）。配置只含公共项目身份、source root、精确 revision、Java 文件数与模型传输契约；`benchmark_informed=false`，不含 CVE、CWE、patch、known location、M6 proposal 或 evaluator 输入。运行前会校验 project ID 安全性、40-hex revision、Git HEAD、RepositoryIndex 规范 Java 文件数以及 small/medium 唯一性。
 
-模型契约冻结为 provider `openlux`、exact model ID `claude-opus-5`、OpenAI protocol、`TOOL_CALL` structured output、temperature 0、max output 2048、seed omitted。`base_url` 与 exact `endpoint_url` 都是 `https://api.openlux.ai/v1`；runner 要求二者严格相等并要求 `endpoint_mode=EXACT`，因此 client 不会拼接 `/chat/completions` 或 `/messages`。
+模型契约冻结为 provider `openlux`、exact model ID `claude-opus-5`、OpenAI protocol、`TOOL_CALL` structured output、temperature 0、max output 2048、seed omitted。`base_url` 是 `https://api.openlux.ai/v1`，exact `endpoint_url` 是服务声明的 OpenAI POST endpoint `https://api.openlux.ai/v1/chat/completions`。runner 要求 `endpoint_mode=EXACT` 且逐字段匹配冻结配置，client 直接使用完整 URL，不在运行时拼接路径。
 
 每项目自动检查：round 1 是否实际完成 `SEARCH_CODE`/`SEARCH_SYMBOLS`；tool calls 是否至少 2 次；是否至少产生 1 条经 schema/parser 接受的 proposal；是否至少进入 Gate 1 次；每个 `NEEDS_MORE_EVIDENCE` 后是否存在实际 tool result；detector input manifest、artifact contract 与 secret/no-leakage 是否通过；每个 model call 是否被带显式 StructuredOutputNormalizer provenance 的 action 或明确 retry/failure 完整记账。只有两个项目全部通过才写 `freeze_allowed=true`；不要求形成 candidate path，也不运行 benchmark evaluator。
 
-本地验证（2026-08-31）：F6 targeted 2 passed；F1–F6 related targeted 41 passed；full 250 passed、2 skipped；compileall 与 `diff --check` 通过。机制测试构造 1-file SMALL 与 100-file MEDIUM 项目，分别完成 2 个 repository tools、1 个 schema-valid proposal、1 次 Gate，并验证 API key 不进入任何 artifact。真实 Cloud run 结果必须单独记录，不能用该 mock 结果替代。
+本地验证（2026-08-31）：机制测试构造 1-file SMALL 与 100-file MEDIUM 项目，分别完成 2 个 repository tools、1 个 schema-valid proposal、1 次 Gate，并验证 API key 不进入任何 artifact。修复 seed 缺省语义、HTTP 状态审计和 V022 revision 后，targeted 14 passed；full 252 passed、2 skipped；compileall 与 `diff --check` 通过。真实 Cloud run 结果必须单独记录，不能用 mock 结果替代。
+
+CloudStudio 诊断尝试（均未读取 benchmark answer，也未进入 F7）：
+
+- attempt 1，detector commit `3902ee8`：在模型调用前因环境缺省 seed 被客户端静默解释为 `0`、与冻结 `null` 不一致而 fail-closed。提交 `66ec477` 将未配置 seed 确定性保留为 `None`，并补回归测试。
+- attempt 2，detector commit `66ec477`：V011 首轮 exact-base POST 返回 transport failure，0 tool call、0 proposal；独立最小探针确认 `POST https://api.openlux.ai/v1` 返回 HTTP 400。V022 在模型调用前发现冻结 revision 两字符转置；真实 Git HEAD 为 `2e8694c6beb3bdbb2645b882eba72ce41bc63242`。提交 `c8e00ad` 修正该身份并让 HTTP 状态以不含响应体/凭据的形式进入失败 artifact。
+- 根据服务公开的接口契约，后续尝试使用 exact OpenAI endpoint `/v1/chat/completions`；这只是冻结完整 URL，不允许 client 在运行时猜测或拼接路径。attempt 1/2 的目录和日志继续保留，不覆盖。
 
 - M7-F7 至 M7-F10：待前置阶段通过后执行。

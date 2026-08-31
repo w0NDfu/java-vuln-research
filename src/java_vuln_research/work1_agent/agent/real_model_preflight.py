@@ -214,8 +214,8 @@ def _validate_model_configuration(config: LLMClientConfig, required: Mapping[str
     }
     if mismatches:
         raise ValueError("real-model preflight configuration mismatch: " + canonical_json(mismatches))
-    if actual["endpoint_url"] != actual["base_url"] or actual["endpoint_mode"] != "EXACT":
-        raise ValueError("preflight requires the exact base URL endpoint without client-side path concatenation")
+    if actual["endpoint_mode"] != "EXACT":
+        raise ValueError("preflight requires a frozen exact endpoint; client-side default path concatenation is forbidden")
 
 
 def _git_revision(source_root: Path) -> str:

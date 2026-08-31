@@ -8,7 +8,7 @@
     "provider": "openlux",
     "exact_model_id": "claude-opus-5",
     "base_url": "https://api.openlux.ai/v1",
-    "endpoint_url": "https://api.openlux.ai/v1",
+    "endpoint_url": "https://api.openlux.ai/v1/chat/completions",
     "api_protocol": "OPENAI",
     "structured_output_mode": "TOOL_CALL",
     "temperature": 0.0,
