@@ -10,6 +10,7 @@ from java_vuln_research.work1_agent.agent.observation import (
     MAX_RECENT_EVIDENCE,
     MAX_RECENT_FEEDBACK,
     MAX_TOOL_GROUNDED_OBSERVATION_CHARS,
+    bounded_tool_catalog,
     build_repository_first_observation,
 )
 from java_vuln_research.work1_agent.repository.entity import ProgramEntity
@@ -51,6 +52,14 @@ def test_initial_observation_starts_from_repository_with_empty_native_and_codeql
     assert len(value["bootstrap"]["tools"]) == 17
     assert value["observation_metrics"]["serialized_chars"] == len(observation.to_json())
     assert value["observation_metrics"]["serialized_chars"] <= MAX_BOOTSTRAP_OBSERVATION_CHARS
+
+
+def test_bootstrap_tool_catalog_explains_literal_search_and_relation_followups() -> None:
+    catalog = {item["name"]: item for item in bounded_tool_catalog()}
+    assert "one case-insensitive literal substring" in catalog["SEARCH_CODE"]["purpose"]
+    assert "do not bundle alternative terms" in catalog["SEARCH_SYMBOLS"]["purpose"]
+    assert "TYPE or interface entity ID" in catalog["GET_IMPLEMENTATIONS"]["purpose"]
+    assert "abstract, interface-only, or bodyless" in catalog["GET_OVERRIDES"]["purpose"]
 
 
 def test_observation_overview_and_feedback_are_bounded_and_stable(tmp_path: Path) -> None:

@@ -28,15 +28,15 @@ MAX_OBSERVATION_CHARS = MAX_TOOL_GROUNDED_OBSERVATION_CHARS
 
 
 _TOOL_PURPOSES = {
-    ActionType.SEARCH_CODE: "Search bounded source text and return grounded file and line hits.",
-    ActionType.SEARCH_SYMBOLS: "Search bounded indexed symbols and return stable entity IDs.",
+    ActionType.SEARCH_CODE: "Search one case-insensitive literal substring in bounded source text; whitespace is literal, so retry EMPTY results with one shorter observed token.",
+    ActionType.SEARCH_SYMBOLS: "Search one case-insensitive literal substring in bounded indexed symbol names; whitespace is literal, so do not bundle alternative terms.",
     ActionType.INSPECT_METHOD: "Read one indexed method or constructor with bounded source context.",
     ActionType.INSPECT_TYPE: "Read one indexed type with bounded source context.",
     ActionType.READ_FILE_RANGE: "Read one explicit repository-relative source range.",
     ActionType.GET_CALLERS: "List bounded structural caller candidates for one entity.",
     ActionType.GET_CALLEES: "List bounded structural callee candidates within one callable.",
-    ActionType.GET_IMPLEMENTATIONS: "List bounded implementation or extension candidates.",
-    ActionType.GET_OVERRIDES: "List bounded override candidates for one callable.",
+    ActionType.GET_IMPLEMENTATIONS: "List bounded implementation or extension candidates for a supplied TYPE or interface entity ID.",
+    ActionType.GET_OVERRIDES: "List bounded override candidates for a supplied METHOD or CONSTRUCTOR entity ID; use after an abstract, interface-only, or bodyless declaration.",
     ActionType.GET_FIELDS: "List bounded fields declared by the containing type.",
     ActionType.GET_ANNOTATIONS: "List bounded annotations structurally attached to one entity.",
     ActionType.CODEQL_ENTITY_FACTS: "Request fixed CodeQL facts for one mapped entity.",

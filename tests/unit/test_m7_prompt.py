@@ -20,8 +20,12 @@ def test_prompt_is_benchmark_agnostic_and_requires_evidence_first() -> None:
     assert "external_input requires source=null and target=null" in lowered
     assert "stop_reason must be exactly one of path_formed" in lowered
     assert "return no code fence, markdown label, preface, or trailing prose" in lowered
+    assert "one case-insensitive literal substring" in lowered
+    assert "never bundle alternative search terms" in lowered
+    assert "get_overrides on that callable" in lowered
+    assert "applicable untried relation or inspection tool" in lowered
     assert prompt.endswith("in that mode return no message content outside the function call.")
-    assert PROMPT_VERSION == "M7_SECURITY_EXPLORATION_V5"
+    assert PROMPT_VERSION == "M7_SECURITY_EXPLORATION_V6"
     assert "retrofit" not in lowered and "hutool" not in lowered
     assert "diagnostic_proposals" not in lowered and "root-cause table" not in lowered
     assert prompt_sha256(prompt) == prompt_sha256(prompt)

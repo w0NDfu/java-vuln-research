@@ -135,6 +135,8 @@ def _first_text_preview(value: Any, *, remaining_nodes: list[int]) -> str | None
 
 def _tool_summary(
     *,
+    action_type: ActionType,
+    arguments: Mapping[str, Any],
     status: AgentToolStatus,
     items: tuple[Mapping[str, Any], ...],
     truncated: bool,
@@ -177,6 +179,20 @@ def _tool_summary(
     if preview is not None:
         summary["content_preview"] = preview
         summary["content_preview_truncated"] = preview_truncated
+    if action_type in {ActionType.SEARCH_CODE, ActionType.SEARCH_SYMBOLS}:
+        summary["query"] = str(arguments["query"])
+        summary["query_semantics"] = "ONE_LITERAL_CASE_INSENSITIVE_SUBSTRING"
+        if status is AgentToolStatus.EMPTY:
+            summary["next_step_hint"] = (
+                "Retry with one shorter literal token taken from observed package, type, method, "
+                "or API text; do not combine alternatives with spaces."
+            )
+    elif action_type is ActionType.INSPECT_METHOD:
+        summary["next_step_hint"] = (
+            "If this is an abstract, interface-only, or bodyless declaration, call GET_OVERRIDES "
+            "with its callable entity_id; call GET_IMPLEMENTATIONS with an owning TYPE entity_id "
+            "when one is available."
+        )
     return summary
 
 
@@ -375,6 +391,8 @@ class RepositoryCodeQLToolAdapter:
             "failure": dict(failure) if failure else None,
         }
         summary = _tool_summary(
+            action_type=action.action_type,
+            arguments=arguments,
             status=status,
             items=items,
             truncated=truncated,

@@ -86,9 +86,12 @@ def test_repository_tools_are_bounded_audited_and_relation_candidates_are_not_fa
     assert len(search.summary["linked_entity_ids"]) <= 5
     assert len(search.summary["locations"]) <= 5
     assert search.summary["outcome"].startswith("OK:")
+    assert search.summary["query"] == "helper"
+    assert search.summary["query_semantics"] == "ONE_LITERAL_CASE_INSENSITIVE_SUBSTRING"
     inspect = adapter.execute(_action(ActionType.INSPECT_METHOD, {"entity_id": run.entity_id, "context_lines": 1}))
     assert inspect.status is AgentToolStatus.OK
     assert len(inspect.summary["content_preview"]) <= 2000
+    assert "GET_OVERRIDES" in inspect.summary["next_step_hint"]
 
     callers = adapter.execute(_action(ActionType.GET_CALLERS, {"entity_id": run.entity_id, "max_results": 10}))
     callees = adapter.execute(_action(ActionType.GET_CALLEES, {"entity_id": run.entity_id, "max_results": 10}))
@@ -104,6 +107,17 @@ def test_repository_tools_are_bounded_audited_and_relation_candidates_are_not_fa
     manifest = boundary.seal()
     assert manifest["no_leakage_pass"] is True
     assert manifest["entries"][0]["logical_name"] == "java:src/Demo.java"
+
+
+def test_empty_search_reports_literal_semantics_and_recovery_hint(tmp_path: Path) -> None:
+    adapter, _ = _setup(tmp_path)
+    result = adapter.execute(
+        _action(ActionType.SEARCH_SYMBOLS, {"query": "missing alternatives", "max_hits": 10})
+    )
+    assert result.status is AgentToolStatus.EMPTY
+    assert result.summary["query"] == "missing alternatives"
+    assert result.summary["query_semantics"] == "ONE_LITERAL_CASE_INSENSITIVE_SUBSTRING"
+    assert "do not combine alternatives with spaces" in result.summary["next_step_hint"]
 
 
 def test_codeql_unavailable_is_structured_and_not_negative_evidence(tmp_path: Path) -> None:
