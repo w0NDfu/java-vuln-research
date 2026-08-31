@@ -34,7 +34,7 @@ from .tool_adapter import AgentToolResult, RepositoryCodeQLToolAdapter
 from .trace import AgentTrace, TraceEventType
 
 
-CONTROLLER_VERSION = "M7_CONTROLLER_V2"
+CONTROLLER_VERSION = "M7_CONTROLLER_V3"
 
 
 class ControllerPhase(str, Enum):
@@ -387,11 +387,24 @@ class AgentController:
                         exc.model_call_id,
                         exc.retryable,
                     )
-                    if exc.failure_class in repairable and attempt <= self.max_model_output_retries:
-                        repair_failure = failure
+                    output_repair = exc.failure_class in repairable
+                    transient_transport_retry = (
+                        exc.retryable
+                        and exc.failure_class
+                        in {ModelFailureClass.MODEL_TIMEOUT, ModelFailureClass.MODEL_UNAVAILABLE}
+                    )
+                    if (output_repair or transient_transport_retry) and attempt <= self.max_model_output_retries:
+                        repair_failure = failure if output_repair else None
                         self._append(
                             TraceEventType.MODEL_RETRY,
-                            {**failure.to_dict(), "attempt": attempt, "next_attempt": attempt + 1},
+                            {
+                                **failure.to_dict(),
+                                "attempt": attempt,
+                                "next_attempt": attempt + 1,
+                                "retry_kind": (
+                                    "OUTPUT_REPAIR" if output_repair else "TRANSIENT_TRANSPORT"
+                                ),
+                            },
                         )
                         continue
                     self._failure(failure)

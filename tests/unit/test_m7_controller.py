@@ -7,6 +7,8 @@ from java_vuln_research.work1_agent.agent import (
     AgentBudgetLimits,
     AgentController,
     AgentState,
+    ModelCallError,
+    ModelFailureClass,
     MockLLMClient,
     PROJECT_ARTIFACT_FILES,
     RepositoryCodeQLToolAdapter,
@@ -143,7 +145,31 @@ def test_controller_repairs_one_invalid_model_output_without_relaxing_parser(tmp
     assert [request.attempt for request in client.requests] == [1, 2, 1]
     repair = next(item for item in result.trace.events if item.event_type is TraceEventType.MODEL_RETRY)
     assert repair.payload["failure_class"] == "SCHEMA_VIOLATION"
+    assert repair.payload["retry_kind"] == "OUTPUT_REPAIR"
     assert "model_output_repair" in client.requests[1].observation
+
+
+def test_controller_retries_one_retryable_transport_failure_without_output_repair(tmp_path: Path) -> None:
+    controller, client = _controller(
+        tmp_path,
+        [
+            ModelCallError(ModelFailureClass.MODEL_TIMEOUT, "transient", retryable=True),
+            _decision(ActionType.SEARCH_CODE, arguments={"query": "helper"}),
+            _decision(ActionType.STOP, stop_reason=StopReason.INSUFFICIENT_EVIDENCE),
+        ],
+    )
+
+    result = controller.run()
+
+    assert result.state.stop_reason is StopReason.INSUFFICIENT_EVIDENCE
+    assert result.failures == ()
+    assert [request.attempt for request in client.requests] == [1, 2, 1]
+    assert client.requests[0].observation == client.requests[1].observation
+    assert "model_output_repair" not in client.requests[1].observation
+    retry = next(item for item in result.trace.events if item.event_type is TraceEventType.MODEL_RETRY)
+    assert retry.payload["failure_class"] == "MODEL_TIMEOUT"
+    assert retry.payload["retry_kind"] == "TRANSIENT_TRANSPORT"
+    assert retry.payload["retryable"] is True
 
 
 def test_round_one_non_discovery_action_returns_structured_controller_feedback(tmp_path: Path) -> None:
