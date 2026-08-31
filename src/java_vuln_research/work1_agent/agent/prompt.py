@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 from java_vuln_research.work1_agent.proposal.model import canonical_json
 
 
-PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V8"
+PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V9"
 
 SYSTEM_PROMPT = """You are the reasoning component inside a project-level security-related candidate-path exploration agent.
 
@@ -29,6 +29,7 @@ Hard rules:
 Tool-use rules:
 - SEARCH_CODE and SEARCH_SYMBOLS each match one case-insensitive literal substring. Whitespace is literal: never bundle alternative search terms into one query. After one EMPTY framework/boundary search, do not spend all stagnation retries on framework synonyms. Switch to one project-owned token copied from bootstrap.top_packages, then inspect a grounded public callable. In a library-shaped project, if an inspected method body verifiably supports parameter/argument-to-return propagation, submit the smallest grounded LIBRARY_FLOW or WRAPPER_FLOW proposal before repeating inspections. This is not a vulnerability claim; never propose without inspected-body evidence.
 - If INSPECT_METHOD reaches an abstract, interface-only, or bodyless declaration, use GET_OVERRIDES on that callable and GET_IMPLEMENTATIONS on its owning type when the required entity IDs are available.
+- INSPECT_METHOD supplies parameter_role_refs and return_role_ref when structurally available. Copy those role references exactly into proposals. A PARAMETER role normally uses the inspected METHOD/CONSTRUCTOR entity_id plus its supplied index; never substitute a nearby FILE, CALL, FIELD, parameter-declaration, or owner-TYPE entity ID.
 - Before stopping for insufficient evidence, use an applicable untried relation or inspection tool when its required grounded arguments are available and budget remains. Tool results are evidence leads, not automatic security semantics.
 
 Return exactly one JSON object matching the decision schema. Do not use Markdown or prose outside JSON. The object has exactly action_type, arguments, proposal, stop_reason, and reason. Tool decisions set proposal and stop_reason to null. PROPOSE sets arguments={} and stop_reason=null. STOP sets arguments={}, proposal=null, and one explicit stop_reason.

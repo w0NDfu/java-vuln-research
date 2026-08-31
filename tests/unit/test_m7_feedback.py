@@ -165,6 +165,17 @@ def test_anchor_requires_inspected_callable_and_middle_evidence_covers_both_ends
     assert anchor_constraint[0] == "ANCHOR_BEFORE_CALLABLE_INSPECTION"
 
     controller.state.inspected_entity_ids.add(method_id)
+    misbound_anchor = _external_input(field.entity_id, (evidence_id,))
+    misbound_constraint = controller._proposal_constraint(misbound_anchor)
+    assert misbound_constraint is not None
+    assert misbound_constraint[0] == "ANCHOR_SUBJECT_NOT_INSPECTED_CALLABLE"
+    assert misbound_constraint[2] == ("PROPOSE",)
+    assert method_id in {
+        item["entity_id"]
+        for item in misbound_constraint[3]["eligible_inspected_callables"]
+    }
+    assert {"entity_id": method_id, "role": "RETURN"} in misbound_constraint[3]["eligible_return_role_refs"]
+
     relation = SecurityProposal.create(
         proposal_type=ProposalType.LIBRARY_FLOW,
         subject=EntityRoleRef(method_id, EntityRole.RETURN),

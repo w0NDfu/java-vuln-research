@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
@@ -18,6 +19,9 @@ from java_vuln_research.work1_agent.repository.search import search_code, search
 from .actions import TOOL_ACTIONS, ActionType, AgentAction
 from .parser import validate_tool_arguments
 from .security_boundary import RuntimeInputKind, RuntimeSecurityBoundary
+
+
+MAX_INSPECT_RELATED_ENTITIES = 20
 
 
 class AgentToolStatus(str, Enum):
@@ -190,9 +194,10 @@ def _tool_summary(
             )
     elif action_type is ActionType.INSPECT_METHOD:
         summary["next_step_hint"] = (
-            "If this is an abstract, interface-only, or bodyless declaration, call GET_OVERRIDES "
-            "with its callable entity_id; call GET_IMPLEMENTATIONS with an owning TYPE entity_id "
-            "when one is available."
+            "Copy parameter_role_refs or return_role_ref exactly when grounding proposal roles; do not "
+            "substitute a nearby FILE, CALL, FIELD, parameter declaration, or owner TYPE entity ID. "
+            "If this is an abstract, interface-only, or bodyless declaration, call GET_OVERRIDES with "
+            "its callable entity_id; call GET_IMPLEMENTATIONS with an owning TYPE entity_id when one is available."
         )
     return summary
 
@@ -263,6 +268,160 @@ class RepositoryCodeQLToolAdapter:
             return None
         return min(candidates, key=lambda item: (item.end_line - item.start_line, item.entity_id))
 
+    def _owner_type(self, entity: ProgramEntity) -> ProgramEntity | None:
+        qualified_name = entity.qualified_name if entity.kind is ProgramEntityKind.TYPE else entity.enclosing_type
+        if not qualified_name:
+            return None
+        candidates = [
+            item
+            for item in self.index.entities
+            if item.kind is ProgramEntityKind.TYPE
+            and item.qualified_name == qualified_name
+            and item.repository_relative_path == entity.repository_relative_path
+        ]
+        if not candidates:
+            return None
+        return min(candidates, key=lambda item: (item.end_line - item.start_line, item.entity_id))
+
+    @staticmethod
+    def _limited_entities(entities: list[ProgramEntity]) -> tuple[list[dict[str, Any]], int]:
+        ordered = sorted(entities, key=lambda item: (item.start_line, item.end_line, item.entity_id))
+        return [item.to_dict() for item in ordered[:MAX_INSPECT_RELATED_ENTITIES]], max(
+            0, len(ordered) - MAX_INSPECT_RELATED_ENTITIES
+        )
+
+    def _inspect_context(self, entity: ProgramEntity, source_text: str) -> dict[str, Any]:
+        owner_type = self._owner_type(entity)
+        value: dict[str, Any] = {
+            "owner_type": owner_type.to_dict() if owner_type is not None else None,
+            "related_entity_limit": MAX_INSPECT_RELATED_ENTITIES,
+        }
+        if entity.kind in {ProgramEntityKind.METHOD, ProgramEntityKind.CONSTRUCTOR}:
+            identity = _callable_identity(entity)
+            parameters = [
+                item
+                for item in self.index.entities
+                if item.kind is ProgramEntityKind.PARAMETER
+                and item.repository_relative_path == entity.repository_relative_path
+                and item.enclosing_callable == identity
+            ]
+            parameters.sort(
+                key=lambda item: (int(item.provenance.get("parameter_index", 2**31 - 1)), item.entity_id)
+            )
+            parameter_rows = [
+                {
+                    "entity": item.to_dict(),
+                    "role_ref": {
+                        "entity_id": entity.entity_id,
+                        "role": "PARAMETER",
+                        "index": int(item.provenance["parameter_index"]),
+                    },
+                }
+                for item in parameters[:MAX_INSPECT_RELATED_ENTITIES]
+                if "parameter_index" in item.provenance
+            ]
+            calls, calls_omitted = self._limited_entities(
+                [
+                    item
+                    for item in self.index.entities
+                    if item.kind is ProgramEntityKind.CALL
+                    and item.repository_relative_path == entity.repository_relative_path
+                    and item.enclosing_callable == identity
+                ]
+            )
+            annotations, annotations_omitted = self._limited_entities(
+                [
+                    item
+                    for item in self.index.entities
+                    if item.kind is ProgramEntityKind.ANNOTATION
+                    and item.repository_relative_path == entity.repository_relative_path
+                    and (
+                        item.enclosing_callable == identity
+                        or entity.start_line <= item.start_line <= entity.end_line
+                    )
+                ]
+            )
+            owner_fields = [
+                item
+                for item in self.index.entities
+                if item.kind is ProgramEntityKind.FIELD
+                and item.repository_relative_path == entity.repository_relative_path
+                and item.enclosing_type == entity.enclosing_type
+            ]
+            referenced_fields = [
+                item
+                for item in owner_fields
+                if re.search(rf"(?<![A-Za-z0-9_$]){re.escape(item.simple_name)}(?![A-Za-z0-9_$])", source_text)
+            ]
+            fields, fields_omitted = self._limited_entities(referenced_fields)
+            value.update(
+                {
+                    "parameters": parameter_rows,
+                    "parameter_role_refs": [dict(item["role_ref"]) for item in parameter_rows],
+                    "return_type": entity.type_text,
+                    "return_role_ref": {"entity_id": entity.entity_id, "role": "RETURN"},
+                    "call_sites_inside_method": calls,
+                    "annotations": annotations,
+                    "fields_referenced": fields,
+                    "related_entities_omitted": {
+                        "parameters": max(0, len(parameters) - len(parameter_rows)),
+                        "call_sites_inside_method": calls_omitted,
+                        "annotations": annotations_omitted,
+                        "fields_referenced": fields_omitted,
+                    },
+                    "relation_semantics": {
+                        "call_sites_inside_method": "NEUTRAL_LEXICAL_CALLS_NOT_RUNTIME_DATAFLOW",
+                        "fields_referenced": "NEUTRAL_LEXICAL_REFERENCE_CANDIDATES",
+                    },
+                }
+            )
+            return value
+
+        members, members_omitted = self._limited_entities(
+            [
+                item
+                for item in self.index.entities
+                if item.kind in {ProgramEntityKind.METHOD, ProgramEntityKind.CONSTRUCTOR}
+                and item.repository_relative_path == entity.repository_relative_path
+                and item.enclosing_type == entity.qualified_name
+            ]
+        )
+        fields, fields_omitted = self._limited_entities(
+            [
+                item
+                for item in self.index.entities
+                if item.kind is ProgramEntityKind.FIELD
+                and item.repository_relative_path == entity.repository_relative_path
+                and item.enclosing_type == entity.qualified_name
+            ]
+        )
+        annotations, annotations_omitted = self._limited_entities(
+            [
+                item
+                for item in self.index.entities
+                if item.kind is ProgramEntityKind.ANNOTATION
+                and item.repository_relative_path == entity.repository_relative_path
+                and (
+                    item.enclosing_type == entity.qualified_name
+                    or entity.start_line <= item.start_line <= entity.end_line
+                    or 0 <= entity.start_line - item.end_line <= 3
+                )
+            ]
+        )
+        value.update(
+            {
+                "callable_members": members,
+                "declared_fields": fields,
+                "annotations": annotations,
+                "related_entities_omitted": {
+                    "callable_members": members_omitted,
+                    "declared_fields": fields_omitted,
+                    "annotations": annotations_omitted,
+                },
+            }
+        )
+        return value
+
     @staticmethod
     def _bounded(rows: list[dict[str, Any]], limit: int) -> tuple[tuple[Mapping[str, Any], ...], bool]:
         return tuple(rows[:limit]), len(rows) > limit
@@ -312,6 +471,7 @@ class RepositoryCodeQLToolAdapter:
                 max_lines=int(arguments.get("max_lines", 250)),
                 max_bytes=int(arguments.get("max_bytes", 64 * 1024)),
             )
+            value.update(self._inspect_context(entity, str(value.get("text") or "")))
             return (value,), bool(value["truncated"]), ()
         rows: list[dict[str, Any]] = []
         if action_type is ActionType.GET_CALLERS:

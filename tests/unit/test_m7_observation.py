@@ -167,6 +167,45 @@ def test_compacted_search_feedback_keeps_owner_callable_for_call_hits(tmp_path: 
     assert owner.entity_id in recent_ids
 
 
+def test_compacted_inspection_keeps_exact_parameter_and_return_role_refs(tmp_path: Path) -> None:
+    method = _entity(1, "METHOD")
+    parameter = _entity(2, "PARAMETER")
+    index = RepositoryIndex(tmp_path, [method, parameter], [], 1, 0.01)
+    state = AgentState.create(project_id="P", repository_identity="repo@abc", provenance={"producer": "test"})
+    state.budget.begin_round()
+    parameter_ref = {"entity_id": method.entity_id, "role": "PARAMETER", "index": 0}
+    return_ref = {"entity_id": method.entity_id, "role": "RETURN"}
+    feedback = [{
+        "tool_call_id": "toolcall-inspect",
+        "tool_name": "INSPECT_METHOD",
+        "status": "OK",
+        "items": [{
+            "entity": method.to_dict(),
+            "parameters": [{"entity": parameter.to_dict(), "role_ref": parameter_ref}],
+            "parameter_role_refs": [parameter_ref],
+            "return_type": "String",
+            "return_role_ref": return_ref,
+            "call_sites_inside_method": [],
+            "annotations": [],
+            "owner_type": None,
+            "fields_referenced": [],
+        }],
+    }]
+
+    observation = build_repository_first_observation(
+        state=state,
+        repository_index=index,
+        codeql_status={"project_id": "P", "ready": False, "status": "UNAVAILABLE"},
+        recent_feedback=feedback,
+    )
+
+    compact = observation.payload["recent_feedback"][0]["items"][0]
+    assert compact["parameter_role_refs"] == [parameter_ref]
+    assert compact["return_role_ref"] == return_ref
+    assert compact["parameters"][0]["entity"]["entity_id"] == parameter.entity_id
+    assert compact["return_type"] == "String"
+
+
 def test_tool_grounded_observation_falls_back_to_latest_summary_when_needed(tmp_path: Path) -> None:
     entities = [_entity(index) for index in range(4)]
     index = RepositoryIndex(tmp_path, entities, [], 4, 0.01)

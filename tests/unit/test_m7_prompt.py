@@ -28,9 +28,11 @@ def test_prompt_is_benchmark_agnostic_and_requires_evidence_first() -> None:
     assert "submit the smallest grounded library_flow" in lowered
     assert "before repeating inspections" in lowered
     assert "get_overrides on that callable" in lowered
+    assert "supplies parameter_role_refs and return_role_ref" in lowered
+    assert "never substitute a nearby file, call, field" in lowered
     assert "applicable untried relation or inspection tool" in lowered
     assert prompt.endswith("in that mode return no message content outside the function call.")
-    assert PROMPT_VERSION == "M7_SECURITY_EXPLORATION_V8"
+    assert PROMPT_VERSION == "M7_SECURITY_EXPLORATION_V9"
     assert "retrofit" not in lowered and "hutool" not in lowered
     assert "diagnostic_proposals" not in lowered and "root-cause table" not in lowered
     assert prompt_sha256(prompt) == prompt_sha256(prompt)

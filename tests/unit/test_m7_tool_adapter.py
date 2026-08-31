@@ -21,6 +21,7 @@ interface Contract { void run(); }
 class Impl implements Contract {
   @Mark private String value;
   public void run() { helper(); }
+  @Mark String echo(String input) { value = input; helper(); return input; }
   void helper() {}
 }
 class Caller { void invoke() { new Impl().run(); } }
@@ -102,6 +103,28 @@ def test_repository_tools_are_bounded_audited_and_relation_candidates_are_not_fa
     )
     assert wrong_inspect.status is AgentToolStatus.ERROR
     assert f"owner callable entity_id={owner['entity_id']}" in wrong_inspect.failure["message"]
+
+    echo = _find(adapter, ProgramEntityKind.METHOD, "echo")
+    echo_inspect = adapter.execute(
+        _action(ActionType.INSPECT_METHOD, {"entity_id": echo.entity_id})
+    )
+    context = echo_inspect.items[0]
+    parameter = context["parameters"][0]
+    assert parameter["entity"]["kind"] == "PARAMETER"
+    assert parameter["entity"]["simple_name"] == "input"
+    assert parameter["role_ref"] == {
+        "entity_id": echo.entity_id,
+        "role": "PARAMETER",
+        "index": 0,
+    }
+    assert context["parameter_role_refs"] == [parameter["role_ref"]]
+    assert context["return_type"] == "String"
+    assert context["return_role_ref"] == {"entity_id": echo.entity_id, "role": "RETURN"}
+    assert context["owner_type"]["entity_id"] == impl.entity_id
+    assert any(item["simple_name"] == "helper" for item in context["call_sites_inside_method"])
+    assert any(item["simple_name"] == "Mark" for item in context["annotations"])
+    assert any(item["simple_name"] == "value" for item in context["fields_referenced"])
+    assert "parameter_role_refs" in echo_inspect.summary["next_step_hint"]
 
     callers = adapter.execute(_action(ActionType.GET_CALLERS, {"entity_id": run.entity_id, "max_results": 10}))
     callees = adapter.execute(_action(ActionType.GET_CALLEES, {"entity_id": run.entity_id, "max_results": 10}))

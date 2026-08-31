@@ -234,6 +234,47 @@ class AgentController:
                 return True
         return False
 
+    def _eligible_inspected_callable_roles(self) -> dict[str, list[dict[str, Any]]]:
+        by_id = {item.entity_id: item for item in self.repository_index.entities}
+        callables = [
+            by_id[entity_id]
+            for entity_id in sorted(self.state.inspected_entity_ids)
+            if entity_id in by_id
+            and by_id[entity_id].kind in {ProgramEntityKind.METHOD, ProgramEntityKind.CONSTRUCTOR}
+        ][:10]
+        callable_rows: list[dict[str, Any]] = []
+        parameter_refs: list[dict[str, Any]] = []
+        return_refs: list[dict[str, Any]] = []
+        for entity in callables:
+            identity = f"{entity.qualified_name}{(entity.signature or '')[len(entity.simple_name):]}"
+            indexes = sorted(
+                {
+                    int(item.provenance["parameter_index"])
+                    for item in self.repository_index.entities
+                    if item.kind is ProgramEntityKind.PARAMETER
+                    and item.enclosing_callable == identity
+                    and "parameter_index" in item.provenance
+                }
+            )
+            callable_rows.append(
+                {
+                    "entity_id": entity.entity_id,
+                    "kind": entity.kind.value,
+                    "qualified_name": entity.qualified_name,
+                    "parameter_count": len(indexes),
+                }
+            )
+            parameter_refs.extend(
+                {"entity_id": entity.entity_id, "role": "PARAMETER", "index": index}
+                for index in indexes
+            )
+            return_refs.append({"entity_id": entity.entity_id, "role": "RETURN"})
+        return {
+            "eligible_inspected_callables": callable_rows,
+            "eligible_parameter_role_refs": parameter_refs[:20],
+            "eligible_return_role_refs": return_refs,
+        }
+
     def _proposal_constraint(self, proposal: SecurityProposal) -> tuple[str, str, tuple[str, ...], dict[str, Any]] | None:
         if not proposal.evidence_refs or not self.state.evidence_refs:
             return (
@@ -243,6 +284,14 @@ class AgentController:
                 {"known_evidence_count": len(self.state.evidence_refs)},
             )
         if proposal.proposal_type in _ANCHOR_PROPOSALS and not self._has_inspected_callable(proposal.subject.entity_id):
+            eligible = self._eligible_inspected_callable_roles()
+            if eligible["eligible_inspected_callables"]:
+                return (
+                    "ANCHOR_SUBJECT_NOT_INSPECTED_CALLABLE",
+                    "the anchor subject is not inside an inspected callable; copy one supplied eligible role ref exactly",
+                    (ActionType.PROPOSE.value,),
+                    {"subject_entity_id": proposal.subject.entity_id, **eligible},
+                )
             return (
                 "ANCHOR_BEFORE_CALLABLE_INSPECTION",
                 "input/effect anchors require an inspected containing method or constructor",
