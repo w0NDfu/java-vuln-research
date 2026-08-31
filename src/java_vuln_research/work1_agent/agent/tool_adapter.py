@@ -184,8 +184,9 @@ def _tool_summary(
         summary["query_semantics"] = "ONE_LITERAL_CASE_INSENSITIVE_SUBSTRING"
         if status is AgentToolStatus.EMPTY:
             summary["next_step_hint"] = (
-                "Retry with one shorter literal token taken from observed package, type, method, "
-                "or API text; do not combine alternatives with spaces."
+                "Do not spend all stagnation retries on framework synonyms. Switch to one project-owned "
+                "token copied from bootstrap.top_packages, or one shorter observed type/method token; "
+                "do not combine alternatives with spaces."
             )
     elif action_type is ActionType.INSPECT_METHOD:
         summary["next_step_hint"] = (

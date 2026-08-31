@@ -117,6 +117,7 @@ def test_empty_search_reports_literal_semantics_and_recovery_hint(tmp_path: Path
     assert result.status is AgentToolStatus.EMPTY
     assert result.summary["query"] == "missing alternatives"
     assert result.summary["query_semantics"] == "ONE_LITERAL_CASE_INSENSITIVE_SUBSTRING"
+    assert "bootstrap.top_packages" in result.summary["next_step_hint"]
     assert "do not combine alternatives with spaces" in result.summary["next_step_hint"]
 
 

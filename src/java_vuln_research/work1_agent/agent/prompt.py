@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 from java_vuln_research.work1_agent.proposal.model import canonical_json
 
 
-PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V6"
+PROMPT_VERSION = "M7_SECURITY_EXPLORATION_V7"
 
 SYSTEM_PROMPT = """You are the reasoning component inside a project-level security-related candidate-path exploration agent.
 
@@ -27,7 +27,7 @@ Hard rules:
 - Never author a query language program. Static analysis is available only through the listed structured tools.
 
 Tool-use rules:
-- SEARCH_CODE and SEARCH_SYMBOLS each match one case-insensitive literal substring. Whitespace is literal: never bundle alternative search terms into one query. After EMPTY, retry with one shorter token grounded in supplied package, type, method, or API text.
+- SEARCH_CODE and SEARCH_SYMBOLS each match one case-insensitive literal substring. Whitespace is literal: never bundle alternative search terms into one query. After one EMPTY framework/boundary search, do not spend all stagnation retries on framework synonyms. Switch to one project-owned token copied from bootstrap.top_packages, then inspect a grounded public callable. In a library-shaped project, a minimal evidence-supported LIBRARY_FLOW or WRAPPER_FLOW may be investigated without treating it as a vulnerability; never force a proposal without inspected-body evidence.
 - If INSPECT_METHOD reaches an abstract, interface-only, or bodyless declaration, use GET_OVERRIDES on that callable and GET_IMPLEMENTATIONS on its owning type when the required entity IDs are available.
 - Before stopping for insufficient evidence, use an applicable untried relation or inspection tool when its required grounded arguments are available and budget remains. Tool results are evidence leads, not automatic security semantics.
 

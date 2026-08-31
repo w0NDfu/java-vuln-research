@@ -21,15 +21,15 @@ MAX_RECENT_ENTITIES = 5
 MAX_RECENT_EVIDENCE = 5
 MAX_RECENT_FEEDBACK = 3
 MAX_NAME_CHARS = 300
-MAX_TOOL_SUMMARY_TEXT_CHARS = 3000
+MAX_TOOL_ITEM_TEXT_CHARS = 1200
 MAX_BOOTSTRAP_OBSERVATION_CHARS = 16 * 1024
 MAX_TOOL_GROUNDED_OBSERVATION_CHARS = 24 * 1024
 MAX_OBSERVATION_CHARS = MAX_TOOL_GROUNDED_OBSERVATION_CHARS
 
 
 _TOOL_PURPOSES = {
-    ActionType.SEARCH_CODE: "Search one case-insensitive literal substring in bounded source text; whitespace is literal, so retry EMPTY results with one shorter observed token.",
-    ActionType.SEARCH_SYMBOLS: "Search one case-insensitive literal substring in bounded indexed symbol names; whitespace is literal, so do not bundle alternative terms.",
+    ActionType.SEARCH_CODE: "Search one case-insensitive literal substring in bounded source text; whitespace is literal, and after an EMPTY boundary search switch to a token copied from bootstrap.top_packages.",
+    ActionType.SEARCH_SYMBOLS: "Search one case-insensitive literal substring in bounded indexed symbol names; do not bundle alternative terms, and use bootstrap.top_packages for project-owned fallback tokens.",
     ActionType.INSPECT_METHOD: "Read one indexed method or constructor with bounded source context.",
     ActionType.INSPECT_TYPE: "Read one indexed type with bounded source context.",
     ActionType.READ_FILE_RANGE: "Read one explicit repository-relative source range.",
@@ -161,7 +161,7 @@ def _compact_tool_item(item: Mapping[str, Any]) -> dict[str, Any]:
         "edges",
     ):
         if key in item:
-            limit = MAX_TOOL_SUMMARY_TEXT_CHARS if key in {"snippet", "content", "summary"} else 500
+            limit = MAX_TOOL_ITEM_TEXT_CHARS if key in {"snippet", "content", "summary"} else 500
             selected[key] = _bounded_value(item[key], text_chars=limit)
     if not selected:
         selected = _bounded_value(item)

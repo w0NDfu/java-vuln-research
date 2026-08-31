@@ -22,10 +22,13 @@ def test_prompt_is_benchmark_agnostic_and_requires_evidence_first() -> None:
     assert "return no code fence, markdown label, preface, or trailing prose" in lowered
     assert "one case-insensitive literal substring" in lowered
     assert "never bundle alternative search terms" in lowered
+    assert "do not spend all stagnation retries on framework synonyms" in lowered
+    assert "token copied from bootstrap.top_packages" in lowered
+    assert "library-shaped project" in lowered
     assert "get_overrides on that callable" in lowered
     assert "applicable untried relation or inspection tool" in lowered
     assert prompt.endswith("in that mode return no message content outside the function call.")
-    assert PROMPT_VERSION == "M7_SECURITY_EXPLORATION_V6"
+    assert PROMPT_VERSION == "M7_SECURITY_EXPLORATION_V7"
     assert "retrofit" not in lowered and "hutool" not in lowered
     assert "diagnostic_proposals" not in lowered and "root-cause table" not in lowered
     assert prompt_sha256(prompt) == prompt_sha256(prompt)

@@ -103,15 +103,14 @@ def test_tool_grounded_observation_caps_entities_evidence_and_large_text(tmp_pat
         }
         for index, entity in enumerate(entities)
     ]
-    feedback = [
-        {
-            "tool_call_id": "toolcall-abc",
-            "tool_name": "INSPECT_METHOD",
-            "status": "OK",
-            "items": [{"entity": entity.to_dict(), "content": "x" * 20000} for entity in entities],
-            "evidence_refs": evidence,
-        }
-    ]
+    feedback_item = {
+        "tool_call_id": "toolcall-abc",
+        "tool_name": "INSPECT_METHOD",
+        "status": "OK",
+        "items": [{"entity": entity.to_dict(), "content": "x" * 20000} for entity in entities],
+        "evidence_refs": evidence,
+    }
+    feedback = [dict(feedback_item, tool_call_id=f"toolcall-{index}") for index in range(3)]
 
     observation = build_repository_first_observation(
         state=state,
@@ -124,6 +123,11 @@ def test_tool_grounded_observation_caps_entities_evidence_and_large_text(tmp_pat
     assert len(context["recent_entities"]) == MAX_RECENT_ENTITIES
     assert len(context["recent_evidence_refs"]) == MAX_RECENT_EVIDENCE
     assert len(observation.payload["recent_feedback"][0]["items"]) == 3
+    assert all(
+        len(item["content"]) <= 1200
+        for row in observation.payload["recent_feedback"]
+        for item in row["items"]
+    )
     assert observation.payload["observation_metrics"]["serialized_chars"] == len(observation.to_json())
     assert len(observation.to_json()) <= MAX_TOOL_GROUNDED_OBSERVATION_CHARS
 
