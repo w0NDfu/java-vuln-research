@@ -393,7 +393,14 @@ class AgentController:
                             "attempt": attempt,
                             "previous_failure_class": repair_failure.failure_class,
                             "previous_failure_message": repair_failure.message,
-                            "instruction": "Return a fresh bare JSON decision that exactly satisfies the frozen action/proposal contract; do not repeat or quote the invalid response.",
+                            "instruction": (
+                                "Return a fresh decision with exactly the five keys action_type, arguments, "
+                                "proposal, stop_reason, and reason; do not repeat or quote the invalid "
+                                "response. Tool actions require proposal=null and stop_reason=null, with "
+                                "all explanation in reason. PROPOSE requires arguments={} and "
+                                "stop_reason=null. STOP requires arguments={}, proposal=null, and an "
+                                "enumerated stop_reason."
+                            ),
                         },
                     }
                 request = LLMRequest.create(

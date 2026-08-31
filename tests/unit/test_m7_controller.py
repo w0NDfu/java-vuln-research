@@ -41,7 +41,13 @@ def _decision(action_type: ActionType, *, arguments: dict[str, object] | None = 
     }
 
 
-def _controller(tmp_path: Path, responses: list[object], *, limits: AgentBudgetLimits | None = None) -> tuple[AgentController, MockLLMClient]:
+def _controller(
+    tmp_path: Path,
+    responses: list[object],
+    *,
+    limits: AgentBudgetLimits | None = None,
+    max_model_output_retries: int = 1,
+) -> tuple[AgentController, MockLLMClient]:
     source_root = tmp_path / "repo"
     source = source_root / "src" / "Sample.java"
     source.parent.mkdir(parents=True)
@@ -78,6 +84,7 @@ def _controller(tmp_path: Path, responses: list[object], *, limits: AgentBudgetL
         llm_client=client,
         parser=StrictActionParser(schema_root),
         tool_adapter=adapter,
+        max_model_output_retries=max_model_output_retries,
     )
     return controller, client
 
@@ -147,6 +154,38 @@ def test_controller_repairs_one_invalid_model_output_without_relaxing_parser(tmp
     assert repair.payload["failure_class"] == "SCHEMA_VIOLATION"
     assert repair.payload["retry_kind"] == "OUTPUT_REPAIR"
     assert "model_output_repair" in client.requests[1].observation
+
+
+def test_controller_can_audit_two_bounded_output_repairs_without_relaxing_parser(tmp_path: Path) -> None:
+    first_invalid = {
+        **_decision(ActionType.SEARCH_CODE, arguments={"query": "helper"}),
+        "unexpected": "field",
+    }
+    second_invalid = {
+        **_decision(ActionType.SEARCH_CODE, arguments={"query": "helper"}),
+        "stop_reason": StopReason.OTHER.value,
+    }
+    controller, client = _controller(
+        tmp_path,
+        [
+            first_invalid,
+            second_invalid,
+            _decision(ActionType.SEARCH_CODE, arguments={"query": "helper"}),
+            _decision(ActionType.STOP, stop_reason=StopReason.INSUFFICIENT_EVIDENCE),
+        ],
+        max_model_output_retries=2,
+    )
+
+    result = controller.run()
+
+    assert result.state.stop_reason is StopReason.INSUFFICIENT_EVIDENCE
+    assert result.failures == ()
+    assert [request.attempt for request in client.requests] == [1, 2, 3, 1]
+    repairs = [item for item in result.trace.events if item.event_type is TraceEventType.MODEL_RETRY]
+    assert len(repairs) == 2
+    repair_observation = client.requests[2].observation["model_output_repair"]
+    assert "exactly the five keys" in repair_observation["instruction"]
+    assert "Tool actions require proposal=null and stop_reason=null" in repair_observation["instruction"]
 
 
 def test_controller_retries_one_retryable_transport_failure_without_output_repair(tmp_path: Path) -> None:

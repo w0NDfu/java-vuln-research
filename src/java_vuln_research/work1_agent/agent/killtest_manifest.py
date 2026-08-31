@@ -163,7 +163,7 @@ def freeze_killtest_manifest(
         "controller": {
             "version": CONTROLLER_VERSION,
             "max_stagnant_rounds": 3,
-            "max_model_output_retries": 1,
+            "max_model_output_retries": 2,
         },
         "path_bounds": {
             "max_depth": path_limits.max_depth,

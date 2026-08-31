@@ -84,7 +84,7 @@ controller 升级为 `M7_CONTROLLER_V2`，显式维护 `DISCOVERY`、`INSPECTION
 
 ### M7-F5 Enriched bounded tool summaries
 
-状态：基础摘要完成并经 CloudStudio 验证；attempt 11 进一步暴露了 inspect 结构化实体信息不足，补充修复已在 commit `1d01ff1` 实现并推送，等待 CloudStudio attempt 12 验证。
+状态：完成并经 CloudStudio attempt 15 验证。attempt 11 暴露 inspect 结构化实体信息不足；commit `1d01ff1` 补齐精确 role refs 后，V022 在 attempt 15 产生 schema-valid proposal 并实际进入 Gate。
 
 每个 M2/M3 tool result 现在包含确定性的 `summary`，供下一轮 observation 使用，而不是把完整原始 items 再次发送给模型。摘要只保留 tool status、bounded result count、最多 5 个 linked entity IDs、最多 5 个 source locations、relation/evidence-kind 计数、truncation、warning count、结构化 failure reason，以及最多 2,000 字符的首个源码/文本 preview。事实与 preview 的递归扫描各有 2,000-node hard ceiling，防止异常嵌套结果造成无界压缩成本。
 
@@ -98,7 +98,7 @@ attempt 11 证明仅有文本 preview 仍不足以让模型可靠绑定 M4 role�
 
 ### M7-F6 Controlled real-model preflight
 
-状态：两项目 preflight runner、冻结配置与自动门槛审计已实现并通过机制回归；CloudStudio 已保留 11 次逐步诊断。attempt 11 已证明 framing、round-1 discovery、工具循环、normalization 记账与 no-leakage 全部可运行，但双项目仍未同时产生可进入 Gate 的 proposal，因此 `freeze_allowed=false`，继续禁止进入 F7/F8。
+状态：两项目 preflight runner、冻结配置与自动门槛审计已实现并通过机制回归；CloudStudio 已保留 15 次逐步诊断。attempt 15 中 V022 已单项目通过；V011 在两个合法 repository tool action 后连续返回两个可修复的结构化输出错误，超过原 1 次 output-repair 上限，因此整体仍为 `freeze_allowed=false`，继续禁止进入 F7/F8。控制器保持 strict parser/fail-closed，并把修复上限有界提升为 2 次，等待 attempt 16 验证。
 
 preflight 不再只使用合成 fixture。冻结配置按 `FROZEN_PROJECT_INVENTORY_JAVA_FILE_COUNT` 选择两个不属于正式 10-project kill-test 的真实开源项目：SMALL 为 V011 OWASP/json-sanitizer（6 个 Java 文件），MEDIUM 为 V022 ESAPI/esapi-java-legacy（351 个 Java 文件）。配置只含公共项目身份、source root、精确 revision、Java 文件数与模型传输契约；`benchmark_informed=false`，不含 CVE、CWE、patch、known location、M6 proposal 或 evaluator 输入。运行前会校验 project ID 安全性、40-hex revision、Git HEAD、RepositoryIndex 规范 Java 文件数以及 small/medium 唯一性。
 
@@ -122,5 +122,9 @@ CloudStudio 诊断尝试（均未读取 benchmark answer，也未进入 F7）：
 - attempt 9，commit `b963686`：V011 完成 6 tools 后保守 STOP；V022 再次由长 trace 触发 observation ceiling。提交 `1f71c0f` 增加 deterministic latest-feedback-summary compaction。
 - attempt 10，commit `1f71c0f`：两个项目均不再出现 observation ceiling。V011 完成 7 tools 后因搜索结果暴露 CALL 而未暴露其 owning callable ID，且大型 TYPE 检查超过 250 行而停止；V022 完成 6 tools，但 provider 在强制 tool mode 下输出多个 fenced decision objects，normalizer 正确拒绝。提交 `b97c2b1` 增加浅层五字段 decision tool schema、CALL→owner callable 可发现性、大型 entity 的确定性 bounded prefix，以及错误调用中的 owner suggestion。
 - attempt 11，commit `b97c2b1`，artifact root `.../b97c2b173407298fa5f732c2c39fc2819d76f6be8-attempt11`：CloudStudio 全量回归 `259 passed, 1 skipped, 3 warnings`。产物共 32 个，selection/no-leakage、normalization accounting、artifact contract 与 secret absence 均通过。V011 为 11 rounds、11 model calls、10 repository tools、0 Gate-entered proposal，`INSUFFICIENT_EVIDENCE`；V022 为 14 rounds、14 model calls、11 repository tools，产生 3 次 parsed `ACTION/PROPOSE`，但都把 PARAMETER 语义绑到非 callable entity，controller 以 `ANCHOR_BEFORE_CALLABLE_INSPECTION` 在 Gate 前拒绝，最终 0 Gate-entered proposal、`NO_FURTHER_ACTION`。这将剩余工程原因明确收敛为 inspect role discoverability 与不可执行 controller feedback，而非 transport/parser/setup failure；commit `1d01ff1` 据此补齐精确 role refs。本地 targeted `30 passed`、full `259 passed, 2 skipped`、compileall 与 `diff --check` 通过。
+- attempt 12，commit `388c7a4`：新 CloudStudio 终端缺少除 API key 外的 `M7_LLM_*` 配置，在模型调用前按 `MODEL_UNAVAILABLE` fail-closed；未覆盖旧目录。
+- attempt 13，commit `388c7a4`：补齐 provider/model/base/exact endpoint/protocol/output-mode 等非秘密变量，但 API key 仍未导出给 Python 子进程，在模型调用前 fail-closed。
+- attempt 14，commit `388c7a4`：确认新终端实际没有 API key；静默重新输入前的运行仍在模型调用前 fail-closed。attempt 12--14 均作为环境审计保留，不计作模型能力证据。
+- attempt 15，commit `388c7a4`，artifact root `.../388c7a40a246a860de4c911a31b578d7e1675b5f-attempt15`：CloudStudio 同 commit 全量回归 `260 passed, 1 skipped, 3 warnings`。真实模型运行产物 17 个，secret absence、no-leakage、artifact contract 与 normalization accounting 全部通过。V022 为 12 rounds、12 model calls、10 repository tools、1 个 schema-valid proposal，Gate sequence 为 `REJECTED`，单项目 preflight `pass=true`；V011 已完成 2 个 repository tools，但下一轮首次输出含额外字段，唯一一次 output repair 又把非 STOP 动作的 `stop_reason` 写成非空字符串，strict parser 连续拒绝并 fail-closed，单项目 `pass=false`。这证明 role discoverability 修复有效，剩余问题是通用的 bounded output-repair 容错深度，而非 Gate 或项目特例。修复保持 parser/schema 不变，将 preflight 和待冻结 detector 的 `max_model_output_retries` 从 1 有界提升为 2，并把修复反馈明确为五字段及 action-specific nullability；本地新增双重修复测试，targeted `14 passed`、full `260 passed, 2 skipped`。
 
 - M7-F7 至 M7-F10：待前置阶段通过后执行。

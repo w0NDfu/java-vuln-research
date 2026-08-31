@@ -424,6 +424,7 @@ def _run_project(
         ),
         evidence_gate=gate,
         graph_path_adapter=graph_adapter,
+        max_model_output_retries=2,
     )
     result = controller.run()
     input_manifest = boundary.seal()

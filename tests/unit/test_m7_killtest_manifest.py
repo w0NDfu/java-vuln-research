@@ -97,6 +97,6 @@ def test_freeze_separates_benchmark_selection_from_detector_input(tmp_path: Path
     assert "do-not-serialize-this-secret" not in detector_text
     assert "secret_CVE-2026-0000" in selection_text
     assert detector["selection_manifest_allowed_for_agent_runtime"] is False
-    assert detector["controller"]["max_model_output_retries"] == 1
+    assert detector["controller"]["max_model_output_retries"] == 2
     assert detector["baseline_lineage"]["codeql_version"] == "UNKNOWN"
     assert all(item["native_baseline"]["preservation_required"] for item in detector["projects"])
