@@ -82,6 +82,15 @@ controller 升级为 `M7_CONTROLLER_V2`，显式维护 `DISCOVERY`、`INSPECTION
 
 本地验证（2026-08-31）：targeted 20 passed；full 248 passed、2 skipped；compileall 与 `diff --check` 通过。deterministic phased smoke 仍为 6 rounds、2 tools、3 ADMISSIBLE proposals、1 path、`PATH_FORMED`，artifact/no-leakage audit 通过。
 
-- M7-F5 enriched bounded tool summaries：待实现。
+### M7-F5 Enriched bounded tool summaries
+
+状态：本地实现与全量回归通过；本阶段以独立 Git commit 推送，随后由 CloudStudio 拉取同一 commit 执行云端回归。
+
+每个 M2/M3 tool result 现在包含确定性的 `summary`，供下一轮 observation 使用，而不是把完整原始 items 再次发送给模型。摘要只保留 tool status、bounded result count、最多 5 个 linked entity IDs、最多 5 个 source locations、relation/evidence-kind 计数、truncation、warning count、结构化 failure reason，以及最多 2,000 字符的首个源码/文本 preview。事实与 preview 的递归扫描各有 2,000-node hard ceiling，防止异常嵌套结果造成无界压缩成本。
+
+controller 另附 Gate 前证据摘要：evidence count、最多 5 个 EvidenceRef IDs、最多 5 个 covered entity IDs、source-kind counts 和 truncation。`TOOL_GROUNDED` observation 允许这两个摘要字段进入最近反馈，但仍受 M7-F3 的 24 KiB 整体硬上限约束。原始 tool items、EvidenceRef 和 trace artifact 保持完整审计语义；摘要不被当作新证据，也不绕过 Gate。
+
+本地验证（2026-08-31）：targeted 21 passed；controlled smoke integration 2 passed；full 248 passed、2 skipped；compileall 与 `diff --check` 通过。deterministic smoke 的 tool/proposal/Gate/path 行为保持不变。
+
 - M7-F6 controlled real-model preflight：待执行；失败则不 freeze 正式 detector。
 - M7-F7 至 M7-F10：待前置阶段通过后执行。

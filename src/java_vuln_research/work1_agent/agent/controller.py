@@ -6,6 +6,7 @@ tool-only, Evidence Gate, then bounded graph/path feedback.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping
@@ -573,6 +574,17 @@ class AgentController:
             feedback = {
                 **tool_result.to_dict(),
                 "evidence_refs": [item.to_dict() for item in tool_evidence],
+                "evidence_summary": {
+                    "evidence_count": len(tool_evidence),
+                    "evidence_ids": [item.evidence_id for item in tool_evidence[:5]],
+                    "covered_entity_ids": sorted(
+                        {entity_id for item in tool_evidence for entity_id in item.entity_ids}
+                    )[:5],
+                    "source_kind_counts": dict(
+                        sorted(Counter(item.source_kind.value for item in tool_evidence).items())
+                    ),
+                    "truncated": len(tool_evidence) > 5,
+                },
             }
             self.recent_feedback.append(feedback)
             self._append(TraceEventType.TOOL_RESULT, feedback)

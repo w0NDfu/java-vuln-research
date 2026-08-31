@@ -208,6 +208,8 @@ def _compact_feedback(value: Mapping[str, Any]) -> dict[str, Any]:
             "truncated",
             "warnings",
             "failure",
+            "summary",
+            "evidence_summary",
             "proposal_id",
             "gate_status",
             "gate_reason",

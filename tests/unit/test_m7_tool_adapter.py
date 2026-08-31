@@ -82,8 +82,13 @@ def test_repository_tools_are_bounded_audited_and_relation_candidates_are_not_fa
 
     search = adapter.execute(_action(ActionType.SEARCH_CODE, {"query": "helper", "max_hits": 10}))
     assert search.status is AgentToolStatus.OK
+    assert search.summary["result_count"] == len(search.items)
+    assert len(search.summary["linked_entity_ids"]) <= 5
+    assert len(search.summary["locations"]) <= 5
+    assert search.summary["outcome"].startswith("OK:")
     inspect = adapter.execute(_action(ActionType.INSPECT_METHOD, {"entity_id": run.entity_id, "context_lines": 1}))
     assert inspect.status is AgentToolStatus.OK
+    assert len(inspect.summary["content_preview"]) <= 2000
 
     callers = adapter.execute(_action(ActionType.GET_CALLERS, {"entity_id": run.entity_id, "max_results": 10}))
     callees = adapter.execute(_action(ActionType.GET_CALLEES, {"entity_id": run.entity_id, "max_results": 10}))
@@ -107,6 +112,7 @@ def test_codeql_unavailable_is_structured_and_not_negative_evidence(tmp_path: Pa
     result = adapter.execute(_action(ActionType.CODEQL_DATAFLOW_NEIGHBORS, {"entity_id": run.entity_id, "max_depth": 1}))
     assert result.status is AgentToolStatus.UNAVAILABLE
     assert result.failure["reason"] == "CODEQL_UNAVAILABLE"
+    assert result.summary["failure_reason"] == "CODEQL_UNAVAILABLE"
     assert "UNAVAILABLE_IS_NOT_NEGATIVE_EVIDENCE" in result.warnings
     assert result.provenance["codeql_unavailable_is_not_absence"] is True
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
@@ -40,6 +41,7 @@ class AgentToolResult:
     warnings: tuple[str, ...]
     failure: Mapping[str, Any] | None
     provenance: Mapping[str, Any]
+    summary: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -52,8 +54,130 @@ class AgentToolResult:
             "truncated": self.truncated,
             "warnings": list(self.warnings),
             "failure": dict(self.failure) if self.failure else None,
+            "summary": dict(self.summary),
             "provenance": dict(self.provenance),
         }
+
+
+def _collect_summary_facts(
+    value: Any,
+    *,
+    entity_ids: list[str],
+    locations: list[dict[str, Any]],
+    relations: Counter[str],
+    evidence_kinds: Counter[str],
+    remaining_nodes: list[int],
+) -> None:
+    if remaining_nodes[0] <= 0:
+        return
+    remaining_nodes[0] -= 1
+    if isinstance(value, Mapping):
+        entity_id = value.get("entity_id")
+        if isinstance(entity_id, str) and entity_id not in entity_ids and len(entity_ids) < 5:
+            entity_ids.append(entity_id)
+        relation = value.get("relation")
+        if isinstance(relation, str):
+            relations[relation] += 1
+        evidence_kind = value.get("evidence_kind")
+        if isinstance(evidence_kind, str):
+            evidence_kinds[evidence_kind] += 1
+        path = value.get("repository_relative_path")
+        start = value.get("start_line")
+        if isinstance(path, str) and start is not None and len(locations) < 5:
+            location = {
+                "repository_relative_path": path,
+                "start_line": int(start),
+                "end_line": int(value.get("end_line", start)),
+            }
+            if location not in locations:
+                locations.append(location)
+        for item in value.values():
+            _collect_summary_facts(
+                item,
+                entity_ids=entity_ids,
+                locations=locations,
+                relations=relations,
+                evidence_kinds=evidence_kinds,
+                remaining_nodes=remaining_nodes,
+            )
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _collect_summary_facts(
+                item,
+                entity_ids=entity_ids,
+                locations=locations,
+                relations=relations,
+                evidence_kinds=evidence_kinds,
+                remaining_nodes=remaining_nodes,
+            )
+
+
+def _first_text_preview(value: Any, *, remaining_nodes: list[int]) -> str | None:
+    if remaining_nodes[0] <= 0:
+        return None
+    remaining_nodes[0] -= 1
+    if isinstance(value, Mapping):
+        for key in ("content", "text", "snippet"):
+            candidate = value.get(key)
+            if isinstance(candidate, str):
+                return candidate
+        for item in value.values():
+            candidate = _first_text_preview(item, remaining_nodes=remaining_nodes)
+            if candidate is not None:
+                return candidate
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            candidate = _first_text_preview(item, remaining_nodes=remaining_nodes)
+            if candidate is not None:
+                return candidate
+    return None
+
+
+def _tool_summary(
+    *,
+    status: AgentToolStatus,
+    items: tuple[Mapping[str, Any], ...],
+    truncated: bool,
+    warnings: tuple[str, ...],
+    failure: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    entity_ids: list[str] = []
+    locations: list[dict[str, Any]] = []
+    relations: Counter[str] = Counter()
+    evidence_kinds: Counter[str] = Counter()
+    preview: str | None = None
+    preview_truncated = False
+    remaining_fact_nodes = [2000]
+    remaining_preview_nodes = [2000]
+    for item in items:
+        _collect_summary_facts(
+            item,
+            entity_ids=entity_ids,
+            locations=locations,
+            relations=relations,
+            evidence_kinds=evidence_kinds,
+            remaining_nodes=remaining_fact_nodes,
+        )
+        if preview is None:
+            raw_preview = _first_text_preview(item, remaining_nodes=remaining_preview_nodes)
+            if isinstance(raw_preview, str):
+                preview_truncated = len(raw_preview) > 2000
+                preview = raw_preview[:2000]
+    summary: dict[str, Any] = {
+        "outcome": f"{status.value}: {len(items)} bounded item(s), {len(entity_ids)} linked entity ID(s)",
+        "result_count": len(items),
+        "linked_entity_ids": entity_ids,
+        "locations": locations,
+        "relation_counts": dict(sorted(relations.items())),
+        "evidence_kind_counts": dict(sorted(evidence_kinds.items())),
+        "truncated": bool(truncated),
+        "warning_count": len(warnings),
+        "failure_reason": str(failure.get("reason")) if failure and failure.get("reason") else None,
+    }
+    if preview is not None:
+        summary["content_preview"] = preview
+        summary["content_preview_truncated"] = preview_truncated
+    return summary
 
 
 def _callable_identity(entity: ProgramEntity) -> str:
@@ -250,6 +374,13 @@ class RepositoryCodeQLToolAdapter:
             "items": [dict(item) for item in items],
             "failure": dict(failure) if failure else None,
         }
+        summary = _tool_summary(
+            status=status,
+            items=items,
+            truncated=truncated,
+            warnings=warnings,
+            failure=failure,
+        )
         return AgentToolResult(
             stable_digest("agenttool", identity),
             self.project_id,
@@ -266,4 +397,5 @@ class RepositoryCodeQLToolAdapter:
                 "codeql_unavailable_is_not_absence": True,
                 "arguments": dict(arguments),
             },
+            summary,
         )
