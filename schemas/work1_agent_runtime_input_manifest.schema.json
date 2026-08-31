@@ -6,8 +6,8 @@
   "additionalProperties": false,
   "required": ["schema_version", "policy_version", "project_id", "repository_identity", "detector_input_frozen", "all_inputs_hashed", "no_leakage_pass", "entries", "violations", "manifest_id"],
   "properties": {
-    "schema_version": {"const": 1},
-    "policy_version": {"const": "M7_RUNTIME_BOUNDARY_V1"},
+    "schema_version": {"const": 2},
+    "policy_version": {"const": "M7_RUNTIME_BOUNDARY_V2"},
     "project_id": {"type": "string", "minLength": 1},
     "repository_identity": {"type": "string", "minLength": 1},
     "detector_input_frozen": {"const": true},
@@ -18,11 +18,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["logical_name", "input_kind", "resolved_path", "size_bytes", "sha256"],
+        "required": ["logical_name", "input_kind", "artifact_role", "requested_path", "resolved_path", "trusted_root", "size_bytes", "sha256"],
         "properties": {
           "logical_name": {"type": "string", "minLength": 1},
           "input_kind": {"enum": ["JAVA_SOURCE", "PROGRAM_ENTITY_INDEX", "REPOSITORY_TOOL_ARTIFACT", "CODEQL_TOOL_ARTIFACT", "CODEQL_NATIVE_BASELINE", "M4_ARTIFACT", "M5_ARTIFACT", "AGENT_TRACE", "RUNTIME_CONFIG", "TRUSTED_SCHEMA"]},
+          "artifact_role": {"enum": ["PROJECT_SOURCE", "TRUSTED_DETECTOR_ASSET", "DETECTOR_RUNTIME_ARTIFACT"]},
+          "requested_path": {"type": "string", "minLength": 1},
           "resolved_path": {"type": "string", "minLength": 1},
+          "trusted_root": {"type": "string", "minLength": 1},
           "size_bytes": {"type": "integer", "minimum": 0},
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
         }
@@ -33,7 +36,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["allowed", "failure_class", "code", "rule_id", "reason", "requested_path", "resolved_path", "input_kind", "logical_name"],
+        "required": ["allowed", "failure_class", "code", "rule_id", "reason", "requested_path", "resolved_path", "input_kind", "artifact_role", "logical_name"],
         "properties": {
           "allowed": {"const": false},
           "failure_class": {"const": "SECURITY_BOUNDARY_VIOLATION"},
@@ -43,6 +46,7 @@
           "requested_path": {"type": "string"},
           "resolved_path": {"type": ["string", "null"]},
           "input_kind": {"type": "string", "minLength": 1},
+          "artifact_role": {"enum": ["PROJECT_SOURCE", "TRUSTED_DETECTOR_ASSET", "DETECTOR_RUNTIME_ARTIFACT"]},
           "logical_name": {"type": "string", "minLength": 1}
         }
       }

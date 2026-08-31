@@ -42,7 +42,23 @@ CloudStudio 上的历史正式运行基于 detector commit `82200a5`，10 个 fr
 
 ## 后续阶段状态
 
-- M7-F2 security boundary false-positive fix：待实现。
+### M7-F2 Security boundary false-positive fix
+
+状态：本地实现与回归通过，等待 CloudStudio 同 commit 全量回归和真实 symlink 用例。
+
+边界策略升级为 `M7_RUNTIME_BOUNDARY_V2`。每个输入先由 `RuntimeInputKind` 映射到不可由调用者自由伪造的 `artifact_role`，再在该 kind 的显式 trusted root 内做 lexical/resolved containment：
+
+- `JAVA_SOURCE -> PROJECT_SOURCE`：只允许已登记 source root；允许合法 source root 或解析后的路径包含 `dataset`、`datasets`、`annotation`、`annotations`，并允许 source root 本身是 symlink；
+- `TRUSTED_SCHEMA -> TRUSTED_DETECTOR_ASSET`：只允许冻结的 schema/query roots；
+- 其余 kinds -> `DETECTOR_RUNTIME_ARTIFACT`：继续执行 answer-artifact path denylist 与 JSON/JSONL/YAML/CSV content scan；
+- 同一个物理文件不能通过声明错误 kind 借用其他 role 的 trusted root，仍以 `ROOT_ESCAPE` fail-closed。
+
+manifest schema 升级到 version 2。每个输入除 SHA-256 外新增 `artifact_role`、`requested_path`、`resolved_path` 和实际命中的 `trusted_root`；violation trace 同样记录 role。这样 freeze 和审计能明确区分“项目源码位于名字敏感的目录中”与“detector 读取了禁止的答案 artifact”。
+
+本地验证（2026-08-31）：targeted 33 passed、1 skipped；full 244 passed、2 skipped；`diff --check` 通过。新增 symlink 回归在本地 Windows 因创建 symlink 权限不足而 skip，必须由 CloudStudio/Linux 实际通过后才能把 F2 标记完成。
+
+### Remaining stages
+
 - M7-F3 compact bootstrap/tool-grounded observation：待实现。
 - M7-F4 phased controller constraints：待实现。
 - M7-F5 enriched bounded tool summaries：待实现。

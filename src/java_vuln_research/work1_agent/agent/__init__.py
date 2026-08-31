@@ -33,6 +33,7 @@ from .runtime import PROJECT_ARTIFACT_FILES, write_controller_artifacts
 from .security_boundary import (
     BoundaryDecision,
     BoundaryViolationCode,
+    RuntimeArtifactRole,
     RuntimeInputEntry,
     RuntimeInputKind,
     RuntimeSecurityBoundary,
@@ -86,6 +87,7 @@ __all__ = [
     "NormalizationMode",
     "OpenAICompatibleLLMClient",
     "RepositoryCodeQLToolAdapter",
+    "RuntimeArtifactRole",
     "RuntimeInputEntry",
     "RuntimeInputKind",
     "RuntimeSecurityBoundary",

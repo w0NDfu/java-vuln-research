@@ -21,7 +21,7 @@ from java_vuln_research.common.io import YamlSubsetError, _parse_yaml_subset
 from java_vuln_research.work1_agent.proposal.model import canonical_json, stable_digest
 
 
-POLICY_VERSION = "M7_RUNTIME_BOUNDARY_V1"
+POLICY_VERSION = "M7_RUNTIME_BOUNDARY_V2"
 MAX_RUNTIME_INPUT_BYTES = 128 * 1024 * 1024
 
 
@@ -36,6 +36,20 @@ class RuntimeInputKind(str, Enum):
     AGENT_TRACE = "AGENT_TRACE"
     RUNTIME_CONFIG = "RUNTIME_CONFIG"
     TRUSTED_SCHEMA = "TRUSTED_SCHEMA"
+
+
+class RuntimeArtifactRole(str, Enum):
+    PROJECT_SOURCE = "PROJECT_SOURCE"
+    TRUSTED_DETECTOR_ASSET = "TRUSTED_DETECTOR_ASSET"
+    DETECTOR_RUNTIME_ARTIFACT = "DETECTOR_RUNTIME_ARTIFACT"
+
+
+def _artifact_role(kind: RuntimeInputKind) -> RuntimeArtifactRole:
+    if kind is RuntimeInputKind.JAVA_SOURCE:
+        return RuntimeArtifactRole.PROJECT_SOURCE
+    if kind is RuntimeInputKind.TRUSTED_SCHEMA:
+        return RuntimeArtifactRole.TRUSTED_DETECTOR_ASSET
+    return RuntimeArtifactRole.DETECTOR_RUNTIME_ARTIFACT
 
 
 class BoundaryViolationCode(str, Enum):
@@ -226,6 +240,7 @@ class BoundaryDecision:
             "requested_path": self.requested_path,
             "resolved_path": self.resolved_path,
             "input_kind": self.input_kind.value,
+            "artifact_role": _artifact_role(self.input_kind).value,
             "logical_name": self.logical_name,
         }
 
@@ -234,7 +249,10 @@ class BoundaryDecision:
 class RuntimeInputEntry:
     logical_name: str
     input_kind: RuntimeInputKind
+    artifact_role: RuntimeArtifactRole
+    requested_path: str
     resolved_path: str
+    trusted_root: str
     size_bytes: int
     sha256: str
 
@@ -242,7 +260,10 @@ class RuntimeInputEntry:
         return {
             "logical_name": self.logical_name,
             "input_kind": self.input_kind.value,
+            "artifact_role": self.artifact_role.value,
+            "requested_path": self.requested_path,
             "resolved_path": self.resolved_path,
+            "trusted_root": self.trusted_root,
             "size_bytes": self.size_bytes,
             "sha256": self.sha256,
         }
@@ -300,7 +321,7 @@ class RuntimeSecurityBoundary:
         self._decisions.append(decision)
         return SecurityBoundaryViolation(decision)
 
-    def _resolve_allowed(self, path: str | Path, kind: RuntimeInputKind, logical_name: str) -> Path:
+    def _resolve_allowed(self, path: str | Path, kind: RuntimeInputKind, logical_name: str) -> tuple[Path, Path]:
         if self._sealed_manifest is not None:
             raise self._deny(
                 code=BoundaryViolationCode.BOUNDARY_SEALED,
@@ -311,17 +332,19 @@ class RuntimeSecurityBoundary:
                 kind=kind,
                 logical_name=logical_name,
             )
-        lexical_denied = _denied_path_rule(path)
-        if lexical_denied:
-            raise self._deny(
-                code=BoundaryViolationCode.PATH_DENIED,
-                rule_id=lexical_denied[0],
-                reason=lexical_denied[1],
-                path=path,
-                resolved=None,
-                kind=kind,
-                logical_name=logical_name,
-            )
+        role = _artifact_role(kind)
+        if role is RuntimeArtifactRole.DETECTOR_RUNTIME_ARTIFACT:
+            lexical_denied = _denied_path_rule(path)
+            if lexical_denied:
+                raise self._deny(
+                    code=BoundaryViolationCode.PATH_DENIED,
+                    rule_id=lexical_denied[0],
+                    reason=lexical_denied[1],
+                    path=path,
+                    resolved=None,
+                    kind=kind,
+                    logical_name=logical_name,
+                )
         candidate = Path(path)
         try:
             resolved = candidate.resolve(strict=True)
@@ -335,27 +358,28 @@ class RuntimeSecurityBoundary:
                 kind=kind,
                 logical_name=logical_name,
             )
-        resolved_denied = _denied_path_rule(resolved)
-        if resolved_denied:
-            raise self._deny(
-                code=BoundaryViolationCode.PATH_DENIED,
-                rule_id=resolved_denied[0],
-                reason=resolved_denied[1],
-                path=path,
-                resolved=resolved,
-                kind=kind,
-                logical_name=logical_name,
-            )
+        if role is RuntimeArtifactRole.DETECTOR_RUNTIME_ARTIFACT:
+            resolved_denied = _denied_path_rule(resolved)
+            if resolved_denied:
+                raise self._deny(
+                    code=BoundaryViolationCode.PATH_DENIED,
+                    rule_id=resolved_denied[0],
+                    reason=resolved_denied[1],
+                    path=path,
+                    resolved=resolved,
+                    kind=kind,
+                    logical_name=logical_name,
+                )
         roots = self._roots.get(kind, ())
-        contained = False
+        trusted_root: Path | None = None
         for root in roots:
             try:
                 resolved.relative_to(root)
-                contained = True
+                trusted_root = root
                 break
             except ValueError:
                 continue
-        if not contained:
+        if trusted_root is None:
             raise self._deny(
                 code=BoundaryViolationCode.ROOT_ESCAPE,
                 rule_id="INPUT_OUTSIDE_KIND_ROOTS",
@@ -375,12 +399,12 @@ class RuntimeSecurityBoundary:
                 kind=kind,
                 logical_name=logical_name,
             )
-        return resolved
+        return resolved, trusted_root
 
     def read_bytes(self, path: str | Path, *, kind: RuntimeInputKind, logical_name: str) -> bytes:
         if not logical_name.strip():
             raise ValueError("logical_name must be non-empty")
-        resolved = self._resolve_allowed(path, kind, logical_name)
+        resolved, trusted_root = self._resolve_allowed(path, kind, logical_name)
         raw = resolved.read_bytes()
         if len(raw) > self.max_input_bytes:
             raise self._deny(
@@ -392,7 +416,8 @@ class RuntimeSecurityBoundary:
                 kind=kind,
                 logical_name=logical_name,
             )
-        if kind not in {RuntimeInputKind.JAVA_SOURCE, RuntimeInputKind.TRUSTED_SCHEMA}:
+        role = _artifact_role(kind)
+        if role is RuntimeArtifactRole.DETECTOR_RUNTIME_ARTIFACT:
             denied = _scan_bytes(resolved, raw)
             if denied:
                 raise self._deny(
@@ -407,7 +432,10 @@ class RuntimeSecurityBoundary:
         entry = RuntimeInputEntry(
             logical_name=logical_name,
             input_kind=kind,
+            artifact_role=role,
+            requested_path=str(path),
             resolved_path=str(resolved),
+            trusted_root=str(trusted_root),
             size_bytes=len(raw),
             sha256=_sha256_bytes(raw),
         )
@@ -448,7 +476,7 @@ class RuntimeSecurityBoundary:
         entries = [self._entries[name].to_dict() for name in sorted(self._entries)]
         violations = [decision.to_trace_payload() for decision in self._decisions if not decision.allowed]
         material: dict[str, Any] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "policy_version": POLICY_VERSION,
             "project_id": self.project_id,
             "repository_identity": self.repository_identity,
@@ -476,7 +504,7 @@ class RuntimeSecurityBoundary:
             if actual != entry["sha256"]:
                 mismatches.append({"logical_name": entry["logical_name"], "expected": entry["sha256"], "actual": actual})
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "policy_version": POLICY_VERSION,
             "project_id": self.project_id,
             "manifest_id": manifest["manifest_id"],

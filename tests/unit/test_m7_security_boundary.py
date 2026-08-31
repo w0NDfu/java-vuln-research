@@ -7,6 +7,7 @@ import pytest
 
 from java_vuln_research.work1_agent.agent import (
     BoundaryViolationCode,
+    RuntimeArtifactRole,
     RuntimeInputKind,
     RuntimeSecurityBoundary,
     SecurityBoundaryViolation,
@@ -49,7 +50,62 @@ def test_boundary_allows_source_and_safe_structured_input_and_hashes_every_read(
     assert manifest["all_inputs_hashed"] is True
     assert [item["logical_name"] for item in manifest["entries"]] == ["runtime-config", "source:Example.java"]
     assert all(len(item["sha256"]) == 64 for item in manifest["entries"])
+    assert {item["artifact_role"] for item in manifest["entries"]} == {
+        RuntimeArtifactRole.PROJECT_SOURCE.value,
+        RuntimeArtifactRole.DETECTOR_RUNTIME_ARTIFACT.value,
+    }
     assert boundary.audit()["status"] == "PASS"
+
+
+def test_source_role_allows_dataset_annotations_and_symlinked_source_root(tmp_path: Path) -> None:
+    physical_root = tmp_path / "datasets" / "cwe-bench-java" / "annotations" / "project-source"
+    physical_root.mkdir(parents=True)
+    source = physical_root / "Annotated.java"
+    source.write_text("@Deprecated class Annotated {}\n", encoding="utf-8")
+    lexical_root = tmp_path / "project-link"
+    try:
+        lexical_root.symlink_to(physical_root, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    boundary = RuntimeSecurityBoundary(
+        project_id="P-SYMLINK",
+        repository_identity="repo@symlink",
+        allowed_roots=runtime_roots(source_roots=[lexical_root]),
+    )
+
+    assert "class Annotated" in boundary.read_text(
+        lexical_root / "Annotated.java",
+        kind=RuntimeInputKind.JAVA_SOURCE,
+        logical_name="java:Annotated.java",
+    )
+    entry = boundary.seal()["entries"][0]
+    assert entry["artifact_role"] == RuntimeArtifactRole.PROJECT_SOURCE.value
+    assert Path(entry["trusted_root"]) == physical_root.resolve()
+    assert Path(entry["resolved_path"]) == source.resolve()
+
+
+def test_artifact_role_still_denies_dataset_annotations_answer_context(tmp_path: Path) -> None:
+    boundary = _boundary(tmp_path)
+    artifact = tmp_path / "artifacts" / "datasets" / "annotations" / "ordinary.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(SecurityBoundaryViolation) as caught:
+        boundary.read_text(artifact, kind=RuntimeInputKind.RUNTIME_CONFIG, logical_name="forbidden-artifact")
+
+    assert caught.value.decision.code is BoundaryViolationCode.PATH_DENIED
+    assert caught.value.decision.to_trace_payload()["artifact_role"] == RuntimeArtifactRole.DETECTOR_RUNTIME_ARTIFACT.value
+
+
+def test_input_kind_cannot_use_a_different_roles_trusted_root(tmp_path: Path) -> None:
+    boundary = _boundary(tmp_path)
+    artifact = tmp_path / "artifacts" / "LooksLikeSource.java"
+    artifact.write_text("class LooksLikeSource {}\n", encoding="utf-8")
+
+    with pytest.raises(SecurityBoundaryViolation) as caught:
+        boundary.read_text(artifact, kind=RuntimeInputKind.JAVA_SOURCE, logical_name="wrong-root-source")
+
+    assert caught.value.decision.code is BoundaryViolationCode.ROOT_ESCAPE
 
 
 @pytest.mark.parametrize(
