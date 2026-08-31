@@ -107,7 +107,10 @@ class LLMClientConfig:
         missing = [prefix + name for name, value in required.items() if not value]
         if missing:
             raise ModelCallError(ModelFailureClass.MODEL_UNAVAILABLE, "missing model runtime configuration: " + ", ".join(missing))
-        seed_text = values.get(prefix + "SEED", "0").strip()
+        # An omitted seed means the provider chooses its normal deterministic
+        # behavior.  Do not silently turn an absent runtime setting into seed
+        # zero: frozen manifests must be able to distinguish ``null`` from 0.
+        seed_text = values.get(prefix + "SEED", "").strip()
         return cls(
             provider=required["PROVIDER"],
             model_id=required["MODEL"],

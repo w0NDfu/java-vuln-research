@@ -82,6 +82,20 @@ def test_config_comes_from_environment_and_never_serializes_secret() -> None:
     assert config.api_key_env == "M7_LLM_API_KEY"
 
 
+def test_omitted_environment_seed_remains_none() -> None:
+    config = LLMClientConfig.from_environment(
+        {
+            "M7_LLM_PROVIDER": "compatible",
+            "M7_LLM_MODEL": "exact-model-v1",
+            "M7_LLM_BASE_URL": "https://model.example/v1",
+            "M7_LLM_API_KEY": "super-secret",
+        }
+    )
+
+    assert config.seed is None
+    assert config.to_manifest_dict()["seed"] is None
+
+
 def test_missing_environment_configuration_is_model_unavailable() -> None:
     with pytest.raises(ModelCallError) as caught:
         LLMClientConfig.from_environment({})
