@@ -130,12 +130,35 @@ CloudStudio 诊断尝试（均未读取 benchmark answer，也未进入 F7）：
 
 ### M7-F7 Detector-input freeze
 
-状态：进行中。commit `9d65664` 上的首次 freeze 尝试保存在 `.../m7_agent/runs/9d656647a5901e426763abff55aa963ae9962edd/killtest_freeze`，命令成功且 no-leakage 通过，但事后逐项审计发现 detector manifest 只通过 schema hashes 间接绑定 normalizer/observation 实现，没有显式冻结 `StructuredOutputNormalizer` 版本和 observation schema/字符上限。该目录保持不可变并标记为不完整尝试，不用于 detector，也不覆盖或删除。
+状态：完成。commit `9d65664` 上的首次 freeze 尝试保存在 `.../m7_agent/runs/9d656647a5901e426763abff55aa963ae9962edd/killtest_freeze`，命令成功且 no-leakage 通过，但事后逐项审计发现 detector manifest 只通过 schema hashes 间接绑定 normalizer/observation 实现，没有显式冻结 `StructuredOutputNormalizer` 版本和 observation schema/字符上限。该目录保持不可变并标记为不完整尝试，不用于 detector，也不覆盖或删除。
 
 commit `30b976d` 上的第二次 freeze 尝试保存在 `.../m7_agent/runs/30b976d2d0290ec57288e456d39a431af24552bc/killtest_freeze`。该 commit 在 CloudStudio 全量回归为 `262 passed, 1 skipped, 3 warnings`；freeze 命令成功且 no-leakage 通过，但逐项对照 F7 原始要求时发现项目项只保存 lexical `repository_root`，没有单独保存 symlink 解析后的 source root。该目录同样保持不可变并标记为不完整尝试，不用于 detector。
 
 commit `fbbf3db` 上的第三次 freeze 尝试在写 artifact 前 fail-closed：新增的 plaintext resolved root 中至少有一个包含 selection case 标识，因此触发 benchmark-derived value no-leakage 审计。其 SHA 专属目录保持原状，不复用、不关闭审计，也不把该路径带入 agent runtime。resolved root 改为版本化 SHA-256 身份；detector 从冻结 lexical root 重新解析实际路径并比对身份，既绑定 symlink 目标又不向 manifest 暴露路径中的 case 标识。
 
-后续修复在 manifest/schema/runtime validator 中显式绑定 normalizer version、observation schema version、16 KiB bootstrap 与 24 KiB tool-grounded 上限，并补齐 Git SHA、tool catalog、controller version、source lexical root 与不泄漏的 source resolved-root identity 的启动时 fail-closed 校验。只有新 commit 在 CloudStudio 同 SHA 全量回归通过并生成全新的 freeze 目录后，才允许启动 F8。
+最终正式 freeze 位于 commit `07ec776` 的 SHA 专属目录，manifest ID 为 `m7detector-9e40adaad7b93a8796c23298`，detector manifest SHA-256 为 `66056b12ee4a51fc43916080635ba0fcfb83338d5c7eb0288c4654810c7138dd`。manifest/schema/runtime validator 显式绑定 normalizer version、observation schema version、16 KiB bootstrap 与 24 KiB tool-grounded 上限，并补齐 Git SHA、tool catalog、controller version、source lexical root 与不泄漏的 source resolved-root identity 的启动时 fail-closed 校验。CloudStudio 同 SHA 全量回归为 `262 passed, 1 skipped, 3 warnings`；schema、manifest ID、artifact hashes、runtime contract、10 个 source identities、M1--M5/baseline lineage 和 no-leakage 机器审计全部通过后才启动 F8。
 
-- M7-F8 至 M7-F10：待新的 F7 freeze 完成并通过逐项审计后执行。
+### M7-F8 Formal autonomous kill test and evaluator
+
+状态：完成。detector 先独立完成 10/10 项目并写入 `detector_output_manifest.json`；该 manifest 冻结 detector summary 和每个项目 detector manifest 的 SHA-256，且 `evaluation_started=false`。重算全部 hash、确认 10 个项目 artifact/runtime audit、secret absence 和 evaluator outputs absent 后，才首次运行 evaluator。
+
+正式 detector 共 77 rounds、79 model calls、62 repository tool calls、0 CodeQL tool calls、37 entity inspections（31 个唯一实体）、496 EvidenceRefs、5 proposals、0 admissible proposal、0 candidate path。77 个成功 action 的 normalization mode 全部为 `FENCED_JSON`；另外 2 个 `STRUCTURED_OUTPUT_AMBIGUOUS` 被 strict normalizer 拒绝并有界重试，79 次 model calls 全部被 action 或 retry 完整记账。10/10 setup-ready、10/10 进入 model/tool loop，没有 setup、transport、parser fatal failure。
+
+evaluator 在 post-freeze 阶段得到 0/10 autonomous recovery。5 个 proposals 全部为 Gate `REJECTED`：4 个 input anchors 因 `SCOPE_DOES_NOT_BOUND_ALL_ANCHORS`，1 个 field-state proposal 因 `FIELD_STATE_ANCHORS_REQUIRED`。140 个 detector files 的 no-leakage audit 通过，native preservation 通过，artifact audit 的 required files、project contract 和 detector freeze validation 均通过。完整逐项目结果、token、wall-clock、hash 和解释写入 `07_AUTONOMOUS_AGENT.md`。
+
+### M7-F9 Conditional ablation
+
+状态：按预注册门槛跳过。正式 recovery count 为 0，evaluator manifest 写入 `m7_11_required=false`；因此没有运行 E1/E2/E3，也没有启动 Work2。
+
+### M7-F10 Final root-cause and artifact audit
+
+状态：完成。新报告与本分析保留历史失败运行并单列新运行。当前剩余失败不再是旧的 protocol framing、security-boundary false positive 或 observation explosion：
+
+- protocol：77 个规范 action + 2 个明确 ambiguous retry，所有项目进入循环，`MODEL_OUTPUT_INVALID=0`；
+- discovery/evidence：10/10 未发现 security effect，9/10 未形成语义关系；
+- tools：repository discovery 实际执行 62 次，但模型没有选择固定 CodeQL tools，8 个项目出现 repository relation limitation；
+- entity alignment：进入 Gate 的 proposals 均通过 entity/no-fabrication/location checks，CodeQL alignment failure 为 0；
+- Gate/path：5 个 proposals 全因正式 scope/role 约束拒绝，故没有 ADMISSIBLE edge 或 candidate path；
+- budget/reasoning：V004、V023 耗尽预算，其余保守停止，根因可定位为 effect/semantic discovery 与 scope construction 不足，而非 setup 未给模型机会。
+
+最终 evaluator hashes、detector freeze hashes、no-leakage 与 artifact audit 均已独立重算；不报告完整 benchmark Detection Rate、Avg FDR 或 Avg F1。
