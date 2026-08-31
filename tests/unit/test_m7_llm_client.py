@@ -15,6 +15,7 @@ from java_vuln_research.work1_agent.agent import (
     ModelFailureClass,
     OpenAICompatibleLLMClient,
     StructuredOutputMode,
+    StructuredOutputNormalizer,
 )
 
 
@@ -29,7 +30,7 @@ def _stop() -> dict[str, object]:
 def test_mock_client_is_deterministic_and_exhaustion_is_classified() -> None:
     client = MockLLMClient([_stop()])
     response = client.complete(_request())
-    assert json.loads(response.raw_text) == _stop()
+    assert StructuredOutputNormalizer().normalize(response).normalized_object == _stop()
     assert response.provider == "deterministic-mock"
     with pytest.raises(ModelCallError) as caught:
         client.complete(_request())
@@ -169,7 +170,7 @@ def test_tool_call_mode_forces_and_reads_one_structured_decision(tool_arguments:
     assert "response_format" not in body
     assert body["tool_choice"]["function"]["name"] == "submit_agent_decision"
     assert body["tools"][0]["function"]["parameters"] == {"type": "object"}
-    assert json.loads(response.raw_text) == _stop()
+    assert StructuredOutputNormalizer().normalize(response).normalized_object == _stop()
 
 
 def test_anthropic_messages_tool_mode_reads_tool_use_input() -> None:
@@ -200,7 +201,7 @@ def test_anthropic_messages_tool_mode_reads_tool_use_input() -> None:
     assert captured["body"]["tool_choice"] == {"type": "tool", "name": "submit_agent_decision"}
     assert captured["body"]["tools"][0]["input_schema"] == {"type": "object"}
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
-    assert json.loads(response.raw_text) == _stop()
+    assert StructuredOutputNormalizer().normalize(response).normalized_object == _stop()
     assert response.input_tokens == 20 and response.output_tokens == 8
 
 

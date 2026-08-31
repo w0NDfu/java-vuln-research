@@ -20,6 +20,8 @@ class ModelFailureClass(str, Enum):
     MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
     MODEL_TIMEOUT = "MODEL_TIMEOUT"
     INVALID_JSON = "INVALID_JSON"
+    STRUCTURED_OUTPUT_AMBIGUOUS = "STRUCTURED_OUTPUT_AMBIGUOUS"
+    STRUCTURED_OUTPUT_UNSUPPORTED = "STRUCTURED_OUTPUT_UNSUPPORTED"
     INVALID_ACTION = "INVALID_ACTION"
     SCHEMA_VIOLATION = "SCHEMA_VIOLATION"
     TOOL_ARGUMENT_INVALID = "TOOL_ARGUMENT_INVALID"
@@ -185,6 +187,7 @@ class LLMResponse:
     output_tokens: int = 0
     finish_reason: str | None = None
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    provider_payload: Mapping[str, Any] | Sequence[Any] | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -198,6 +201,9 @@ class LLMResponse:
             "output_tokens": self.output_tokens,
             "finish_reason": self.finish_reason,
             "provenance": dict(self.provenance),
+            "provider_payload_shape": (
+                "NONE" if self.provider_payload is None else type(self.provider_payload).__name__.upper()
+            ),
         }
 
 
@@ -289,22 +295,9 @@ class OpenAICompatibleLLMClient:
         try:
             choice = response["choices"][0]
             message = choice["message"]
-            if self.config.structured_output_mode is StructuredOutputMode.TOOL_CALL:
-                tool_calls = message["tool_calls"]
-                matching = [
-                    item
-                    for item in tool_calls
-                    if isinstance(item, Mapping)
-                    and isinstance(item.get("function"), Mapping)
-                    and item["function"].get("name") == "submit_agent_decision"
-                ]
-                if len(matching) != 1:
-                    raise ValueError("unexpected structured tool call")
-                arguments = matching[0]["function"].get("arguments")
-                text = canonical_json(arguments) if isinstance(arguments, Mapping) else arguments
-            else:
-                text = message["content"]
-            if not isinstance(text, str) or not text.strip():
+            content = message.get("content")
+            text = content if isinstance(content, str) else ""
+            if not text.strip() and not message.get("tool_calls") and content is None:
                 raise ValueError("empty content")
             usage = dict(response.get("usage") or {})
             finish_reason = str(choice["finish_reason"]) if choice.get("finish_reason") is not None else None
@@ -321,6 +314,7 @@ class OpenAICompatibleLLMClient:
             output_tokens=int(usage.get("completion_tokens") or 0),
             finish_reason=finish_reason,
             provenance={"response_id": response.get("id"), "configuration": self.config.to_manifest_dict()},
+            provider_payload=dict(message),
         )
 
 
@@ -386,23 +380,11 @@ class AnthropicMessagesLLMClient:
             raise ModelCallError(ModelFailureClass.MODEL_UNAVAILABLE, "model transport returned an unusable response", model_call_id=model_call_id, retryable=True) from exc
         try:
             content = response["content"]
-            if self.config.structured_output_mode is StructuredOutputMode.TOOL_CALL:
-                matching = [
-                    block
-                    for block in content
-                    if isinstance(block, Mapping)
-                    and block.get("type") == "tool_use"
-                    and block.get("name") == "submit_agent_decision"
-                ]
-                if len(matching) != 1 or not isinstance(matching[0].get("input"), Mapping):
-                    raise ValueError("unexpected Anthropic tool use")
-                text = canonical_json(matching[0]["input"])
-            else:
-                blocks = [str(block["text"]) for block in content if isinstance(block, Mapping) and block.get("type") == "text"]
-                if len(blocks) != 1:
-                    raise ValueError("unexpected Anthropic text blocks")
-                text = blocks[0]
-            if not text.strip():
+            if not isinstance(content, Sequence) or isinstance(content, (str, bytes, bytearray)):
+                raise ValueError("unexpected Anthropic content")
+            text_blocks = [str(block["text"]) for block in content if isinstance(block, Mapping) and block.get("type") == "text"]
+            text = text_blocks[0] if len(content) == 1 and len(text_blocks) == 1 else ""
+            if not text.strip() and not content:
                 raise ValueError("empty content")
             usage = dict(response.get("usage") or {})
             finish_reason = str(response["stop_reason"]) if response.get("stop_reason") is not None else None
@@ -419,6 +401,7 @@ class AnthropicMessagesLLMClient:
             output_tokens=int(usage.get("output_tokens") or 0),
             finish_reason=finish_reason,
             provenance={"response_id": response.get("id"), "configuration": self.config.to_manifest_dict()},
+            provider_payload=list(content),
         )
 
 

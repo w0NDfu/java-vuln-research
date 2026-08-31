@@ -118,7 +118,7 @@ def test_controller_records_model_failure_and_stops_fail_closed(tmp_path: Path) 
     result = controller.run()
 
     assert result.state.stop_reason is StopReason.OTHER
-    assert result.failures[0].failure_class == "INVALID_JSON"
+    assert result.failures[0].failure_class == "STRUCTURED_OUTPUT_UNSUPPORTED"
     assert [item.event_type for item in result.trace.events][-2:] == [TraceEventType.FAILURE, TraceEventType.STOP]
     assert result.state.budget.model_calls == 2
     assert [request.attempt for request in client.requests] == [1, 2]
@@ -138,7 +138,7 @@ def test_controller_repairs_one_invalid_model_output_without_relaxing_parser(tmp
     assert result.state.budget.model_calls == 2
     assert [request.attempt for request in client.requests] == [1, 2]
     repair = next(item for item in result.trace.events if item.event_type is TraceEventType.MODEL_RETRY)
-    assert repair.payload["failure_class"] == "INVALID_JSON"
+    assert repair.payload["failure_class"] == "SCHEMA_VIOLATION"
     assert "model_output_repair" in client.requests[1].observation
 
 
@@ -249,4 +249,4 @@ def test_runtime_writes_complete_artifacts_even_for_model_failure(tmp_path: Path
     assert audit["required_files_present"] is True
     assert all((output / name).is_file() for name in PROJECT_ARTIFACT_FILES)
     assert (output / "artifact_audit.json").is_file()
-    assert "INVALID_JSON" in (output / "manifest.json").read_text(encoding="utf-8")
+    assert "STRUCTURED_OUTPUT_UNSUPPORTED" in (output / "manifest.json").read_text(encoding="utf-8")

@@ -66,7 +66,6 @@ def test_parser_builds_canonical_tool_action_and_injects_identity() -> None:
 @pytest.mark.parametrize(
     ("value", "failure"),
     [
-        ("```json\n{}\n```", ModelFailureClass.INVALID_JSON),
         ("{not json}", ModelFailureClass.INVALID_JSON),
         ({"action_type": "WRITE_CODE", "arguments": {}, "proposal": None, "stop_reason": None, "reason": "x"}, ModelFailureClass.INVALID_ACTION),
         ({**_tool(), "extra": True}, ModelFailureClass.SCHEMA_VIOLATION),

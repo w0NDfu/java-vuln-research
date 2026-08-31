@@ -14,6 +14,7 @@ from .actions import CODEQL_ACTIONS, REPOSITORY_ACTIONS, TOOL_ACTIONS, ActionTyp
 from .budget import BudgetTracker
 from .llm_client import LLMResponse, ModelCallError, ModelFailureClass
 from .schema_validation import SchemaValidationError, validate_json_schema
+from .structured_output import StructuredOutputNormalizer
 
 
 ENTITY_ID_PATTERN = re.compile(r"^entity-[0-9a-f]{24}$")
@@ -152,11 +153,13 @@ def _check_budget(action_type: ActionType, budget: BudgetTracker | None, respons
 
 
 class StrictActionParser:
-    def __init__(self, schema_root: str | Path) -> None:
+    def __init__(self, schema_root: str | Path, *, normalizer: StructuredOutputNormalizer | None = None) -> None:
         self.schema_root = Path(schema_root)
         self.decision_schema = json.loads((self.schema_root / "work1_agent_model_decision.schema.json").read_text(encoding="utf-8"))
         self.action_schema = json.loads((self.schema_root / "work1_agent_action.schema.json").read_text(encoding="utf-8"))
         self.proposal_schema = json.loads((self.schema_root / "security_proposal.schema.json").read_text(encoding="utf-8"))
+        self.normalizer = normalizer or StructuredOutputNormalizer()
+        self.last_normalization: Mapping[str, Any] | None = None
 
     def _validate(self, value: Mapping[str, Any], schema: Mapping[str, Any], response: LLMResponse) -> None:
         try:
@@ -182,15 +185,9 @@ class StrictActionParser:
         known_entity_ids: set[str] | None = None,
         known_evidence_refs: set[str] | None = None,
     ) -> AgentAction:
-        raw_text = response.raw_text.strip()
-        if not raw_text.startswith("{") or not raw_text.endswith("}"):
-            raise _failure(ModelFailureClass.INVALID_JSON, "model output must be one bare JSON object", response)
-        try:
-            value = json.loads(raw_text)
-        except json.JSONDecodeError as exc:
-            raise _failure(ModelFailureClass.INVALID_JSON, f"invalid JSON at line {exc.lineno} column {exc.colno}", response) from exc
-        if not isinstance(value, dict):
-            raise _failure(ModelFailureClass.INVALID_JSON, "model output must decode to an object", response)
+        normalization = self.normalizer.normalize(response)
+        self.last_normalization = normalization.to_dict()
+        value = dict(normalization.normalized_object)
         if set(value) != _DECISION_KEYS:
             raise _failure(ModelFailureClass.SCHEMA_VIOLATION, "model decision must contain exactly the five allowed fields", response)
         try:
@@ -278,6 +275,11 @@ class StrictActionParser:
                 "provider": response.provider,
                 "model_id": response.model_id,
                 "benchmark_informed": False,
+                "structured_output_normalization": {
+                    key: raw
+                    for key, raw in normalization.to_dict().items()
+                    if key != "normalized_object"
+                },
             },
         )
         self._validate(action.to_dict(), self.action_schema, response)

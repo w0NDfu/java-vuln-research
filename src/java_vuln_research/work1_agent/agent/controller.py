@@ -209,6 +209,8 @@ class AgentController:
             repair_failure: AgentControllerFailure | None = None
             repairable = {
                 ModelFailureClass.INVALID_JSON,
+                ModelFailureClass.STRUCTURED_OUTPUT_AMBIGUOUS,
+                ModelFailureClass.STRUCTURED_OUTPUT_UNSUPPORTED,
                 ModelFailureClass.INVALID_ACTION,
                 ModelFailureClass.SCHEMA_VIOLATION,
                 ModelFailureClass.TOOL_ARGUMENT_INVALID,
