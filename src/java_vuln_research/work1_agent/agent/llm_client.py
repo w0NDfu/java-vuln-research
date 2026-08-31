@@ -289,6 +289,14 @@ class OpenAICompatibleLLMClient:
             )
         except (TimeoutError, socket.timeout) as exc:
             raise ModelCallError(ModelFailureClass.MODEL_TIMEOUT, "model request timed out", model_call_id=model_call_id, retryable=True) from exc
+        except urllib.error.HTTPError as exc:
+            retryable = exc.code in {408, 409, 425, 429} or 500 <= exc.code <= 599
+            raise ModelCallError(
+                ModelFailureClass.MODEL_UNAVAILABLE,
+                f"model endpoint returned HTTP {exc.code}",
+                model_call_id=model_call_id,
+                retryable=retryable,
+            ) from exc
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, (TimeoutError, socket.timeout)):
                 raise ModelCallError(ModelFailureClass.MODEL_TIMEOUT, "model request timed out", model_call_id=model_call_id, retryable=True) from exc
@@ -375,6 +383,14 @@ class AnthropicMessagesLLMClient:
             )
         except (TimeoutError, socket.timeout) as exc:
             raise ModelCallError(ModelFailureClass.MODEL_TIMEOUT, "model request timed out", model_call_id=model_call_id, retryable=True) from exc
+        except urllib.error.HTTPError as exc:
+            retryable = exc.code in {408, 409, 425, 429} or 500 <= exc.code <= 599
+            raise ModelCallError(
+                ModelFailureClass.MODEL_UNAVAILABLE,
+                f"model endpoint returned HTTP {exc.code}",
+                model_call_id=model_call_id,
+                retryable=retryable,
+            ) from exc
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, (TimeoutError, socket.timeout)):
                 raise ModelCallError(ModelFailureClass.MODEL_TIMEOUT, "model request timed out", model_call_id=model_call_id, retryable=True) from exc

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
 import socket
+import urllib.error
 
 import pytest
 
@@ -144,6 +146,27 @@ def test_exact_endpoint_is_used_verbatim_without_concatenation() -> None:
 
     assert captured["url"] == endpoint
     assert config.to_manifest_dict()["endpoint_mode"] == "EXACT"
+
+
+def test_http_status_is_auditable_without_response_body_leakage() -> None:
+    def transport(url: str, _headers: dict[str, str], _body: bytes, _timeout: float) -> dict[str, object]:
+        raise urllib.error.HTTPError(
+            url,
+            429,
+            "Too Many Requests",
+            None,
+            io.BytesIO(b"provider-body-must-not-be-recorded"),
+        )
+
+    config = LLMClientConfig("compatible", "exact-model", "https://model.example/v1", "secret")
+
+    with pytest.raises(ModelCallError) as caught:
+        OpenAICompatibleLLMClient(config, transport=transport).complete(_request())
+
+    assert caught.value.failure_class is ModelFailureClass.MODEL_UNAVAILABLE
+    assert caught.value.retryable is True
+    assert "HTTP 429" in str(caught.value)
+    assert "provider-body-must-not-be-recorded" not in str(caught.value)
 
 
 @pytest.mark.parametrize("tool_arguments", [json.dumps(_stop()), _stop()])
