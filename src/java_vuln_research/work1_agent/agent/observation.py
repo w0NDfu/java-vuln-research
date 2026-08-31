@@ -196,7 +196,12 @@ def _compact_feedback(value: Mapping[str, Any]) -> dict[str, Any]:
         key: _bounded_value(value[key])
         for key in (
             "feedback_id",
+            "feedback_type",
             "round",
+            "failure_class",
+            "message",
+            "required_actions",
+            "details",
             "tool_call_id",
             "tool_name",
             "status",
@@ -349,6 +354,7 @@ def build_repository_first_observation(
     codeql_status: Mapping[str, Any],
     native_baseline_summary: Mapping[str, Any] | None = None,
     recent_feedback: Sequence[Mapping[str, Any]] = (),
+    controller_phase: str | None = None,
 ) -> AgentObservation:
     if state.project_id != str(codeql_status.get("project_id", state.project_id)):
         raise ValueError("CodeQL status is cross-project")
@@ -379,6 +385,7 @@ def build_repository_first_observation(
     level = "TOOL_GROUNDED" if all_feedback else "BOOTSTRAP"
     payload: dict[str, Any] = {
         "observation_level": level,
+        "controller_phase": controller_phase or "DISCOVERY",
         "repository_identity": state.repository_identity,
         "bootstrap": {
             "java_file_count": repository_index.java_file_count,

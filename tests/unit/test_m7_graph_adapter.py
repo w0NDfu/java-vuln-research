@@ -134,6 +134,7 @@ def test_graph_adapter_keeps_m5_hard_ceilings() -> None:
 def test_controller_returns_new_path_feedback_and_waits_for_explicit_stop(tmp_path: Path) -> None:
     index = build_repository_index(FIXTURE)
     method = next(item for item in index.entities if item.kind is ProgramEntityKind.METHOD and item.simple_name == "customExternalInput")
+    effect_method = next(item for item in index.entities if item.kind is ProgramEntityKind.METHOD and item.simple_name == "customSecurityEffect")
     call = next(item for item in index.entities if item.kind is ProgramEntityKind.CALL and item.simple_name == "writeString")
     input_evidence = EvidenceRef.create(source_kind=EvidenceSourceKind.PROGRAM_ENTITY, entity_ids=[method.entity_id], confidence=EvidenceStrength.DIRECT, provenance={"producer": "test"})
     effect_evidence = EvidenceRef.create(source_kind=EvidenceSourceKind.PROGRAM_ENTITY, entity_ids=[call.entity_id], confidence=EvidenceStrength.DIRECT, provenance={"producer": "test"})
@@ -151,7 +152,9 @@ def test_controller_returns_new_path_feedback_and_waits_for_explicit_stop(tmp_pa
     state = AgentState.create(project_id="P", repository_identity="controlled@abc", provenance={"producer": "test"})
     for evidence in (input_evidence, effect_evidence, relation_evidence):
         state.record_evidence(evidence.evidence_id, project_id="P")
+    state.inspected_entity_ids.update({method.entity_id, effect_method.entity_id})
     responses = [
+        {"action_type": ActionType.SEARCH_SYMBOLS.value, "arguments": {"query": "custom"}, "proposal": None, "stop_reason": None, "reason": "Discover bounded symbols."},
         {"action_type": "PROPOSE", "arguments": {}, "proposal": input_proposal.to_dict(), "stop_reason": None, "reason": "Input anchor."},
         {"action_type": "PROPOSE", "arguments": {}, "proposal": effect_proposal.to_dict(), "stop_reason": None, "reason": "Effect anchor."},
         {"action_type": ActionType.STOP.value, "arguments": {}, "proposal": None, "stop_reason": StopReason.PATH_FORMED.value, "reason": "A bounded candidate path formed."},

@@ -2,7 +2,7 @@
 
 from .actions import ActionType, AgentAction, StopReason
 from .budget import AgentBudgetLimits, BudgetExceeded, BudgetTracker
-from .controller import AgentController, AgentControllerFailure, AgentControllerResult
+from .controller import AgentController, AgentControllerFailure, AgentControllerResult, ControllerPhase
 from .feedback import AgentGateFeedback, build_gate_feedback, evidence_from_tool_result
 from .graph_adapter import (
     AgentGraphPathAdapter,
@@ -76,6 +76,7 @@ __all__ = [
     "BoundaryViolationCode",
     "BudgetExceeded",
     "BudgetTracker",
+    "ControllerPhase",
     "LLMAPIProtocol",
     "LLMClient",
     "LLMClientConfig",

@@ -74,7 +74,14 @@ observation schema 升级到 version 2，并拆为两个确定性层级：
 
 本地验证（2026-08-31）：targeted 25 passed；full 246 passed、2 skipped；compileall、未定义引用检查和 `diff --check` 通过。极端测试使用 12 个实体、12 个 EvidenceRef 和每项 20,000 字符源码，验证反馈为 3、实体为 5、EvidenceRef 为 5 且最终 observation 不超过 24 KiB。deterministic controlled smoke 为 6 rounds、2 tools、3 proposals、3 ADMISSIBLE、1 path、`PATH_FORMED`，artifact audit 与 no-leakage 均通过。
 
-- M7-F4 phased controller constraints：待实现。
+### M7-F4 Phased controller constraints
+
+状态：本地实现与回归通过，等待 GitHub 网络恢复后执行 CloudStudio 同 commit 全量回归。
+
+controller 升级为 `M7_CONTROLLER_V2`，显式维护 `DISCOVERY`、`INSPECTION`、`HYPOTHESIS`、`PATH_SEARCH`。phase 写入每个 trace event，并进入 model-visible observation。非空项目第 1 轮只接受 `SEARCH_CODE` 或 `SEARCH_SYMBOLS`；越界 action 返回 `ROUND1_DISCOVERY_ACTION_REQUIRED` structured controller feedback。无 EvidenceRef 的 proposal 在 Gate 前返回 `PROPOSAL_BEFORE_EVIDENCE`；input/effect anchor 必须位于已执行 `INSPECT_METHOD` 的 method/constructor 中；传播 proposal 的 EvidenceRef grounding 必须同时覆盖 source 与 target，否则返回 `PROPOSAL_EVIDENCE_COVERAGE_INCOMPLETE`。这些反馈不扣 proposal budget、不进入 Gate/graph，并受 stagnation ceiling 约束。
+
+本地验证（2026-08-31）：targeted 20 passed；full 248 passed、2 skipped；compileall 与 `diff --check` 通过。deterministic phased smoke 仍为 6 rounds、2 tools、3 ADMISSIBLE proposals、1 path、`PATH_FORMED`，artifact/no-leakage audit 通过。
+
 - M7-F5 enriched bounded tool summaries：待实现。
 - M7-F6 controlled real-model preflight：待执行；失败则不 freeze 正式 detector。
 - M7-F7 至 M7-F10：待前置阶段通过后执行。

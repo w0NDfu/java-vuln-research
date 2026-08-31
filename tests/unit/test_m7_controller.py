@@ -128,18 +128,42 @@ def test_controller_records_model_failure_and_stops_fail_closed(tmp_path: Path) 
 def test_controller_repairs_one_invalid_model_output_without_relaxing_parser(tmp_path: Path) -> None:
     controller, client = _controller(
         tmp_path,
-        ["```json\n{}\n```", _decision(ActionType.STOP, stop_reason=StopReason.INSUFFICIENT_EVIDENCE)],
+        [
+            "```json\n{}\n```",
+            _decision(ActionType.SEARCH_CODE, arguments={"query": "helper"}),
+            _decision(ActionType.STOP, stop_reason=StopReason.INSUFFICIENT_EVIDENCE),
+        ],
     )
 
     result = controller.run()
 
     assert result.state.stop_reason is StopReason.INSUFFICIENT_EVIDENCE
     assert result.failures == ()
-    assert result.state.budget.model_calls == 2
-    assert [request.attempt for request in client.requests] == [1, 2]
+    assert result.state.budget.model_calls == 3
+    assert [request.attempt for request in client.requests] == [1, 2, 1]
     repair = next(item for item in result.trace.events if item.event_type is TraceEventType.MODEL_RETRY)
     assert repair.payload["failure_class"] == "SCHEMA_VIOLATION"
     assert "model_output_repair" in client.requests[1].observation
+
+
+def test_round_one_non_discovery_action_returns_structured_controller_feedback(tmp_path: Path) -> None:
+    controller, client = _controller(
+        tmp_path,
+        [
+            _decision(ActionType.READ_FILE_RANGE, arguments={"path": "src/main/java/p/A.java", "start_line": 1, "end_line": 2}),
+            _decision(ActionType.SEARCH_SYMBOLS, arguments={"query": "helper"}),
+            _decision(ActionType.STOP, stop_reason=StopReason.INSUFFICIENT_EVIDENCE),
+        ],
+    )
+
+    result = controller.run()
+
+    feedback = next(item for item in result.trace.events if item.event_type is TraceEventType.CONTROLLER_FEEDBACK)
+    assert feedback.payload["failure_class"] == "ROUND1_DISCOVERY_ACTION_REQUIRED"
+    assert feedback.payload["phase"] == "DISCOVERY"
+    assert result.state.budget.tool_calls_total == 1
+    assert client.requests[1].observation["recent_feedback"][0]["failure_class"] == "ROUND1_DISCOVERY_ACTION_REQUIRED"
+    assert {event.payload["phase"] for event in result.trace.events} >= {"DISCOVERY", "INSPECTION"}
 
 
 def test_controller_enforces_round_budget_without_needing_an_extra_model_response(tmp_path: Path) -> None:

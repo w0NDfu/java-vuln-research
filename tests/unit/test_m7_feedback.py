@@ -133,37 +133,56 @@ def _controller(tmp_path: Path) -> tuple[AgentController, str]:
     return controller, method.entity_id
 
 
-def test_needs_more_feedback_drives_tool_then_same_proposal_can_be_admitted(tmp_path: Path) -> None:
+def test_controller_feedback_drives_inspection_then_proposal_can_be_admitted(tmp_path: Path) -> None:
     controller, method_id = _controller(tmp_path)
 
     result = controller.run()
 
-    assert [item.status for item in result.gate_results] == [GateStatus.NEEDS_MORE_EVIDENCE, GateStatus.ADMISSIBLE]
-    assert result.gate_results[0].proposal_id == result.gate_results[1].proposal_id
-    assert result.state.budget.proposals_total == 2
+    assert [item.status for item in result.gate_results] == [GateStatus.ADMISSIBLE]
+    controller_feedback = next(item for item in result.trace.events if item.event_type is TraceEventType.CONTROLLER_FEEDBACK)
+    assert controller_feedback.payload["failure_class"] == "PROPOSAL_BEFORE_EVIDENCE"
+    assert result.state.budget.proposals_total == 1
     assert result.state.budget.admissible_proposals == 1
     assert len(result.state.evidence_refs) >= 1
     assert method_id in result.state.inspected_entity_ids
-    assert result.gate_feedback[0].payload["unresolved_semantics"] == ["NO_PROGRAM_EVIDENCE"]
-    assert result.gate_feedback[1].payload["active_proposal_count"] == 1
-    assert result.gate_feedback[1].payload["graph_update_enabled"] is False
-    assert result.gate_feedback[1].payload["candidate_path_count_after"] == 0
+    assert result.gate_feedback[0].payload["active_proposal_count"] == 1
+    assert result.gate_feedback[0].payload["graph_update_enabled"] is False
+    assert result.gate_feedback[0].payload["candidate_path_count_after"] == 0
     assert any(item.event_type is TraceEventType.EVIDENCE for item in result.trace.events)
-    assert sum(item.event_type is TraceEventType.GATE_RESULT for item in result.trace.events) == 2
+    assert sum(item.event_type is TraceEventType.GATE_RESULT for item in result.trace.events) == 1
+
+
+def test_anchor_requires_inspected_callable_and_middle_evidence_covers_both_ends(tmp_path: Path) -> None:
+    controller, method_id = _controller(tmp_path)
+    field = next(item for item in controller.repository_index.entities if item.kind is ProgramEntityKind.FIELD)
+    evidence_id = "evidence-000000000000000000000001"
+    controller.state.evidence_refs.add(evidence_id)
+    controller.evidence_entities[evidence_id] = {method_id}
+
+    anchor = _external_input(method_id, (evidence_id,))
+    anchor_constraint = controller._proposal_constraint(anchor)
+    assert anchor_constraint is not None
+    assert anchor_constraint[0] == "ANCHOR_BEFORE_CALLABLE_INSPECTION"
+
+    controller.state.inspected_entity_ids.add(method_id)
+    relation = SecurityProposal.create(
+        proposal_type=ProposalType.LIBRARY_FLOW,
+        subject=EntityRoleRef(method_id, EntityRole.RETURN),
+        source=EntityRoleRef(method_id, EntityRole.RETURN),
+        target=EntityRoleRef(field.entity_id, EntityRole.FIELD),
+        scope=ProposalScope(ScopeKind.CALLABLE, (method_id, field.entity_id), "P"),
+        evidence_refs=(evidence_id,),
+        reason="Evidence intentionally covers only the source endpoint.",
+        provenance={"producer": "test", "benchmark_informed": False},
+    )
+    relation_constraint = controller._proposal_constraint(relation)
+    assert relation_constraint is not None
+    assert relation_constraint[0] == "PROPOSAL_EVIDENCE_COVERAGE_INCOMPLETE"
+    assert relation_constraint[3]["missing_entity_ids"] == [field.entity_id]
 
 
 def test_rejected_feedback_never_activates_proposal_or_graph(tmp_path: Path) -> None:
-    controller, _ = _controller(tmp_path)
-    field = next(item for item in controller.repository_index.entities if item.kind is ProgramEntityKind.FIELD)
-    rejected = SecurityProposal.create(
-        proposal_type=ProposalType.EXTERNAL_INPUT,
-        subject=EntityRoleRef(field.entity_id, EntityRole.RETURN),
-        scope=ProposalScope(ScopeKind.ENTITY, (field.entity_id,), "P"),
-        semantic_category="UNKNOWN",
-        evidence_refs=(),
-        reason="Deliberately incompatible role for Gate test.",
-        provenance={"producer": "test", "benchmark_informed": False},
-    )
+    controller, method_id = _controller(tmp_path)
 
     class RejectedThenStop:
         def __init__(self) -> None:
@@ -171,7 +190,24 @@ def test_rejected_feedback_never_activates_proposal_or_graph(tmp_path: Path) -> 
 
         def complete(self, request: LLMRequest) -> LLMResponse:
             self.calls += 1
-            decision = _decision(ActionType.PROPOSE, proposal=rejected) if self.calls == 1 else _decision(ActionType.STOP, stop_reason=StopReason.INSUFFICIENT_EVIDENCE)
+            if self.calls == 1:
+                decision = _decision(ActionType.SEARCH_SYMBOLS, arguments={"query": "customExternalInput"})
+            elif self.calls == 2:
+                decision = _decision(ActionType.INSPECT_METHOD, arguments={"entity_id": method_id})
+            elif self.calls == 3:
+                evidence_id = request.observation["tool_grounded_context"]["recent_evidence_refs"][0]["evidence_id"]
+                rejected = SecurityProposal.create(
+                    proposal_type=ProposalType.EXTERNAL_INPUT,
+                    subject=EntityRoleRef(method_id, EntityRole.ARGUMENT, 0),
+                    scope=ProposalScope(ScopeKind.ENTITY, (method_id,), "P"),
+                    semantic_category="UNKNOWN",
+                    evidence_refs=(evidence_id,),
+                    reason="Deliberately incompatible role for Gate test.",
+                    provenance={"producer": "test", "benchmark_informed": False},
+                )
+                decision = _decision(ActionType.PROPOSE, proposal=rejected)
+            else:
+                decision = _decision(ActionType.STOP, stop_reason=StopReason.INSUFFICIENT_EVIDENCE)
             return LLMResponse(
                 model_call_id=stable_digest("modelcall", {"request": request.request_id}),
                 request_id=request.request_id,

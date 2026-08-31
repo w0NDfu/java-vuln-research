@@ -86,7 +86,7 @@ def evidence_from_tool_result(
         ids: set[str] = set()
         _entity_ids({"item": item, "arguments": result.provenance.get("arguments", {})}, known, ids)
         path, start, end = _location(item)
-        if not ids and path is not None and start is not None and end is not None:
+        if path is not None and start is not None and end is not None:
             ids.update(
                 entity.entity_id
                 for entity in repository_index.entities
