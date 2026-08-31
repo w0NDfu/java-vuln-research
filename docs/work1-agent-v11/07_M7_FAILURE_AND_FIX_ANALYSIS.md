@@ -15,7 +15,7 @@ CloudStudio 上的历史正式运行基于 detector commit `82200a5`，10 个 fr
 
 ## M7-F1 Structured output normalization
 
-状态：本地实现与回归通过，等待 CloudStudio 同 commit 全量回归。
+状态：完成。commit `72793ed` 已推送，并在 CloudStudio `/workspace/java-vuln-research-m7` 同 commit 全量回归通过。
 
 在 provider client 与 `StrictActionParser` 之间新增 `StructuredOutputNormalizer`，版本为 `M7_STRUCTURED_OUTPUT_NORMALIZER_V1`。它只解除唯一、无歧义的传输封装，不修补 action、字段、实体、EvidenceRef、proposal 语义或预算：
 
@@ -34,6 +34,7 @@ CloudStudio 上的历史正式运行基于 detector commit `82200a5`，10 个 fr
 - `compileall`：通过；
 - targeted pytest：39 passed；
 - full pytest：242 passed、1 skipped；
+- CloudStudio full pytest：242 passed、1 skipped、3 个既有 deprecation warnings；
 - `git diff --check`：通过；
 - 新增覆盖：bare/fenced JSON、OpenAI/Anthropic envelope、单 object content、多调用/多块歧义、prose 混合、未知 action，以及 normalization 后伪造 EvidenceRef 仍被 strict parser 拒绝。
 
@@ -47,4 +48,3 @@ CloudStudio 上的历史正式运行基于 detector commit `82200a5`，10 个 fr
 - M7-F5 enriched bounded tool summaries：待实现。
 - M7-F6 controlled real-model preflight：待执行；失败则不 freeze 正式 detector。
 - M7-F7 至 M7-F10：待前置阶段通过后执行。
-
