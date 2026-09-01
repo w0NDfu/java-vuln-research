@@ -188,4 +188,16 @@ Python dataclass validation 与 JSON schema 都要求 closed top-level fields、
 - `python -m compileall -q src tests`：通过；
 - `git diff --check`：通过。
 
-warnings 均为既有或新增 schema 测试使用旧 `jsonschema.RefResolver` 产生的 deprecation，不影响契约判定。CloudStudio exact-commit 结果将在 push 后补充到下一里程碑审计链，不改写本次代码身份。
+warnings 均为既有或新增 schema 测试使用旧 `jsonschema.RefResolver` 产生的 deprecation，不影响契约判定。
+
+CloudStudio exact-commit 验证：
+
+- worktree：`/workspace/java-vuln-research-m8`；
+- branch：`work1/agent-active-security-v11-m8-multiagent`；
+- HEAD：`fce8e9901813853f1ce1ebbaf0d3081e7b826653`；
+- 工作区：clean；
+- full regression：`276 passed, 1 skipped, 5 warnings`；
+- `python -m compileall -q src tests`：通过，exit code `0`；
+- `git diff --check`：通过。
+
+云端比本地多执行一个 CodeQL smoke，因此 skip 数量相差 1；其余测试身份和代码身份保持一致。该验证没有修改云端仓库或旧 M7 artifacts。
