@@ -40,7 +40,7 @@ from .prompts.effect_agent import SYSTEM_PROMPT as EFFECT_SYSTEM_PROMPT
 from .prompts.input_agent import SYSTEM_PROMPT as INPUT_SYSTEM_PROMPT
 
 
-SPECIALIST_RUNTIME_VERSION = "M8_SPECIALIST_RUNTIME_V1"
+SPECIALIST_RUNTIME_VERSION = "M8_SPECIALIST_RUNTIME_V2"
 MAX_INTERNAL_ROUNDS = 4
 MAX_TOOL_CALLS = 6
 MAX_FINDING_BATCHES = 1
@@ -238,8 +238,16 @@ def _parse_decision(
         if action not in TOOL_ACTIONS:
             raise ValueError("specialist requested a non-tool action")
         validate_tool_arguments(action, arguments)
-        if value["findings"] or value["status"] not in {None, ""}:
-            raise ValueError("TOOL must not include findings or status")
+        if (
+            value["findings"]
+            or value["status"] not in {None, ""}
+            or next_evidence
+            or uncertainty
+        ):
+            raise ValueError(
+                "TOOL must not include findings, status, next_suggested_evidence, "
+                "or uncertainty"
+            )
     elif action_type == "SUBMIT_FINDINGS":
         if not _empty_tool_name(value["tool_name"]) or arguments:
             raise ValueError("SUBMIT_FINDINGS must not include a tool")

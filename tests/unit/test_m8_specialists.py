@@ -160,17 +160,24 @@ def test_prompts_are_distinct_and_role_bounded() -> None:
         "SUBMIT_FINDINGS" in prompt and "Candidate Path is only" in prompt
         for prompt in (INPUT_SYSTEM_PROMPT, EFFECT_SYSTEM_PROMPT, BRIDGE_SYSTEM_PROMPT)
     )
+    assert all(
+        'Never encode an array as ""' in prompt
+        and "These array types do not change by action_type" in prompt
+        and "findings []" in prompt
+        and "status null" in prompt
+        for prompt in (INPUT_SYSTEM_PROMPT, EFFECT_SYSTEM_PROMPT, BRIDGE_SYSTEM_PROMPT)
+    )
     assert (INPUT_PROMPT_VERSION, prompt_sha256(INPUT_SYSTEM_PROMPT)) == (
-        "M8_INPUT_AGENT_V1",
-        "5c16fc6b5337f2277ade342ba4c0b015e96e2a765cafe77f8411bbf26759320d",
+        "M8_INPUT_AGENT_V2",
+        "8c3eb00150e5c22abb8ecc2ee465ab88d5affb2c4fc77aa4c844f0b520d992fc",
     )
     assert (EFFECT_PROMPT_VERSION, prompt_sha256(EFFECT_SYSTEM_PROMPT)) == (
-        "M8_EFFECT_AGENT_V1",
-        "648f968268af323618c6cb8918415fe2da7dc79516139651f22a7b7839873384",
+        "M8_EFFECT_AGENT_V2",
+        "1939aa9aecf6be39ffab25c41da3bb8a1f6dc5692606cd1cba7e47df6f84845e",
     )
     assert (BRIDGE_PROMPT_VERSION, prompt_sha256(BRIDGE_SYSTEM_PROMPT)) == (
-        "M8_BRIDGE_AGENT_V1",
-        "753396bfd91d9e377de253f3c0a5ca2304436f6e06e704541bded0c5971f33f6",
+        "M8_BRIDGE_AGENT_V2",
+        "e1bd0ff9012178ef0d287b32469888af87065da31f2594ffeff5cac2da6e1600",
     )
 
 
@@ -457,6 +464,85 @@ def test_model_cannot_use_a_tool_omitted_from_taskspec(tmp_path: Path) -> None:
     assert run.result.status is SpecialistResultStatus.FAILED
     assert run.failures[0].failure_class == "MODEL_OUTPUT_INVALID"
     assert not run.result.tool_calls
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("next_suggested_evidence", "", "next_suggested_evidence"),
+        (
+            "next_suggested_evidence",
+            "Inspect the method body next.",
+            "next_suggested_evidence",
+        ),
+        ("uncertainty", "", "uncertainty"),
+        ("uncertainty", "The implementation is not inspected yet.", "uncertainty"),
+    ],
+)
+def test_tool_rejects_scalar_advisory_fields_before_execution(
+    tmp_path: Path,
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    runtime, client, method = _setup(tmp_path, [])
+    decision = _decision(
+        "TOOL",
+        tool_name="INSPECT_METHOD",
+        arguments={"entity_id": method.entity_id},
+    )
+    decision[field] = value
+    client._responses.append(decision)
+
+    run = runtime.run(_task(SpecialistRole.INPUT, seed_entity_ids=(method.entity_id,)))
+
+    assert run.result.status is SpecialistResultStatus.FAILED
+    assert run.result.rounds_used == 1
+    assert run.failures[0].failure_class == "MODEL_OUTPUT_INVALID"
+    assert message in run.failures[0].message
+    assert not run.result.tool_calls
+
+
+@pytest.mark.parametrize("field", ["next_suggested_evidence", "uncertainty"])
+def test_tool_rejects_non_empty_advisory_arrays_before_execution(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    runtime, client, method = _setup(tmp_path, [])
+    decision = _decision(
+        "TOOL",
+        tool_name="INSPECT_METHOD",
+        arguments={"entity_id": method.entity_id},
+    )
+    decision[field] = ["This advisory value belongs on a terminal action."]
+    client._responses.append(decision)
+
+    run = runtime.run(_task(SpecialistRole.INPUT, seed_entity_ids=(method.entity_id,)))
+
+    assert run.result.status is SpecialistResultStatus.FAILED
+    assert run.failures[0].failure_class == "MODEL_OUTPUT_INVALID"
+    assert field in run.failures[0].message
+    assert not run.result.tool_calls
+
+
+def test_tool_accepts_empty_array_advisory_fields(tmp_path: Path) -> None:
+    runtime, client, method = _setup(tmp_path, [])
+    client._responses.extend(
+        [
+            _decision(
+                "TOOL",
+                tool_name="INSPECT_METHOD",
+                arguments={"entity_id": method.entity_id},
+            ),
+            _decision("STOP", status="NO_SUPPORTED_FINDING"),
+        ]
+    )
+
+    run = runtime.run(_task(SpecialistRole.INPUT, seed_entity_ids=(method.entity_id,)))
+
+    assert run.result.status is SpecialistResultStatus.NO_SUPPORTED_FINDING
+    assert len(run.result.tool_calls) == 1
+    assert not run.failures
 
 
 def test_runtime_rejects_cross_project_task_and_adapter(tmp_path: Path) -> None:

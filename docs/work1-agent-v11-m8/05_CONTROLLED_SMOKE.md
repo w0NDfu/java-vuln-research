@@ -148,3 +148,15 @@ attempt1 的 `SPECIALIST_TOOL_RESTRICTION` 已消失：Coordinator 发出的 5 �
 - manifest 的 Git/project/prompt identity、四 Agent `id == name`、`claude-opus-5` / `claude-sonnet-5` 分配和仅记录 key presence 的合同检查通过。
 
 M8-5 gate 结论仍为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。attempt2 作为第二个不可覆盖负结果保留，不进入 M8-6。后续修复只应补全通用 specialist JSON 类型合同，保持 parser fail closed；不得把字符串静默包装为数组，也不得修改 specialist allow-list、预算、M4 Gate 或 M5 path builder。修复后必须使用新 Git SHA 和新的 attempt3 artifact root。
+
+## Attempt2 后的 specialist 合同修复冻结
+
+attempt2 负结果单独记录于 Git 提交 `47c02ca`。后续修复以 shared specialist prompt 及其冻结身份为核心，并仅额外将 specialist runtime 收紧为拒绝 TOOL 非空 advisory array；不改 normalizer、observation/result schema、工具权限、预算、M4 Gate、M5 path builder 或 controlled fixture：
+
+- `M8_INPUT_AGENT_V2`：`8c3eb00150e5c22abb8ecc2ee465ab88d5affb2c4fc77aa4c844f0b520d992fc`；
+- `M8_EFFECT_AGENT_V2`：`1939aa9aecf6be39ffab25c41da3bb8a1f6dc5692606cd1cba7e47df6f84845e`；
+- `M8_BRIDGE_AGENT_V2`：`e1bd0ff9012178ef0d287b32469888af87065da31f2594ffeff5cac2da6e1600`。
+
+V2 对八个 closed top-level 字段逐一声明 JSON 类型；所有 array 字段禁止使用 `""`、单个字符串、`null` 或 object 表示，无值必须写 `[]`。TOOL 明确使用 `findings=[]`、`status=null`，两个 advisory 字段必须为 `[]`。`M8_SPECIALIST_RUNTIME_V2` 同步拒绝 TOOL 非空 advisory array，避免接受后静默丢失；新增测试证明标量和 TOOL 非空 advisory array 都 fail closed 且不会执行工具，空数组 TOOL 正例不受影响。
+
+本地冻结验证结果为：specialist targeted `23 passed`，M8 targeted `65 passed, 2 warnings`，full regression `326 passed, 2 skipped, 5 warnings`，`compileall` 与 `git diff --check` 均通过。attempt3 必须 checkout 本修复的最终 exact commit，使用新的非覆盖 artifact root；attempt1 与 attempt2 均不得复用或删除。

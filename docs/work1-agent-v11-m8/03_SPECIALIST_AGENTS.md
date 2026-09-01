@@ -33,11 +33,13 @@ Coordinator TaskSpec
 
 | role | version | SHA-256 |
 |---|---|---|
-| Input | `M8_INPUT_AGENT_V1` | `5c16fc6b5337f2277ade342ba4c0b015e96e2a765cafe77f8411bbf26759320d` |
-| Effect | `M8_EFFECT_AGENT_V1` | `648f968268af323618c6cb8918415fe2da7dc79516139651f22a7b7839873384` |
-| Bridge | `M8_BRIDGE_AGENT_V1` | `753396bfd91d9e377de253f3c0a5ca2304436f6e06e704541bded0c5971f33f6` |
+| Input | `M8_INPUT_AGENT_V2` | `8c3eb00150e5c22abb8ecc2ee465ab88d5affb2c4fc77aa4c844f0b520d992fc` |
+| Effect | `M8_EFFECT_AGENT_V2` | `1939aa9aecf6be39ffab25c41da3bb8a1f6dc5692606cd1cba7e47df6f84845e` |
+| Bridge | `M8_BRIDGE_AGENT_V2` | `e1bd0ff9012178ef0d287b32469888af87065da31f2594ffeff5cac2da6e1600` |
 
 共同 prompt 明确：finding 不是 proposal，ADMISSIBLE 不是漏洞，Candidate Path 不是已确认漏洞；不读 benchmark/evaluator/CVE/patch/M6 diagnostic；不生成 arbitrary QL；CodeQL `EMPTY/UNAVAILABLE/ERROR/ENTITY_NOT_MAPPED` 不是否定证据。
+
+V2 是 CloudStudio real-LLM attempt2 后的通用合同修复。V1 只列出 closed key set，没有声明每个 JSON 字段的类型；真实 specialist 因而把 `next_suggested_evidence` 或 `uncertainty` 写成字符串。V2 明确 `arguments` 必须为 object，`findings`、`next_suggested_evidence`、`uncertainty` 必须为 array，无值使用 `[]`，TOOL 的 `status` 使用 `null` 且两个 advisory array 必须为空。`M8_SPECIALIST_RUNTIME_V2` 只同步严格执行该 advisory-empty 合同，避免接受随后会被丢弃的 advisory 值。parser 和 normalizer 没有增加 scalar-to-array coercion，字符串和 TOOL 非空 advisory array 均在工具执行前 fail closed。V1 版本和哈希继续保存在 attempt1/attempt2 manifest 与 Git 历史中。
 
 角色 prompt 互不相同：
 
@@ -117,6 +119,8 @@ Input、Effect、Bridge 分别只看到 `external_input_context`、`security_eff
 - CloudStudio exact-commit：必须在 push 后执行，当前尚未宣称通过。
 
 5 个 warnings 均为现有 schema 测试使用 `jsonschema.RefResolver` 的 deprecation warning，不改变测试判定。
+
+attempt2 后 V2 合同修复的最终复算结果为：specialist targeted `23 passed`，M8 targeted `65 passed, 2 warnings`，full regression `326 passed, 2 skipped, 5 warnings`，`compileall` 与 `git diff --check` 均通过。新增参数化测试覆盖 `next_suggested_evidence` / `uncertainty` 的空字符串、非空标量字符串和 TOOL 非空数组；这些形状均为 `MODEL_OUTPUT_INVALID` 且零工具执行，空数组 TOOL 正例继续执行。
 
 ## 未改变的边界
 

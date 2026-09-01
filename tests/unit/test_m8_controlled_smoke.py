@@ -117,6 +117,20 @@ def test_controlled_smoke_forms_path_and_writes_replayable_audited_artifacts(
         manifest["agents"][name]["exact_model_id"]
         for name in ("input_agent", "effect_agent", "semantic_bridge_agent")
     } == {"claude-sonnet-5"}
+    assert {role: manifest["prompts"][role] for role in ("input", "effect", "bridge")} == {
+        "input": {
+            "version": "M8_INPUT_AGENT_V2",
+            "sha256": "8c3eb00150e5c22abb8ecc2ee465ab88d5affb2c4fc77aa4c844f0b520d992fc",
+        },
+        "effect": {
+            "version": "M8_EFFECT_AGENT_V2",
+            "sha256": "1939aa9aecf6be39ffab25c41da3bb8a1f6dc5692606cd1cba7e47df6f84845e",
+        },
+        "bridge": {
+            "version": "M8_BRIDGE_AGENT_V2",
+            "sha256": "e1bd0ff9012178ef0d287b32469888af87065da31f2594ffeff5cac2da6e1600",
+        },
+    }
     for name, expected in manifest["output_hashes"].items():
         assert hashlib.sha256((output / name).read_bytes()).hexdigest() == expected
 
