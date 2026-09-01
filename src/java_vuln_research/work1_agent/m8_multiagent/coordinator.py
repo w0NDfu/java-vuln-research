@@ -54,7 +54,7 @@ from .scope_helper import build_valid_scope
 from .specialists import SpecialistAgentRuntime, SpecialistRuntimeRun
 
 
-COORDINATOR_RUNTIME_VERSION = "M8_COORDINATOR_RUNTIME_V1"
+COORDINATOR_RUNTIME_VERSION = "M8_COORDINATOR_RUNTIME_V2"
 _MIDDLE_PROPOSALS = frozenset(
     {
         ProposalType.WRAPPER_FLOW,
@@ -94,9 +94,17 @@ _DISPATCH_ROLES = {
 
 
 class CoordinatorConstraint(RuntimeError):
-    def __init__(self, failure_class: str, message: str, next_required_action: str) -> None:
+    def __init__(
+        self,
+        failure_class: str,
+        message: str,
+        next_required_action: str,
+        *,
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
         self.failure_class = failure_class
         self.next_required_action = next_required_action
+        self.details = dict(details or {})
         super().__init__(message)
 
 
@@ -307,6 +315,7 @@ class CoordinatorFailure:
     coordinator_round: int
     action_id: str | None = None
     retryable: bool = False
+    details: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -315,6 +324,7 @@ class CoordinatorFailure:
             "coordinator_round": self.coordinator_round,
             "action_id": self.action_id,
             "retryable": self.retryable,
+            "details": dict(self.details),
         }
 
 
@@ -363,7 +373,9 @@ class CoordinatorRunResult:
 def _strings(value: Any, name: str) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         raise ValueError(f"{name} must be an array of strings")
-    result = tuple(str(item).strip() for item in value)
+    if any(not isinstance(item, str) for item in value):
+        raise ValueError(f"{name} must be an array of strings")
+    result = tuple(item.strip() for item in value)
     if any(not item for item in result) or len(result) != len(set(result)):
         raise ValueError(f"{name} must contain unique non-empty strings")
     return result
@@ -586,6 +598,7 @@ class CoordinatorRuntime:
         next_required_action: str,
         action_id: str | None,
         retryable: bool = True,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         failure = CoordinatorFailure(
             failure_class,
@@ -593,6 +606,7 @@ class CoordinatorRuntime:
             coordinator_round,
             action_id,
             retryable,
+            dict(details or {}),
         )
         self.failures.append(failure)
         self.board.record_coordinator_event(
@@ -617,14 +631,29 @@ class CoordinatorRuntime:
     def _dispatch(self, action: CoordinatorAction) -> None:
         role = _DISPATCH_ROLES[action.action_type]
         runtime = self.specialist_runtimes[role]
-        self.budget.record_dispatch(role)
         allowed = _strings(action.arguments["allowed_tools"], "allowed_tools")
-        if not allowed or not set(allowed).issubset(runtime.allowed_tools):
+        canonical_allowed = tuple(sorted(runtime.allowed_tools))
+        invalid = tuple(sorted(set(allowed) - runtime.allowed_tools))
+        if not allowed or invalid:
+            details = {
+                "specialist_agent": role.value,
+                "requested_tools": list(allowed),
+                "invalid_tools": list(invalid),
+                "allowed_tools": list(canonical_allowed),
+                "non_empty_required": True,
+                "canonical_names_case_sensitive": True,
+            }
             raise CoordinatorConstraint(
                 "SPECIALIST_TOOL_RESTRICTION",
-                "Coordinator attempted to grant a tool outside the specialist allow-list",
+                f"{role.value} dispatch allowed_tools violate the role policy; "
+                f"requested={canonical_json(list(allowed))}; "
+                f"invalid={canonical_json(list(invalid))}; "
+                f"allowed={canonical_json(list(canonical_allowed))}; "
+                "non_empty_required=true; canonical_names_case_sensitive=true",
                 action.action_type.value,
+                details=details,
             )
+        self.budget.record_dispatch(role)
         seeds = _strings(action.arguments["seed_entity_ids"], "seed_entity_ids")
         known = {
             SpecialistRole.INPUT: self.board.input_findings,
@@ -1181,6 +1210,17 @@ class CoordinatorRuntime:
             observation = build_coordinator_observation(
                 board=self.board,
                 coordinator_round=coordinator_round,
+                dispatch_tool_policy={
+                    action_type.value: {
+                        "specialist_agent": role.value,
+                        "allowed_tools": sorted(
+                            self.specialist_runtimes[role].allowed_tools
+                        ),
+                        "non_empty_subset_required": True,
+                        "canonical_names_case_sensitive": True,
+                    }
+                    for action_type, role in _DISPATCH_ROLES.items()
+                },
                 previous_observation=self.observations[-1] if self.observations else None,
             )
             self.observations.append(observation)
@@ -1251,6 +1291,7 @@ class CoordinatorRuntime:
                     message=str(exc),
                     next_required_action=exc.next_required_action,
                     action_id=action.action_id,
+                    details=exc.details,
                 )
                 if exc.failure_class == "BUDGET_EXHAUSTED":
                     self._stop(coordinator_round, StopReason.BUDGET_EXHAUSTED)

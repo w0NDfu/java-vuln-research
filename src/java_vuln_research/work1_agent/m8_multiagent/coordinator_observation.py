@@ -11,7 +11,7 @@ from java_vuln_research.work1_agent.proposal.model import canonical_json, stable
 from .board import SharedEvidenceBoard
 
 
-COORDINATOR_OBSERVATION_VERSION = 1
+COORDINATOR_OBSERVATION_VERSION = 2
 MAX_COORDINATOR_OBSERVATION_BYTES = 32 * 1024
 
 
@@ -83,6 +83,40 @@ def _compact_gate_result(value: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
+def _exact_dispatch_tool_policy(
+    value: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Mapping[str, Any]]:
+    result: dict[str, Mapping[str, Any]] = {}
+    keys = {
+        "specialist_agent",
+        "allowed_tools",
+        "non_empty_subset_required",
+        "canonical_names_case_sensitive",
+    }
+    for action_type in sorted(value):
+        entry = value[action_type]
+        if set(entry) != keys:
+            raise ValueError("dispatch tool policy entry has an invalid key set")
+        tools = entry["allowed_tools"]
+        if not isinstance(tools, Sequence) or isinstance(
+            tools, (str, bytes, bytearray)
+        ):
+            raise ValueError("dispatch allowed_tools must be an array of strings")
+        if not tools or any(not isinstance(item, str) or not item for item in tools):
+            raise ValueError("dispatch allowed_tools must contain non-empty strings")
+        if len(tools) != len(set(tools)):
+            raise ValueError("dispatch allowed_tools must be unique")
+        result[str(action_type)] = {
+            "specialist_agent": str(entry["specialist_agent"]),
+            "allowed_tools": list(tools),
+            "non_empty_subset_required": bool(entry["non_empty_subset_required"]),
+            "canonical_names_case_sensitive": bool(
+                entry["canonical_names_case_sensitive"]
+            ),
+        }
+    return result
+
+
 @dataclass(frozen=True, slots=True)
 class CoordinatorObservation:
     observation_id: str
@@ -116,10 +150,13 @@ def build_coordinator_observation(
     *,
     board: SharedEvidenceBoard,
     coordinator_round: int,
+    dispatch_tool_policy: Mapping[str, Mapping[str, Any]],
     previous_observation: CoordinatorObservation | None = None,
 ) -> CoordinatorObservation:
     if coordinator_round < 1:
         raise ValueError("coordinator_round must be positive")
+    if not dispatch_tool_policy:
+        raise ValueError("dispatch_tool_policy is required")
     repository = _select(
         board.repository_summary,
         (
@@ -174,6 +211,9 @@ def build_coordinator_observation(
             "codeql_unavailable_is_negative": False,
             "candidate_path_is_vulnerability": False,
         },
+        # Capability names are an exact machine contract and must never pass
+        # through the generic sequence truncation used for evidence context.
+        "dispatch_tool_policy": _exact_dispatch_tool_policy(dispatch_tool_policy),
     }
     duplicated = _duplicate_bytes(
         payload,

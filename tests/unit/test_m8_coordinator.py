@@ -838,12 +838,96 @@ def test_e_codeql_unavailable_is_not_negative_and_repository_exploration_continu
     assert result.stop_reason is StopReason.NO_FURTHER_ACTION
 
 
+def test_coordinator_observation_advertises_exact_dispatch_tool_policy(
+    tmp_path: Path,
+) -> None:
+    env = _environment(
+        tmp_path,
+        [_coordinator_decision("STOP", stop_reason="NO_FURTHER_ACTION")],
+    )
+
+    result = env.runtime.run()
+
+    policy = result.observations[0].to_dict()["dispatch_tool_policy"]
+    actions = {
+        SpecialistRole.INPUT: "DISPATCH_INPUT_AGENT",
+        SpecialistRole.EFFECT: "DISPATCH_EFFECT_AGENT",
+        SpecialistRole.BRIDGE: "DISPATCH_BRIDGE_AGENT",
+    }
+    for role, action_type in actions.items():
+        entry = policy[action_type]
+        assert entry == {
+            "specialist_agent": role.value,
+            "allowed_tools": sorted(env.runtime.specialist_runtimes[role].allowed_tools),
+            "non_empty_subset_required": True,
+            "canonical_names_case_sensitive": True,
+        }
+        assert all(name == ActionType(name).value for name in entry["allowed_tools"])
+    assert "SEARCH_CODE" not in policy["DISPATCH_BRIDGE_AGENT"]["allowed_tools"]
+    assert "SEARCH_SYMBOLS" not in policy["DISPATCH_BRIDGE_AGENT"]["allowed_tools"]
+
+
+def test_invalid_dispatch_is_repairable_without_consuming_specialist_budget(
+    tmp_path: Path,
+) -> None:
+    env = _environment(tmp_path, [])
+    invalid = _coordinator_decision(
+        "DISPATCH_INPUT_AGENT",
+        arguments={
+            "objective": "Find one project-local external input candidate.",
+            "seed_entity_ids": [env.methods["entry"].entity_id],
+            "unresolved_question": "Is external influence supported?",
+            "allowed_tools": ["NOT_A_CANONICAL_TOOL"],
+        },
+    )
+    valid_tools = ["SEARCH_CODE", "READ_FILE_RANGE", "INSPECT_METHOD"]
+    valid = _coordinator_decision(
+        "DISPATCH_INPUT_AGENT",
+        arguments={
+            "objective": "Find one project-local external input candidate.",
+            "seed_entity_ids": [env.methods["entry"].entity_id],
+            "unresolved_question": "Is external influence supported?",
+            "allowed_tools": valid_tools,
+        },
+    )
+    env.runtime.llm_client._responses.extend(
+        [invalid, valid, _coordinator_decision("STOP", stop_reason="NO_FURTHER_ACTION")]
+    )
+
+    result = env.runtime.run()
+
+    assert len(result.specialist_runs) == 1
+    assert result.budget_state["usage"]["dispatches"]["INPUT_AGENT"] == 1
+    assert result.specialist_runs[0].observations[0].to_dict()["task"][
+        "allowed_tools"
+    ] == valid_tools
+    assert [item.failure_class for item in result.failures] == [
+        "SPECIALIST_TOOL_RESTRICTION"
+    ]
+    message = result.failures[0].message
+    assert "NOT_A_CANONICAL_TOOL" in message
+    assert 'invalid=["NOT_A_CANONICAL_TOOL"]' in message
+    assert 'allowed=[' in message and '"INSPECT_METHOD"' in message
+    assert result.failures[0].details["requested_tools"] == ["NOT_A_CANONICAL_TOOL"]
+    assert result.failures[0].details["invalid_tools"] == ["NOT_A_CANONICAL_TOOL"]
+    assert result.failures[0].details["specialist_agent"] == "INPUT_AGENT"
+    feedback = result.observations[1].to_dict()["evidence_board"][
+        "failed_hypotheses"
+    ][-1]
+    assert feedback["message"] == message
+    assert feedback["details"]["requested_tools"] == ["NOT_A_CANONICAL_TOOL"]
+    assert feedback["details"]["invalid_tools"] == ["NOT_A_CANONICAL_TOOL"]
+    assert feedback["details"]["specialist_agent"] == "INPUT_AGENT"
+    assert feedback["next_required_action"] == "DISPATCH_INPUT_AGENT"
+
+
 def test_coordinator_prompt_is_frozen_and_role_assignment_is_enforced(tmp_path: Path) -> None:
-    assert COORDINATOR_PROMPT_VERSION == "M8_COORDINATOR_V2"
+    assert COORDINATOR_PROMPT_VERSION == "M8_COORDINATOR_V3"
     assert "Specialists never chat directly" in COORDINATOR_SYSTEM_PROMPT
     assert "omit proposal_id" in COORDINATOR_SYSTEM_PROMPT
+    assert "dispatch_tool_policy[action_type].allowed_tools" in COORDINATOR_SYSTEM_PROMPT
     assert prompt_sha256(COORDINATOR_SYSTEM_PROMPT) == (
-        "b56af0f0b4f666db8b9ec1e67e64fc3ca151da88a075103a7f9a17aae3583484"
+        "ca5c7792dbce8ac544912d9a5a04d6053985a3f60ea2e0f9786ef22eeae9916c"
     )
 
     env = _environment(tmp_path, [])

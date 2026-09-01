@@ -8,13 +8,15 @@ Coordinator 的冻结身份为：
 
 | id = name | exact model ID | prompt version | prompt SHA-256 |
 |---|---|---|---|
-| `coordinator_agent` | `claude-opus-5` | `M8_COORDINATOR_V2` | `b56af0f0b4f666db8b9ec1e67e64fc3ca151da88a075103a7f9a17aae3583484` |
+| `coordinator_agent` | `claude-opus-5` | `M8_COORDINATOR_V3` | `ca5c7792dbce8ac544912d9a5a04d6053985a3f60ea2e0f9786ef22eeae9916c` |
 
 三个 specialist 继续使用 `claude-sonnet-5`，且每个 agent 的 `id == name`。非 Mock client 暴露 `config.model_id` 时，runtime 会精确校验模型 ID；Coordinator 使用 specialist 模型或 specialist 使用 Coordinator 模型都会 fail closed。
 
 M8-5 real-model readiness 复核发现，V1 要求模型填写 canonical `proposal_id`，但该 ID 是 runtime 内部稳定哈希，模型不能可靠计算。V2 冻结了完整 proposal draft 字段和 role/scope 结构；模型必须省略 `proposal_id`，runtime 校验严格 key set、project scope 和非 benchmark provenance 后生成 canonical ID。已有带合法 canonical ID 的 deterministic proposal 仍兼容，Gate schema 与判定标准未改变。
 
-Coordinator repository overview 现在携带最多 16 个有界 top-level entity 摘要，使首轮可以基于真实 `entity_id` dispatch，而不是猜测内部哈希。tool call 与 Gate observation 去除已由 EvidenceRef 独立表达的重复大字段；最终 controlled round 保持在 32 KiB frozen hard ceiling 内。
+M8-5 real-LLM attempt1 随后暴露第二个通用契约缺口：V2 要求模型填写 `allowed_tools`，但 prompt 和 observation 都没有公开 canonical tool vocabulary。真实 Coordinator 因此猜出非 canonical 名称，runtime 正确 fail closed，却又在校验前扣除了 Input dispatch budget。V3 不接受别名或放宽白名单，而是从三个实际 specialist runtime 的 `allowed_tools` 生成完整、排序稳定且不截断的 `dispatch_tool_policy`。模型只能逐字复制对应 action 的非空子集；未知或跨角色工具继续 fail closed。
+
+Coordinator repository overview 携带最多 16 个有界 top-level entity 摘要，使首轮可以基于真实 `entity_id` dispatch，而不是猜测内部哈希。tool call 与 Gate observation 去除已由 EvidenceRef 独立表达的重复大字段；tool policy 作为机器契约使用独立精确序列化，不经过通用数组截断。最终 observation 仍受 32 KiB hard ceiling 约束。
 
 ## 一轮一个动作
 
@@ -57,7 +59,7 @@ Scope/role helper 只在对应的真实 Gate rejection 之后启用：
 
 ## 预算
 
-默认冻结 development 预算与执行指令一致：Coordinator 最多 12 rounds；Input/Effect/Bridge 每项目最多 4/4/5 次 dispatch；proposal 最多 10；admissible proposal 最多 8；CodeQL 最多 12 calls。specialist 单次 dispatch 的 4 rounds、6 tool calls、1 finding batch 上限继续由 M8-3 runtime 执行。预算使用和剩余量逐轮写入 board。
+默认冻结 development 预算与执行指令一致：Coordinator 最多 12 rounds；Input/Effect/Bridge 每项目最多 4/4/5 次 dispatch；proposal 最多 10；admissible proposal 最多 8；CodeQL 最多 12 calls。specialist 单次 dispatch 的 4 rounds、6 tool calls、1 finding batch 上限继续由 M8-3 runtime 执行。只有通过 role policy preflight 并真正创建 TaskSpec 的 dispatch 才扣 specialist dispatch 预算；非法 action 仍消耗 Coordinator round 和 model-call 预算。预算使用和剩余量逐轮写入 board。
 
 ## Controlled fixtures
 
@@ -73,19 +75,21 @@ Scope/role helper 只在对应的真实 Gate rejection 之后启用：
 
 Fixture 中的 source/effect/relation、CodeQL 结果和结构边均为受控测试数据，只证明控制器协议和数据流正确，不证明真实项目 discovery 或 autonomous recovery。
 
+新增 real-shaped contract regression 验证：三类 action 看到的 policy 与对应 runtime allow-list 精确相等；Bridge 仍不获得自由搜索工具；非法名称产生包含 requested/invalid/canonical policy 的结构化反馈且不消耗 specialist dispatch；下一轮使用 observation 中的 canonical 子集后可以成功进入 specialist。该修复不修改 specialist 权限、M4 Gate 或 M5 path 语义。
+
 ## 验证
 
-当前本地 targeted 结果：
+V3 修复后的本地结果：
 
-- Coordinator controlled fixtures: `6 passed`；
-- Evidence Board + Coordinator: `13 passed, 1 warning`；
-- full regression: `307 passed, 2 skipped, 5 warnings`；
+- Coordinator controlled fixtures + dispatch contract: `8 passed`；
+- M8 Coordinator/specialists/contracts/board/smoke targeted: `48 passed, 2 warnings`；
+- full regression: `319 passed, 2 skipped, 5 warnings`；
 - `python -m compileall -q src tests`: 通过；
 - `git diff --check`: 通过。
 
 5 个 warnings 都是已有 schema 测试使用 `jsonschema.RefResolver` 的 deprecation warning，不改变测试判定。
 
-CloudStudio 在 clean detached worktree `/workspace/m8v` 对 exact commit `a4f1b805461c8906b01fc58d7134ec9d1cab7c3d` 的复验结果：
+初始 M8-4 CloudStudio 验证在 clean detached worktree `/workspace/m8v` 对 exact commit `a4f1b805461c8906b01fc58d7134ec9d1cab7c3d` 的结果：
 
 - full regression: `308 passed, 1 skipped, 5 warnings`；
 - Coordinator controlled smoke: `6 passed`；

@@ -78,7 +78,7 @@ manifest 只记录 API key 对应环境变量名和 `api_key_present=true`；运
 | Candidate Paths | 0 |
 | stop reason | `BUDGET_EXHAUSTED` |
 
-`failure_taxonomy.json` 记录 4 个 `SPECIALIST_TOOL_RESTRICTION`。四次 Input dispatch TaskSpec 都试图授予超出 Input specialist allow-list 的工具，runtime 按安全边界 fail closed；因此没有成功进入 specialist 执行，也没有继续调度 Effect 或 Bridge。失败首先位于 Coordinator 到 specialist 的 TaskSpec/tool-policy 边界，而不是 M4 Gate、M5 path builder 或 no-leakage evaluator。
+`failure_taxonomy.json` 记录 4 个 `SPECIALIST_TOOL_RESTRICTION`。四次 Input dispatch authorization attempt 都试图授予超出 Input specialist allow-list 的工具，runtime 在创建 TaskSpec 前按安全边界 fail closed；因此没有成功进入 specialist 执行，也没有继续调度 Effect 或 Bridge。失败首先位于 Coordinator 到 specialist 的 TaskSpec/tool-policy 边界，而不是 M4 Gate、M5 path builder 或 no-leakage evaluator。
 
 独立落盘核验结果：
 
@@ -86,4 +86,21 @@ manifest 只记录 API key 对应环境变量名和 `api_key_present=true`；运
 - `no_leakage_audit.json` 为 `status=PASS`、`no_leakage_pass=true`、`runtime_boundary_pass=true`、`model_secret_scan_pass=true`、`violation_count=0`；
 - `artifact_audit.json` 为 `required_files_present=true`、`no_leakage_pass=true`。
 
-M8-5 gate 结论为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。本 attempt 作为不可覆盖的负结果保留；不在同一目录重跑，不根据本结果修改冻结 prompt，也不进入 M8-6 development cohort。
+M8-5 gate 结论为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。本 attempt 作为不可覆盖的负结果保留，不在同一目录重跑，也不进入 M8-6 development cohort。
+
+## Attempt1 后的通用修复冻结
+
+用户在 attempt1 封存后明确要求修复。审计确认这不是项目语义、Gate 或 specialist 权限问题，而是模型输入契约缺失：Coordinator 必须生成 `allowed_tools`，但 V2 prompt/observation 没有提供 canonical 名称；失败 action 又在 role-policy 校验前消耗 specialist dispatch budget。
+
+新冻结只修复该通用协调协议：
+
+- `M8_COORDINATOR_RUNTIME_V2` 在每轮 observation 中公开从实际 specialist runtime 派生的完整 `dispatch_tool_policy`；
+- `M8_COORDINATOR_V3` 要求 `allowed_tools` 是对应 action policy 的非空、大小写精确子集，prompt SHA-256 为 `ca5c7792dbce8ac544912d9a5a04d6053985a3f60ea2e0f9786ef22eeae9916c`；
+- 未知和跨角色工具仍 fail closed，不做 alias 猜测、静默取交集或权限扩张；
+- restriction feedback 记录 specialist、requested、invalid 和 canonical allowed tools；
+- 只有通过 preflight 并真正创建 TaskSpec 的 dispatch 扣 specialist quota，非法 action 仍扣 Coordinator round/model-call budget；
+- observation 的 policy 使用独立精确序列化，避免通用 evidence 压缩器把 17 项工具数组截断为 12 项。
+
+该修复不读取 benchmark/evaluator，不包含 fixture entity、项目名、CVE/CWE、危险 API 或 case-specific rule，不修改 M4 Gate、M5 path builder、specialist tool allow-list、CodeQL tool catalog 或预算上限。attempt2 必须使用新 Git SHA 和新的非覆盖 artifact root；只有 attempt2 同时满足 Candidate Paths 至少 1 条和 no-leakage PASS，才重新评估 M8-6 gate。
+
+本地冻结验证为：M8 targeted `48 passed, 2 warnings`，full regression `319 passed, 2 skipped, 5 warnings`，`compileall` 和 `git diff --check` 均通过。
