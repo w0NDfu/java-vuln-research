@@ -11,10 +11,17 @@ from .contracts import (
     SpecialistTaskSpec,
 )
 from .serialization import read_board_snapshot, replay_board, write_board_events, write_board_snapshot
+from .role_helper import ProposalAnchor, RoleOption, RolePreview, build_role_guidance
+from .scope_helper import ScopeBasis, ScopePreview, build_valid_scope
 
 __all__ = [
     "BoardEvent",
     "FindingType",
+    "ProposalAnchor",
+    "RoleOption",
+    "RolePreview",
+    "ScopeBasis",
+    "ScopePreview",
     "SharedEvidenceBoard",
     "SpecialistAgentState",
     "SpecialistFinding",
@@ -23,6 +30,8 @@ __all__ = [
     "SpecialistRole",
     "SpecialistStopReason",
     "SpecialistTaskSpec",
+    "build_role_guidance",
+    "build_valid_scope",
     "read_board_snapshot",
     "replay_board",
     "write_board_events",
