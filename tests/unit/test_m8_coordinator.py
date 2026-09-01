@@ -540,9 +540,11 @@ def _input_proposal_decision(env, *, bad_scope: bool = False, include_codeql: bo
             provenance={"producer": "CONTROLLED_COORDINATOR"},
         )
         env.last_proposal_id = proposal.proposal_id
+        draft = proposal.to_dict()
+        draft.pop("proposal_id")
         return _coordinator_decision(
             "SUBMIT_PROPOSAL",
-            proposal=proposal.to_dict(),
+            proposal=draft,
             supporting_finding_ids=[finding["finding_id"]],
         )
 
@@ -837,10 +839,11 @@ def test_e_codeql_unavailable_is_not_negative_and_repository_exploration_continu
 
 
 def test_coordinator_prompt_is_frozen_and_role_assignment_is_enforced(tmp_path: Path) -> None:
-    assert COORDINATOR_PROMPT_VERSION == "M8_COORDINATOR_V1"
+    assert COORDINATOR_PROMPT_VERSION == "M8_COORDINATOR_V2"
     assert "Specialists never chat directly" in COORDINATOR_SYSTEM_PROMPT
+    assert "omit proposal_id" in COORDINATOR_SYSTEM_PROMPT
     assert prompt_sha256(COORDINATOR_SYSTEM_PROMPT) == (
-        "5d07a81d840a6627a707cc01960c55c7fe9300b88c8c23389aafb1875ff80284"
+        "b56af0f0b4f666db8b9ec1e67e64fc3ca151da88a075103a7f9a17aae3583484"
     )
 
     env = _environment(tmp_path, [])

@@ -34,8 +34,8 @@ from .coordinator_observation import (
     build_coordinator_observation,
 )
 from .serialization import read_board_snapshot, replay_board, write_board_events, write_board_snapshot
-from .role_helper import ProposalAnchor, RoleOption, RolePreview, build_role_guidance
-from .scope_helper import ScopeBasis, ScopePreview, build_valid_scope
+from .role_helper import ROLE_HELPER_VERSION, ProposalAnchor, RoleOption, RolePreview, build_role_guidance
+from .scope_helper import SCOPE_HELPER_VERSION, ScopeBasis, ScopePreview, build_valid_scope
 from .specialists import (
     BRIDGE_ALLOWED_TOOLS,
     EFFECT_ALLOWED_TOOLS,
@@ -74,6 +74,8 @@ __all__ = [
     "ProposalAnchor",
     "RoleOption",
     "RolePreview",
+    "ROLE_HELPER_VERSION",
+    "SCOPE_HELPER_VERSION",
     "ScopeBasis",
     "ScopePreview",
     "SharedEvidenceBoard",

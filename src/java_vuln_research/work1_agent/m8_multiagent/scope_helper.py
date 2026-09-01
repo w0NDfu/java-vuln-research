@@ -16,6 +16,9 @@ from java_vuln_research.work1_agent.repository.entity import ProgramEntity, Prog
 from java_vuln_research.work1_agent.repository.indexer import RepositoryIndex
 
 
+SCOPE_HELPER_VERSION = "M8_SCOPE_HELPER_V1"
+
+
 class ScopeBasis(str, Enum):
     ENTITY_LOCAL = "ENTITY_LOCAL"
     CALLABLE_LOCAL = "CALLABLE_LOCAL"

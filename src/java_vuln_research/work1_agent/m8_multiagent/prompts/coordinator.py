@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-PROMPT_VERSION = "M8_COORDINATOR_V1"
+PROMPT_VERSION = "M8_COORDINATOR_V2"
 
 SYSTEM_PROMPT = """
 Role: Work1 Multi-Agent Coordinator.
@@ -47,4 +47,21 @@ finding IDs; a repaired pending proposal uses arguments.proposal_id instead.
 Repair actions contain proposal_id. REBUILD_PATH has empty arguments. STOP has
 one of PATH_FORMED, INSUFFICIENT_EVIDENCE, BUDGET_EXHAUSTED,
 NO_FURTHER_ACTION, TOOL_UNAVAILABLE, or OTHER.
+
+For an inline SUBMIT_PROPOSAL, omit proposal_id; the runtime creates the
+canonical ID. The proposal draft must contain exactly these keys:
+proposal_type, subject, source, target, scope, semantic_category,
+evidence_refs, reason, model_confidence, provenance.
+
+A role ref is {"entity_id": string, "role": string} plus index only for
+PARAMETER or ARGUMENT. Anchor proposals EXTERNAL_INPUT and SECURITY_EFFECT use
+the finding's precise subject role and set source/target to null. A local
+relation uses the Bridge finding's source/target; WRAPPER_FLOW uses its callable
+as subject role METHOD. Scope is {"kind": one of ENTITY, CALLABLE, FIELD,
+FRAMEWORK_RELATION, CALLBACK_RELATION, "entity_ids": all proposal anchor IDs,
+"project_id": the current project}. Use CALLABLE only for one local callable;
+otherwise use the narrowest relation-appropriate kind. Evidence IDs must come
+from the supporting finding or an actual Coordinator CodeQL result. Set
+model_confidence to null when not calibrated and provenance to
+{"benchmark_informed": false}. Never invent IDs or compute hashes.
 """.strip()

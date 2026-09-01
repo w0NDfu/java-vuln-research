@@ -8,9 +8,13 @@ Coordinator 的冻结身份为：
 
 | id = name | exact model ID | prompt version | prompt SHA-256 |
 |---|---|---|---|
-| `coordinator_agent` | `claude-opus-5` | `M8_COORDINATOR_V1` | `5d07a81d840a6627a707cc01960c55c7fe9300b88c8c23389aafb1875ff80284` |
+| `coordinator_agent` | `claude-opus-5` | `M8_COORDINATOR_V2` | `b56af0f0b4f666db8b9ec1e67e64fc3ca151da88a075103a7f9a17aae3583484` |
 
 三个 specialist 继续使用 `claude-sonnet-5`，且每个 agent 的 `id == name`。非 Mock client 暴露 `config.model_id` 时，runtime 会精确校验模型 ID；Coordinator 使用 specialist 模型或 specialist 使用 Coordinator 模型都会 fail closed。
+
+M8-5 real-model readiness 复核发现，V1 要求模型填写 canonical `proposal_id`，但该 ID 是 runtime 内部稳定哈希，模型不能可靠计算。V2 冻结了完整 proposal draft 字段和 role/scope 结构；模型必须省略 `proposal_id`，runtime 校验严格 key set、project scope 和非 benchmark provenance 后生成 canonical ID。已有带合法 canonical ID 的 deterministic proposal 仍兼容，Gate schema 与判定标准未改变。
+
+Coordinator repository overview 现在携带最多 16 个有界 top-level entity 摘要，使首轮可以基于真实 `entity_id` dispatch，而不是猜测内部哈希。tool call 与 Gate observation 去除已由 EvidenceRef 独立表达的重复大字段；最终 controlled round 保持在 32 KiB frozen hard ceiling 内。
 
 ## 一轮一个动作
 
@@ -79,7 +83,18 @@ Fixture 中的 source/effect/relation、CodeQL 结果和结构边均为受控测
 - `python -m compileall -q src tests`: 通过；
 - `git diff --check`: 通过。
 
-5 个 warnings 都是已有 schema 测试使用 `jsonschema.RefResolver` 的 deprecation warning，不改变测试判定。CloudStudio exact-commit 复验在本 milestone 提交并 push 后执行，不提前宣称通过。
+5 个 warnings 都是已有 schema 测试使用 `jsonschema.RefResolver` 的 deprecation warning，不改变测试判定。
+
+CloudStudio 在 clean detached worktree `/workspace/m8v` 对 exact commit `a4f1b805461c8906b01fc58d7134ec9d1cab7c3d` 的复验结果：
+
+- full regression: `308 passed, 1 skipped, 5 warnings`；
+- Coordinator controlled smoke: `6 passed`；
+- `python3 -m compileall -q src tests`: exit 0；
+- `git --no-pager diff --check`: exit 0；
+- 最终 `git --no-pager status --short`: clean；
+- 最终 HEAD 仍为 exact commit。
+
+本地与云端 skipped 数不同来自环境依赖可用性差异；两边均无 failed test。云端 targeted smoke 另显示现有 `pylama` 导入 `pkg_resources` 的一条 UserWarning，不改变测试判定。CloudStudio 页面同时显示 CAPTCHA，但本次复验未与其交互。
 
 ## 未改变的边界
 

@@ -57,6 +57,7 @@ def _tool_result(result: AgentToolResult) -> dict[str, Any]:
         "tool_name": result.tool_name,
         "status": result.status.value,
         "summary": _bounded(result.summary),
+        "items": _bounded(result.items[:5]),
         "warnings": list(result.warnings),
         "truncated": result.truncated,
         "failure": _bounded(result.failure),

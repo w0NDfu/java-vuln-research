@@ -36,6 +36,7 @@ from java_vuln_research.work1_agent.proposal import (
     EvidenceGateResult,
     EvidenceRef,
     GateStatus,
+    ProposalScope,
     ProposalType,
     SecurityProposal,
 )
@@ -442,6 +443,53 @@ def _parse_action(
             "response_model_id": response.model_id,
             "benchmark_informed": False,
         },
+    )
+
+
+_PROPOSAL_DRAFT_KEYS = {
+    "proposal_type",
+    "subject",
+    "source",
+    "target",
+    "scope",
+    "semantic_category",
+    "evidence_refs",
+    "reason",
+    "model_confidence",
+    "provenance",
+}
+
+
+def _proposal_from_model_draft(
+    value: Mapping[str, Any],
+    *,
+    project_id: str,
+) -> SecurityProposal:
+    raw = dict(value)
+    if "proposal_id" in raw:
+        if set(raw) != _PROPOSAL_DRAFT_KEYS | {"proposal_id"}:
+            raise ValueError("Coordinator proposal has an invalid key set")
+        return SecurityProposal.from_dict(raw)
+    if set(raw) != _PROPOSAL_DRAFT_KEYS:
+        raise ValueError("Coordinator proposal draft has an invalid key set")
+    scope = dict(raw["scope"])
+    if scope.get("project_id") not in {None, project_id}:
+        raise ValueError("Coordinator proposal draft is cross-project")
+    scope["project_id"] = project_id
+    provenance = dict(raw["provenance"])
+    if provenance.get("benchmark_informed") not in {None, False}:
+        raise ValueError("Coordinator proposal draft claims benchmark-informed provenance")
+    return SecurityProposal.create(
+        proposal_type=raw["proposal_type"],
+        subject=EntityRoleRef.from_dict(raw["subject"]),
+        source=EntityRoleRef.from_dict(raw["source"]) if raw["source"] else None,
+        target=EntityRoleRef.from_dict(raw["target"]) if raw["target"] else None,
+        scope=ProposalScope.from_dict(scope),
+        semantic_category=raw["semantic_category"],
+        evidence_refs=raw["evidence_refs"],
+        reason=str(raw["reason"]),
+        model_confidence=raw["model_confidence"],
+        provenance=provenance or {"benchmark_informed": False},
     )
 
 
@@ -909,7 +957,7 @@ class CoordinatorRuntime:
     def _submit(self, action: CoordinatorAction) -> None:
         if action.proposal is not None:
             proposal = self._with_provenance(
-                SecurityProposal.from_dict(action.proposal),
+                _proposal_from_model_draft(action.proposal, project_id=self.project_id),
                 action.supporting_finding_ids,
             )
             self._validate_proposal_support(proposal, action.supporting_finding_ids)

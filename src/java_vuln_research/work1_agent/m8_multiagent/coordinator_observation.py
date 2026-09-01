@@ -46,6 +46,43 @@ def _duplicate_bytes(current: Mapping[str, Any], previous: Mapping[str, Any] | N
     )
 
 
+def _compact_tool_call(value: Mapping[str, Any]) -> dict[str, Any]:
+    return _bounded(
+        _select(
+            value,
+            (
+                "tool_call_id",
+                "tool_name",
+                "status",
+                "truncated",
+                "warnings",
+                "failure",
+                "summary",
+            ),
+        )
+    )
+
+
+def _compact_gate_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    # Resolved evidence is already represented by recent_evidence_refs. Repeating
+    # its excerpts here can push late-round observations over the hard ceiling.
+    return _bounded(
+        _select(
+            value,
+            (
+                "proposal_id",
+                "status",
+                "checks",
+                "missing_evidence",
+                "warnings",
+                "rejection_reasons",
+                "coordinator_round",
+                "supporting_finding_ids",
+            ),
+        )
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CoordinatorObservation:
     observation_id: str
@@ -93,6 +130,7 @@ def build_coordinator_observation(
             "entity_count",
             "entity_kind_counts",
             "top_packages",
+            "top_level_entities",
         ),
     )
     codeql = _select(
@@ -111,9 +149,11 @@ def build_coordinator_observation(
                 _bounded(item.to_dict()) for item in board.all_findings()[-12:]
             ],
             "recent_evidence_refs": [_bounded(dict(item)) for item in board.evidence_refs[-16:]],
-            "recent_tool_calls": [_bounded(dict(item)) for item in board.tool_calls[-12:]],
+            "recent_tool_calls": [_compact_tool_call(item) for item in board.tool_calls[-12:]],
             "pending_proposals": [_bounded(dict(item)) for item in board.pending_proposals[-8:]],
-            "recent_gate_results": [_bounded(dict(item)) for item in board.gate_results[-8:]],
+            "recent_gate_results": [
+                _compact_gate_result(item) for item in board.gate_results[-8:]
+            ],
             "active_admissible_proposal_ids": [
                 str(item["proposal_id"]) for item in board.active_admissible_proposals
             ],

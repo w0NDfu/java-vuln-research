@@ -12,6 +12,9 @@ from java_vuln_research.work1_agent.repository.entity import ProgramEntity, Prog
 from java_vuln_research.work1_agent.repository.indexer import RepositoryIndex
 
 
+ROLE_HELPER_VERSION = "M8_ROLE_HELPER_V1"
+
+
 class ProposalAnchor(str, Enum):
     SUBJECT = "subject"
     SOURCE = "source"
