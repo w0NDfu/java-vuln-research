@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "m8_specialist_finding.schema.json",
+  "title": "M8 SpecialistFinding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "finding_id", "project_id", "specialist_agent",
+    "finding_type", "round", "entity_ids", "tool_call_ids", "evidence_refs",
+    "summary", "details", "uncertainties", "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "finding_id": {"type": "string", "pattern": "^m8finding-[0-9a-f]{24}$"},
+    "project_id": {"type": "string", "minLength": 1},
+    "specialist_agent": {"enum": ["INPUT_AGENT", "EFFECT_AGENT", "BRIDGE_AGENT"]},
+    "finding_type": {"enum": ["INPUT_FINDING", "EFFECT_FINDING", "BRIDGE_FINDING"]},
+    "round": {"type": "integer", "minimum": 1},
+    "entity_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "tool_call_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "summary": {"type": "string", "minLength": 1},
+    "details": {"type": "object", "minProperties": 1},
+    "uncertainties": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "provenance": {"type": "object", "minProperties": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"specialist_agent": {"const": "INPUT_AGENT"}}},
+      "then": {"properties": {"finding_type": {"const": "INPUT_FINDING"}}}
+    },
+    {
+      "if": {"properties": {"specialist_agent": {"const": "EFFECT_AGENT"}}},
+      "then": {"properties": {"finding_type": {"const": "EFFECT_FINDING"}}}
+    },
+    {
+      "if": {"properties": {"specialist_agent": {"const": "BRIDGE_AGENT"}}},
+      "then": {"properties": {"finding_type": {"const": "BRIDGE_FINDING"}}}
+    }
+  ]
+}

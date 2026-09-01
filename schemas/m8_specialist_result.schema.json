@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "m8_specialist_result.schema.json",
+  "title": "M8 SpecialistResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "result_id", "task_id", "project_id", "specialist_agent",
+    "status", "findings", "evidence_refs", "tool_calls",
+    "next_suggested_evidence", "uncertainty", "stop_reason", "rounds_used",
+    "tool_calls_used", "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "result_id": {"type": "string", "pattern": "^m8result-[0-9a-f]{24}$"},
+    "task_id": {"type": "string", "pattern": "^m8task-[0-9a-f]{24}$"},
+    "project_id": {"type": "string", "minLength": 1},
+    "specialist_agent": {"enum": ["INPUT_AGENT", "EFFECT_AGENT", "BRIDGE_AGENT"]},
+    "status": {"enum": ["FINDINGS", "NEED_MORE_EVIDENCE", "NO_SUPPORTED_FINDING", "BUDGET_EXHAUSTED", "TOOL_UNAVAILABLE", "FAILED"]},
+    "findings": {"type": "array", "items": {"$ref": "m8_specialist_finding.schema.json"}},
+    "evidence_refs": {
+      "type": "array",
+      "items": {"type": "object", "required": ["evidence_id"], "properties": {"evidence_id": {"type": "string", "minLength": 1}}}
+    },
+    "tool_calls": {
+      "type": "array",
+      "items": {"type": "object", "required": ["tool_call_id"], "properties": {"tool_call_id": {"type": "string", "minLength": 1}}}
+    },
+    "next_suggested_evidence": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "uncertainty": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "stop_reason": {"enum": ["FINDING_BATCH_READY", "NEED_MORE_EVIDENCE", "NO_SUPPORTED_FINDING", "BUDGET_EXHAUSTED", "TOOL_UNAVAILABLE", "ERROR"]},
+    "rounds_used": {"type": "integer", "minimum": 0},
+    "tool_calls_used": {"type": "integer", "minimum": 0},
+    "provenance": {"type": "object", "minProperties": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "FINDINGS"}}},
+      "then": {"properties": {"findings": {"minItems": 1}}},
+      "else": {"properties": {"findings": {"maxItems": 0}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "FINDINGS"}}},
+      "then": {"properties": {"stop_reason": {"const": "FINDING_BATCH_READY"}, "rounds_used": {"minimum": 1}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "NEED_MORE_EVIDENCE"}}},
+      "then": {"properties": {"stop_reason": {"const": "NEED_MORE_EVIDENCE"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "NO_SUPPORTED_FINDING"}}},
+      "then": {"properties": {"stop_reason": {"const": "NO_SUPPORTED_FINDING"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "BUDGET_EXHAUSTED"}}},
+      "then": {"properties": {"stop_reason": {"const": "BUDGET_EXHAUSTED"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "TOOL_UNAVAILABLE"}}},
+      "then": {"properties": {"stop_reason": {"const": "TOOL_UNAVAILABLE"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "FAILED"}}},
+      "then": {"properties": {"stop_reason": {"const": "ERROR"}}}
+    }
+  ]
+}

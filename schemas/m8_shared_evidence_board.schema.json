@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "m8_shared_evidence_board.schema.json",
+  "title": "M8 SharedEvidenceBoard",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "board_id", "project_id", "repository_summary", "codeql_status",
+    "input_findings", "effect_findings", "bridge_findings", "inspected_entities",
+    "tool_calls", "evidence_refs", "pending_proposals", "gate_results",
+    "active_admissible_proposals", "candidate_paths", "unresolved_questions",
+    "failed_hypotheses", "budget_state", "round_state", "agent_states", "event_log"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "board_id": {"type": "string", "pattern": "^m8board-[0-9a-f]{24}$"},
+    "project_id": {"type": "string", "minLength": 1},
+    "repository_summary": {"type": "object", "minProperties": 1},
+    "codeql_status": {"type": "object", "minProperties": 1},
+    "input_findings": {"type": "array", "items": {"$ref": "m8_specialist_finding.schema.json"}},
+    "effect_findings": {"type": "array", "items": {"$ref": "m8_specialist_finding.schema.json"}},
+    "bridge_findings": {"type": "array", "items": {"$ref": "m8_specialist_finding.schema.json"}},
+    "inspected_entities": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "tool_calls": {"type": "array", "items": {"type": "object", "required": ["tool_call_id"]}},
+    "evidence_refs": {"type": "array", "items": {"type": "object", "required": ["evidence_id"]}},
+    "pending_proposals": {"type": "array", "items": {"type": "object"}},
+    "gate_results": {"type": "array", "items": {"type": "object"}},
+    "active_admissible_proposals": {"type": "array", "items": {"type": "object"}},
+    "candidate_paths": {"type": "array", "items": {"type": "object"}},
+    "unresolved_questions": {"type": "array", "items": {"type": "string"}},
+    "failed_hypotheses": {"type": "array", "items": {"type": "object"}},
+    "budget_state": {"type": "object", "minProperties": 1},
+    "round_state": {"type": "object", "minProperties": 1},
+    "agent_states": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["INPUT_AGENT", "EFFECT_AGENT", "BRIDGE_AGENT"],
+      "properties": {
+        "INPUT_AGENT": {"$ref": "m8_shared_evidence_board.schema.json#/$defs/agentState"},
+        "EFFECT_AGENT": {"$ref": "m8_shared_evidence_board.schema.json#/$defs/agentState"},
+        "BRIDGE_AGENT": {"$ref": "m8_shared_evidence_board.schema.json#/$defs/agentState"}
+      }
+    },
+    "event_log": {"type": "array", "minItems": 1, "items": {"$ref": "m8_shared_evidence_board.schema.json#/$defs/event"}}
+  },
+  "$defs": {
+    "agentState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["specialist_agent", "dispatches", "internal_rounds", "tool_calls", "finding_batches", "findings", "last_task_id", "last_result_id", "last_result_status"],
+      "properties": {
+        "specialist_agent": {"enum": ["INPUT_AGENT", "EFFECT_AGENT", "BRIDGE_AGENT"]},
+        "dispatches": {"type": "integer", "minimum": 0},
+        "internal_rounds": {"type": "integer", "minimum": 0},
+        "tool_calls": {"type": "integer", "minimum": 0},
+        "finding_batches": {"type": "integer", "minimum": 0},
+        "findings": {"type": "integer", "minimum": 0},
+        "last_task_id": {"type": ["string", "null"]},
+        "last_result_id": {"type": ["string", "null"]},
+        "last_result_status": {"type": ["string", "null"]}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event_id", "sequence", "project_id", "event_type", "coordinator_round", "specialist_agent", "payload", "provenance"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "event_id": {"type": "string", "pattern": "^m8boardevent-[0-9a-f]{24}$"},
+        "sequence": {"type": "integer", "minimum": 1},
+        "project_id": {"type": "string", "minLength": 1},
+        "event_type": {"enum": ["BOARD_INITIALIZED", "SPECIALIST_RESULT_MERGED"]},
+        "coordinator_round": {"type": "integer", "minimum": 0},
+        "specialist_agent": {"enum": ["INPUT_AGENT", "EFFECT_AGENT", "BRIDGE_AGENT", null]},
+        "payload": {"type": "object", "minProperties": 1},
+        "provenance": {"type": "object", "minProperties": 1}
+      }
+    }
+  }
+}
