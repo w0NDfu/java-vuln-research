@@ -104,3 +104,47 @@ M8-5 gate 结论为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至
 该修复不读取 benchmark/evaluator，不包含 fixture entity、项目名、CVE/CWE、危险 API 或 case-specific rule，不修改 M4 Gate、M5 path builder、specialist tool allow-list、CodeQL tool catalog 或预算上限。attempt2 必须使用新 Git SHA 和新的非覆盖 artifact root；只有 attempt2 同时满足 Candidate Paths 至少 1 条和 no-leakage PASS，才重新评估 M8-6 gate。
 
 本地冻结验证为：M8 targeted `48 passed, 2 warnings`，full regression `319 passed, 2 skipped, 5 warnings`，`compileall` 和 `git diff --check` 均通过。
+
+## CloudStudio real-LLM attempt 2
+
+2026-09-01 在 CloudStudio clean worktree `/workspace/m8v` checkout 通用 Coordinator 修复后，使用新的不可覆盖目录执行 attempt2：
+
+- Git SHA：`0e23d2c97cf8b89018c195f9a4b841eb45c8d591`；
+- branch：`work1/agent-active-security-v11-m8-multiagent`；
+- artifact root：`/workspace/experiment-output/artifacts/work1-agent-v11/m8_multiagent/controlled_real_llm/0e23d2c-20260901-attempt2`；
+- project：非 benchmark 的 `CONTROLLED_M8` fixture；
+- coordinator：`coordinator_agent`，`id == name`，`claude-opus-5`；
+- specialists：`input_agent`、`effect_agent`、`semantic_bridge_agent`，均为 `id == name` 和 `claude-sonnet-5`。
+
+运行前 CloudStudio 验证为 targeted `48 passed, 2 warnings`、full regression `320 passed, 1 skipped, 5 warnings`、`compileall` 通过、`git diff --check` 通过。HEAD 与上述 SHA 一致；一次终端误操作产生的 0 字节未跟踪文件 `tatus --short` 经确认后删除，随后 `git status --short` 为空。attempt1 目录保持原样。
+
+真实运行结果：
+
+| metric | value |
+|---|---:|
+| coordinator rounds | 6 |
+| model calls | 6 |
+| input / output tokens | 26,062 / 7,451 |
+| Input / Effect / Bridge dispatches | 4 / 1 / 0 |
+| successful specialist dispatches | 5 |
+| Input / Effect / Bridge findings | 0 / 0 / 0 |
+| proposals / admissible proposals | 0 / 0 |
+| Gate admission rate | 0.0 |
+| CodeQL calls | 0 |
+| Candidate Paths | 0 |
+| stop reason | `INSUFFICIENT_EVIDENCE` |
+
+attempt1 的 `SPECIALIST_TOOL_RESTRICTION` 已消失：Coordinator 发出的 5 个 TaskSpec 均通过 preflight，specialist dispatch quota 实际记为 Input 4、Effect 1、Bridge 0。五个 specialist 模型响应也都选择了 canonical TOOL 动作，依次为 Input 的 `READ_FILE_RANGE`、`GET_ANNOTATIONS`、`INSPECT_METHOD`、`READ_FILE_RANGE`，以及 Effect 的 `READ_FILE_RANGE`。
+
+新的失败发生在 specialist 输出合同。V1 shared prompt 只列出 `next_suggested_evidence` 和 `uncertainty` 字段名，没有声明它们必须始终为 JSON string array。五个 TOOL 响应中四个把 `next_suggested_evidence` 写成空字符串或单个字符串，一个在前者为数组时把 `uncertainty` 写成字符串。strict parser 在任何工具执行前正确 fail closed，因此 `failure_taxonomy.json` 记录 `failure_count=10`，labels 为 `ERROR: 5` 和 `MODEL_OUTPUT_INVALID: 5`；底层五个 parser failure 中四个为 `next_suggested_evidence must be an array of strings`，一个为 `uncertainty must be an array of strings`。
+
+独立落盘核验结果：
+
+- `candidate_paths.jsonl` 为 0 行，且 `summary.json`、`evidence_board.json` 均记录 0 条 Candidate Path；
+- `no_leakage_audit.json` 为 `status=PASS`、`no_leakage_pass=true`、`runtime_boundary_pass=true`、`model_secret_scan_pass=true`、`benchmark_informed=false`、`violation_count=0`，`hash_mismatches` 和 `secret_hit_files` 均为空；
+- 对最终完整 artifact 目录再次按两个 API-key 环境变量值扫描，均无命中文件；扫描不输出 secret；
+- `artifact_audit.json` 为 `required_files_present=true`、`artifact_count=23`、22 个受审计 artifact 条目、`no_leakage_pass=true`；
+- `manifest.output_hashes` 和 `artifact_audit.artifacts` 两组 SHA-256 均逐项复算通过；
+- manifest 的 Git/project/prompt identity、四 Agent `id == name`、`claude-opus-5` / `claude-sonnet-5` 分配和仅记录 key presence 的合同检查通过。
+
+M8-5 gate 结论仍为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。attempt2 作为第二个不可覆盖负结果保留，不进入 M8-6。后续修复只应补全通用 specialist JSON 类型合同，保持 parser fail closed；不得把字符串静默包装为数组，也不得修改 specialist allow-list、预算、M4 Gate 或 M5 path builder。修复后必须使用新 Git SHA 和新的 attempt3 artifact root。
