@@ -19,6 +19,20 @@ from .contracts import (
     SpecialistStopReason,
     SpecialistTaskSpec,
 )
+from .coordinator import (
+    COORDINATOR_RUNTIME_VERSION,
+    CoordinatorAction,
+    CoordinatorActionType,
+    CoordinatorBudgetLimits,
+    CoordinatorFailure,
+    CoordinatorRunResult,
+    CoordinatorRuntime,
+)
+from .coordinator_observation import (
+    MAX_COORDINATOR_OBSERVATION_BYTES,
+    CoordinatorObservation,
+    build_coordinator_observation,
+)
 from .serialization import read_board_snapshot, replay_board, write_board_events, write_board_snapshot
 from .role_helper import ProposalAnchor, RoleOption, RolePreview, build_role_guidance
 from .scope_helper import ScopeBasis, ScopePreview, build_valid_scope
@@ -40,6 +54,14 @@ __all__ = [
     "BRIDGE_ALLOWED_TOOLS",
     "BridgeAgentRuntime",
     "COORDINATOR_AGENT",
+    "COORDINATOR_RUNTIME_VERSION",
+    "CoordinatorAction",
+    "CoordinatorActionType",
+    "CoordinatorBudgetLimits",
+    "CoordinatorFailure",
+    "CoordinatorObservation",
+    "CoordinatorRunResult",
+    "CoordinatorRuntime",
     "EFFECT_AGENT",
     "EFFECT_ALLOWED_TOOLS",
     "EffectAgentRuntime",
@@ -48,6 +70,7 @@ __all__ = [
     "INPUT_ALLOWED_TOOLS",
     "InputAgentRuntime",
     "M8_AGENT_REGISTRY",
+    "MAX_COORDINATOR_OBSERVATION_BYTES",
     "ProposalAnchor",
     "RoleOption",
     "RolePreview",
@@ -67,6 +90,7 @@ __all__ = [
     "SpecialistStopReason",
     "SpecialistTaskSpec",
     "build_role_guidance",
+    "build_coordinator_observation",
     "build_valid_scope",
     "read_board_snapshot",
     "replay_board",

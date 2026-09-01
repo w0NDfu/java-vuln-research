@@ -396,6 +396,137 @@ class SharedEvidenceBoard:
             payload={"task": task.to_dict(), "result": result.to_dict()},
         )
 
+    def _apply_coordinator_event(self, event_type: str, payload: Mapping[str, Any]) -> None:
+        coordinator_round = int(payload["coordinator_round"])
+        if coordinator_round < 1:
+            raise ValueError("coordinator event round must be positive")
+        if event_type == "COORDINATOR_ACTION_RECORDED":
+            action = _mapping(payload["action"], "coordinator action", required=True)
+            self.require_project(str(action["project_id"]))
+            self.round_state = {
+                **dict(self.round_state),
+                "coordinator_round": coordinator_round,
+                "last_coordinator_action_id": str(action["action_id"]),
+            }
+            return
+        if event_type == "COORDINATOR_FEEDBACK_RECORDED":
+            feedback = _mapping(payload["feedback"], "coordinator feedback", required=True)
+            self.failed_hypotheses.append(
+                {"coordinator_round": coordinator_round, **feedback}
+            )
+            question = feedback.get("next_required_action")
+            if question and str(question) not in self.unresolved_questions:
+                self.unresolved_questions.append(str(question))
+            return
+        if event_type == "CODEQL_CORROBORATION_RECORDED":
+            tool_call = _mapping(payload["tool_call"], "CodeQL tool call", required=True)
+            self.require_project(str(tool_call["project_id"]))
+            evidence = tuple(
+                _mapping(item, "CodeQL evidence", required=True)
+                for item in payload.get("evidence_refs", ())
+            )
+            self._merge_artifacts(self.tool_calls, (tool_call,), "tool_call_id")
+            self._merge_artifacts(self.evidence_refs, evidence, "evidence_id")
+            arguments = dict(tool_call.get("provenance", {})).get("arguments", {})
+            inspected = set(self.inspected_entities)
+            if isinstance(arguments, Mapping):
+                inspected.update(
+                    str(value)
+                    for key, value in arguments.items()
+                    if key.endswith("entity_id") and value
+                )
+            self.inspected_entities = sorted(inspected)
+            self.round_state = {
+                **dict(self.round_state),
+                "coordinator_round": coordinator_round,
+                "last_codeql_tool_call_id": str(tool_call["tool_call_id"]),
+            }
+            return
+        if event_type in {"PROPOSAL_PENDING", "PROPOSAL_REPAIR_PREPARED"}:
+            entry = _mapping(payload["pending_proposal"], "pending proposal", required=True)
+            proposal = _mapping(entry["proposal"], "pending proposal payload", required=True)
+            proposal_id = str(proposal["proposal_id"])
+            existing = {
+                str(dict(item["proposal"])["proposal_id"]): dict(item)
+                for item in self.pending_proposals
+            }
+            prior = existing.get(proposal_id)
+            if prior is not None and canonical_json(prior) != canonical_json(entry):
+                raise ValueError("pending proposal collision with different content")
+            if prior is None:
+                self.pending_proposals.append(entry)
+            return
+        if event_type == "GATE_RESULT_RECORDED":
+            proposal = _mapping(payload["proposal"], "gated proposal", required=True)
+            result = _mapping(payload["gate_result"], "gate result", required=True)
+            proposal_id = str(proposal["proposal_id"])
+            if str(result["proposal_id"]) != proposal_id:
+                raise ValueError("gate result does not match proposal")
+            self.pending_proposals = [
+                item
+                for item in self.pending_proposals
+                if str(dict(item["proposal"])["proposal_id"]) != proposal_id
+            ]
+            gate_record = {
+                **result,
+                "coordinator_round": coordinator_round,
+                "supporting_finding_ids": list(payload["supporting_finding_ids"]),
+            }
+            self.gate_results.append(gate_record)
+            if str(result["status"]) == "ADMISSIBLE" and not any(
+                str(item["proposal_id"]) == proposal_id
+                for item in self.active_admissible_proposals
+            ):
+                self.active_admissible_proposals.append(proposal)
+            question = payload.get("unresolved_question")
+            if question and str(question) not in self.unresolved_questions:
+                self.unresolved_questions.append(str(question))
+            return
+        if event_type == "PATH_REBUILT":
+            paths = [
+                _mapping(item, "candidate path", required=True)
+                for item in payload.get("candidate_paths", ())
+            ]
+            identities = [str(item["candidate_path_id"]) for item in paths]
+            if len(identities) != len(set(identities)):
+                raise ValueError("candidate path IDs must be unique")
+            self.candidate_paths = paths
+            self.round_state = {
+                **dict(self.round_state),
+                "coordinator_round": coordinator_round,
+                "last_path_summary": dict(payload["path_summary"]),
+            }
+            return
+        if event_type == "BUDGET_UPDATED":
+            self.budget_state = _mapping(payload["budget_state"], "budget state", required=True)
+            self.round_state = {**dict(self.round_state), "coordinator_round": coordinator_round}
+            return
+        if event_type == "COORDINATOR_STOPPED":
+            self.round_state = {
+                **dict(self.round_state),
+                "coordinator_round": coordinator_round,
+                "stopped": True,
+                "stop_reason": str(payload["stop_reason"]),
+            }
+            return
+        raise ValueError(f"unsupported coordinator board event type: {event_type}")
+
+    def record_coordinator_event(
+        self,
+        *,
+        event_type: str,
+        coordinator_round: int,
+        payload: Mapping[str, Any],
+    ) -> BoardEvent:
+        value = {"coordinator_round": int(coordinator_round), **dict(payload)}
+        self._apply_coordinator_event(event_type, value)
+        return self._append_event(
+            event_type=event_type,
+            coordinator_round=coordinator_round,
+            specialist_agent=None,
+            payload=value,
+        )
+
     @classmethod
     def replay(cls, events: Sequence[BoardEvent | Mapping[str, Any]]) -> "SharedEvidenceBoard":
         parsed = [item if isinstance(item, BoardEvent) else BoardEvent.from_dict(item) for item in events]
@@ -417,11 +548,20 @@ class SharedEvidenceBoard:
         if board.event_log[0].to_dict() != initial.to_dict():
             raise ValueError("initial board event failed deterministic replay")
         for expected in parsed[1:]:
-            if expected.event_type != "SPECIALIST_RESULT_MERGED":
-                raise ValueError(f"unsupported replay event type: {expected.event_type}")
-            task = SpecialistTaskSpec.from_dict(expected.payload["task"])
-            result = SpecialistResult.from_dict(expected.payload["result"])
-            actual = board.merge_specialist_result(task, result)
+            if expected.event_type == "SPECIALIST_RESULT_MERGED":
+                task = SpecialistTaskSpec.from_dict(expected.payload["task"])
+                result = SpecialistResult.from_dict(expected.payload["result"])
+                actual = board.merge_specialist_result(task, result)
+            else:
+                actual = board.record_coordinator_event(
+                    event_type=expected.event_type,
+                    coordinator_round=expected.coordinator_round,
+                    payload={
+                        key: value
+                        for key, value in expected.payload.items()
+                        if key != "coordinator_round"
+                    },
+                )
             if actual.to_dict() != expected.to_dict():
                 raise ValueError("board event failed deterministic replay")
         return board

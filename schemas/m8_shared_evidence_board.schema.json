@@ -69,7 +69,14 @@
         "event_id": {"type": "string", "pattern": "^m8boardevent-[0-9a-f]{24}$"},
         "sequence": {"type": "integer", "minimum": 1},
         "project_id": {"type": "string", "minLength": 1},
-        "event_type": {"enum": ["BOARD_INITIALIZED", "SPECIALIST_RESULT_MERGED"]},
+        "event_type": {"enum": [
+          "BOARD_INITIALIZED", "SPECIALIST_RESULT_MERGED",
+          "COORDINATOR_ACTION_RECORDED", "COORDINATOR_FEEDBACK_RECORDED",
+          "CODEQL_CORROBORATION_RECORDED",
+          "PROPOSAL_PENDING", "PROPOSAL_REPAIR_PREPARED",
+          "GATE_RESULT_RECORDED", "PATH_REBUILT", "BUDGET_UPDATED",
+          "COORDINATOR_STOPPED"
+        ]},
         "coordinator_round": {"type": "integer", "minimum": 0},
         "specialist_agent": {"enum": ["INPUT_AGENT", "EFFECT_AGENT", "BRIDGE_AGENT", null]},
         "payload": {"type": "object", "minProperties": 1},
