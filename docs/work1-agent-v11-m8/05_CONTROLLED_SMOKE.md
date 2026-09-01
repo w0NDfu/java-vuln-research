@@ -46,3 +46,44 @@ Evidence Board snapshot 可以由 `board_events.jsonl` 完整 replay。artifact 
 ## Real-LLM gate
 
 CloudStudio real smoke 必须在 clean worktree checkout 本 milestone exact commit，使用唯一且非覆盖的 artifact attempt 目录。进入 M8-6 的硬条件是至少形成一条 Candidate Path 且 no-leakage audit 为 PASS。真实 Claude 结果和 exact commit/attempt identity 在云端复验完成后追加记录；失败 attempt 也必须保留，且不得通过覆盖目录或在同一 attempt 上调 prompt 规避负结果。
+
+## CloudStudio real-LLM attempt 1
+
+2026-09-01 在 CloudStudio clean worktree `/workspace/m8v` 对以下冻结身份执行了一次真实模型 smoke：
+
+- Git SHA：`db87f201bfcc6b4d786b695d56c344e834ec1ed1`；
+- branch：`work1/agent-active-security-v11-m8-multiagent`；
+- artifact root：`/workspace/experiment-output/artifacts/work1-agent-v11/m8_multiagent/controlled_real_llm/db87f201-20260901-attempt1`；
+- project：非 benchmark 的 `CONTROLLED_M8` fixture；
+- coordinator：`coordinator_agent`，`id == name`，`claude-opus-5`；
+- specialists：`input_agent`、`effect_agent`、`semantic_bridge_agent`，均为 `id == name` 和 `claude-sonnet-5`；
+- provider/protocol：`openlux` / `OPENAI`，exact endpoint `https://api.openlux.ai/v1/chat/completions`；
+- structured output：`JSON_OBJECT`，temperature `0`，seed omitted，timeout `60s`，max output tokens `2048`。
+
+manifest 只记录 API key 对应环境变量名和 `api_key_present=true`；运行输出、artifact 和 Git 均未记录 secret。运行前后的 CloudStudio 验证为：targeted `32 passed`、full regression `318 passed, 1 skipped, 5 warnings`、`compileall` 通过、`git diff --check` 通过，worktree 保持 clean，远端 branch 与上述 SHA 一致。
+
+真实运行结果：
+
+| metric | value |
+|---|---:|
+| coordinator rounds | 5 |
+| model calls | 5 |
+| input / output tokens | 18,256 / 6,292 |
+| attempted Input dispatches | 4 |
+| successful specialist dispatches | 0 |
+| Input / Effect / Bridge findings | 0 / 0 / 0 |
+| proposals / admissible proposals | 0 / 0 |
+| Gate admission rate | 0.0 |
+| CodeQL calls | 0 |
+| Candidate Paths | 0 |
+| stop reason | `BUDGET_EXHAUSTED` |
+
+`failure_taxonomy.json` 记录 4 个 `SPECIALIST_TOOL_RESTRICTION`。四次 Input dispatch TaskSpec 都试图授予超出 Input specialist allow-list 的工具，runtime 按安全边界 fail closed；因此没有成功进入 specialist 执行，也没有继续调度 Effect 或 Bridge。失败首先位于 Coordinator 到 specialist 的 TaskSpec/tool-policy 边界，而不是 M4 Gate、M5 path builder 或 no-leakage evaluator。
+
+独立落盘核验结果：
+
+- `candidate_paths.jsonl` 为 0 行；
+- `no_leakage_audit.json` 为 `status=PASS`、`no_leakage_pass=true`、`runtime_boundary_pass=true`、`model_secret_scan_pass=true`、`violation_count=0`；
+- `artifact_audit.json` 为 `required_files_present=true`、`no_leakage_pass=true`。
+
+M8-5 gate 结论为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。本 attempt 作为不可覆盖的负结果保留；不在同一目录重跑，不根据本结果修改冻结 prompt，也不进入 M8-6 development cohort。
