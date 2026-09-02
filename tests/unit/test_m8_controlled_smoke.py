@@ -119,16 +119,16 @@ def test_controlled_smoke_forms_path_and_writes_replayable_audited_artifacts(
     } == {"claude-sonnet-5"}
     assert {role: manifest["prompts"][role] for role in ("input", "effect", "bridge")} == {
         "input": {
-            "version": "M8_INPUT_AGENT_V2",
-            "sha256": "8c3eb00150e5c22abb8ecc2ee465ab88d5affb2c4fc77aa4c844f0b520d992fc",
+            "version": "M8_INPUT_AGENT_V3",
+            "sha256": "65f79a095c8a12b040c6a46971dd89bbe6480a882d60425ad643d64fac24ce31",
         },
         "effect": {
-            "version": "M8_EFFECT_AGENT_V2",
-            "sha256": "1939aa9aecf6be39ffab25c41da3bb8a1f6dc5692606cd1cba7e47df6f84845e",
+            "version": "M8_EFFECT_AGENT_V3",
+            "sha256": "4507245419c1ddceccc02249daa2ab2583c19d697bc220c8f012bb24765b8539",
         },
         "bridge": {
-            "version": "M8_BRIDGE_AGENT_V2",
-            "sha256": "e1bd0ff9012178ef0d287b32469888af87065da31f2594ffeff5cac2da6e1600",
+            "version": "M8_BRIDGE_AGENT_V3",
+            "sha256": "96318fc66e1b79bd318784f338d34d825cf04b23971fd795323f7081d19d5517",
         },
     }
     for name, expected in manifest["output_hashes"].items():

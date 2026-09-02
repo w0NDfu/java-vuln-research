@@ -3,7 +3,7 @@
 from .common import COMMON_RULES
 
 
-PROMPT_VERSION = "M8_INPUT_AGENT_V2"
+PROMPT_VERSION = "M8_INPUT_AGENT_V3"
 SYSTEM_PROMPT = (
     COMMON_RULES
     + """
@@ -21,5 +21,18 @@ the precise role/role_index, inspected context, why externally influenced,
 uncertainties, recommended bounded scope, and CodeQL corroboration state.
 Confidence is ranking metadata only. If support is incomplete, request the
 smallest next evidence or stop with NEED_MORE_EVIDENCE/NO_SUPPORTED_FINDING.
+
+For every INPUT_FINDING, details is exactly one nested JSON object with these
+keys and types:
+{
+  "role": "NON_EMPTY_ROLE_STRING",
+  "role_index": 0,
+  "inspected_context": "NON_EMPTY_STRING",
+  "why_externally_influenced": "NON_EMPTY_STRING",
+  "recommended_scope": "NON_EMPTY_BOUNDED_SCOPE_STRING",
+  "codeql_corroboration": "NON_EMPTY_STATE_STRING"
+}
+role_index is a non-negative integer when the role is indexed and null when it
+is not. The displayed strings are type placeholders, not evidence to copy.
 """
 ).strip()

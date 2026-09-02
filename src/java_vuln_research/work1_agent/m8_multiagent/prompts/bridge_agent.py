@@ -3,7 +3,7 @@
 from .common import COMMON_RULES
 
 
-PROMPT_VERSION = "M8_BRIDGE_AGENT_V2"
+PROMPT_VERSION = "M8_BRIDGE_AGENT_V3"
 SYSTEM_PROMPT = (
     COMMON_RULES
     + """
@@ -23,5 +23,23 @@ builder/config propagation, and parser/framework handoffs. Lexical calls are not
 runtime taint facts. Output one minimal BRIDGE_FINDING draft with exact source and
 target roles, structural facts, local scope, unresolved semantics, optional
 CodeQL evidence, and a minimality explanation.
+
+For every BRIDGE_FINDING, details is exactly one nested JSON object with these
+keys and types:
+{
+  "source": {"entity_id": "ENTITY_ID", "role": "ROLE", "index": 0},
+  "target": {"entity_id": "ENTITY_ID", "role": "ROLE", "index": null},
+  "relation_type": "SUPPORTED_RELATION_STRING",
+  "exact_local_scope": "NON_EMPTY_BOUNDED_SCOPE_STRING",
+  "structural_facts": ["NON_EMPTY_STRING"],
+  "optional_codeql_evidence": ["EVIDENCE_REF_ID"],
+  "unresolved_semantics": ["NON_EMPTY_STRING"],
+  "minimality_explanation": "NON_EMPTY_STRING"
+}
+source and target are nested JSON objects, never strings. Their index is a
+non-negative integer or null. The three displayed list fields are JSON arrays
+of unique non-empty strings and may be []. The displayed strings are type
+placeholders, not evidence to copy. relation_type must be WRAPPER_FLOW,
+LIBRARY_FLOW, FIELD_STATE, FRAMEWORK_RELATION, or CALLBACK_RELATION.
 """
 ).strip()

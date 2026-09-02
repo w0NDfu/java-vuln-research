@@ -160,3 +160,66 @@ attempt2 负结果单独记录于 Git 提交 `47c02ca`。后续修复以 shared 
 V2 对八个 closed top-level 字段逐一声明 JSON 类型；所有 array 字段禁止使用 `""`、单个字符串、`null` 或 object 表示，无值必须写 `[]`。TOOL 明确使用 `findings=[]`、`status=null`，两个 advisory 字段必须为 `[]`。`M8_SPECIALIST_RUNTIME_V2` 同步拒绝 TOOL 非空 advisory array，避免接受后静默丢失；新增测试证明标量和 TOOL 非空 advisory array 都 fail closed 且不会执行工具，空数组 TOOL 正例不受影响。
 
 本地冻结验证结果为：specialist targeted `23 passed`，M8 targeted `65 passed, 2 warnings`，full regression `326 passed, 2 skipped, 5 warnings`，`compileall` 与 `git diff --check` 均通过。attempt3 必须 checkout 本修复的最终 exact commit，使用新的非覆盖 artifact root；attempt1 与 attempt2 均不得复用或删除。
+
+## CloudStudio real-LLM attempt 3
+
+2026-09-01 在 CloudStudio clean worktree `/workspace/m8v` checkout specialist 顶层 JSON 类型合同修复后，使用新的不可覆盖目录执行 attempt3：
+
+- Git SHA：`9f5f34cd656ba59b8610e1d2f8ea389f6fc1f889`；
+- branch：`work1/agent-active-security-v11-m8-multiagent`；
+- artifact root：`/workspace/experiment-output/artifacts/work1-agent-v11/m8_multiagent/controlled_real_llm/9f5f34c-20260901-attempt3`；
+- project：非 benchmark 的 `CONTROLLED_M8` fixture；
+- Coordinator：`coordinator_agent` / `claude-opus-5`；
+- specialists：`input_agent`、`effect_agent`、`semantic_bridge_agent` / `claude-sonnet-5`。
+
+运行前 CloudStudio 验证为 specialist `23 passed`、M8 `65 passed, 2 warnings`、full regression `327 passed, 1 skipped, 5 warnings`；`compileall`、`git diff --check`、exact detached SHA 和 clean worktree 全部通过。
+
+真实运行结果：
+
+| metric | value |
+|---|---:|
+| runtime | `302.86s` |
+| Coordinator rounds | 4 |
+| successful model calls | 3 |
+| Input / Effect / Bridge dispatches | 2 / 1 / 0 |
+| repository tool calls | 6 |
+| input / output tokens | 19,880 / 4,155 |
+| Input / Effect / Bridge findings | 0 / 0 / 0 |
+| proposals / admissible proposals | 0 / 0 |
+| Candidate Paths | 0 |
+| stop reason | `OTHER` |
+
+attempt2 的顶层 array 问题已消失。三个 specialist 都成功执行 repository tools 并在后续轮次尝试 `SUBMIT_FINDINGS`，但每个都把嵌套 `finding.details` 编码为字符串。runtime 在构造 `SpecialistFinding` 前正确 fail closed，三次均为：
+
+```text
+specialist finding details must be an object
+```
+
+Coordinator 第 4 轮另有一次 provider timeout。`failure_taxonomy.json` 记录 `ERROR: 3`、`MODEL_OUTPUT_INVALID: 3`、`MODEL_TIMEOUT: 1`。当前失败仍位于 provider/model 输出合同层，还没有到达 finding merge、M4 Gate 或 M5 path 的语义评估阶段。
+
+独立落盘审计结果：
+
+- `artifact_count=23`；
+- manifest 和 artifact-audit 两组 SHA-256 全部逐项重算通过；
+- finding/proposal/Candidate Path JSONL 均为 0 行；
+- `no_leakage_status=PASS`、runtime boundary `PASS`；
+- 两个 API-key 环境变量的实际值在全部 artifact 中均为 0 命中，审计不输出 secret；
+- Agent/model/prompt/project/Git identity 全部正确。
+
+M8-5 gate 结论仍为 **FAIL**。attempt3 作为第三个不可覆盖负结果保留，不进入 M8-6。
+
+## Attempt3 后的 nested finding 合同修复冻结
+
+attempt3 只暴露了一个通用合同缺口：V2 明确了顶层字段类型，但未声明 finding draft 的嵌套字段类型和三个 role-specific `details` object 形状。V3 仅冻结这一合同：
+
+- `M8_INPUT_AGENT_V3`：`65f79a095c8a12b040c6a46971dd89bbe6480a882d60425ad643d64fac24ce31`；
+- `M8_EFFECT_AGENT_V3`：`4507245419c1ddceccc02249daa2ab2583c19d697bc220c8f012bb24765b8539`；
+- `M8_BRIDGE_AGENT_V3`：`96318fc66e1b79bd318784f338d34d825cf04b23971fd795323f7081d19d5517`。
+
+V3 对 `entity_ids`、`tool_call_ids`、`evidence_refs`、`summary`、`details`、`uncertainties` 逐一声明 JSON 类型，明确 `details` 必须是直接嵌套的 object，不得是字符串、stringified JSON、array 或 `null`。三个 role prompt 分别列出必需 keys 和嵌套 array/role-ref 类型。这些示例只是类型占位，不含 fixture entity、API、CWE、CVE 或 benchmark 线索。
+
+runtime 仍为 `M8_SPECIALIST_RUNTIME_V2`，保留原有 strict parser；没有增加 string-to-object coercion，没有改 observation、allow-list、预算、M4 Gate、M5 path builder 或 fixture。新参数化回归覆盖空字符串、stringified JSON、array 和 `null`，证明它们都在 finding merge 前失败；正确 nested object 保持通过。
+
+本地冻结验证结果为：specialist targeted `27 passed`，M8 targeted `69 passed, 2 warnings`，full regression `330 passed, 2 skipped, 5 warnings`，`compileall` 和 `git diff --check` 均通过。
+
+下一次 CloudStudio 运行必须使用本修复的最终 exact commit 和新的 attempt4 artifact root；在本地与云端回归结果冻结前，不得宣称 attempt4-ready。

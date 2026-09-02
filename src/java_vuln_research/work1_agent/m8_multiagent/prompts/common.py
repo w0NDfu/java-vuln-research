@@ -45,6 +45,16 @@ status null. Its next_suggested_evidence and uncertainty fields must both be [].
 SUBMIT_FINDINGS requires status FINDINGS and one grounded finding batch.
 STOP requires a non-FINDINGS status and no findings. Finding drafts contain only:
 entity_ids, tool_call_ids, evidence_refs, summary, details, uncertainties.
+Every item in findings is a JSON object with exactly those six keys. Their types
+are strict:
+- entity_ids is a non-empty array of unique non-empty entity-ID strings.
+- tool_call_ids is a non-empty array of unique non-empty tool-call-ID strings.
+- evidence_refs is a non-empty array of unique non-empty EvidenceRef-ID strings.
+- summary is a non-empty string.
+- details is a JSON object whose exact role-specific shape is defined below.
+- uncertainties is an array of unique non-empty strings; use [] when empty.
+Never encode details as a string, stringified JSON, array, or null. In particular,
+do not place escaped JSON text inside details. Emit a nested JSON object directly.
 The runtime supplies canonical IDs, role identity, provenance, and round metadata.
 """.strip()
 

@@ -165,19 +165,21 @@ def test_prompts_are_distinct_and_role_bounded() -> None:
         and "These array types do not change by action_type" in prompt
         and "findings []" in prompt
         and "status null" in prompt
+        and "Never encode details as a string" in prompt
+        and "details is exactly one nested JSON object" in prompt
         for prompt in (INPUT_SYSTEM_PROMPT, EFFECT_SYSTEM_PROMPT, BRIDGE_SYSTEM_PROMPT)
     )
     assert (INPUT_PROMPT_VERSION, prompt_sha256(INPUT_SYSTEM_PROMPT)) == (
-        "M8_INPUT_AGENT_V2",
-        "8c3eb00150e5c22abb8ecc2ee465ab88d5affb2c4fc77aa4c844f0b520d992fc",
+        "M8_INPUT_AGENT_V3",
+        "65f79a095c8a12b040c6a46971dd89bbe6480a882d60425ad643d64fac24ce31",
     )
     assert (EFFECT_PROMPT_VERSION, prompt_sha256(EFFECT_SYSTEM_PROMPT)) == (
-        "M8_EFFECT_AGENT_V2",
-        "1939aa9aecf6be39ffab25c41da3bb8a1f6dc5692606cd1cba7e47df6f84845e",
+        "M8_EFFECT_AGENT_V3",
+        "4507245419c1ddceccc02249daa2ab2583c19d697bc220c8f012bb24765b8539",
     )
     assert (BRIDGE_PROMPT_VERSION, prompt_sha256(BRIDGE_SYSTEM_PROMPT)) == (
-        "M8_BRIDGE_AGENT_V2",
-        "e1bd0ff9012178ef0d287b32469888af87065da31f2594ffeff5cac2da6e1600",
+        "M8_BRIDGE_AGENT_V3",
+        "96318fc66e1b79bd318784f338d34d825cf04b23971fd795323f7081d19d5517",
     )
 
 
@@ -362,6 +364,57 @@ def test_fabricated_finding_evidence_fails_closed(tmp_path: Path) -> None:
     run = runtime.run(_task(SpecialistRole.INPUT, seed_entity_ids=(method.entity_id,)))
     assert run.result.status is SpecialistResultStatus.FAILED
     assert run.failures[0].failure_class == "MODEL_OUTPUT_INVALID"
+    assert not run.result.findings
+
+
+@pytest.mark.parametrize(
+    "invalid_details",
+    [
+        "",
+        '{"role":"PARAMETER","role_index":0}',
+        [],
+        None,
+    ],
+)
+def test_finding_rejects_non_object_details_without_coercion(
+    tmp_path: Path,
+    invalid_details: object,
+) -> None:
+    runtime, client, method = _setup(tmp_path, [])
+
+    def submit(request):
+        evidence = next(
+            item
+            for item in request.observation["external_input_context"]["recent_evidence_refs"]
+            if method.entity_id in item["entity_ids"]
+        )
+        finding: dict[str, object] = {
+            "entity_ids": [method.entity_id],
+            "tool_call_ids": [evidence["tool_call_id"]],
+            "evidence_refs": [evidence["evidence_id"]],
+            "summary": "The finding is grounded but its details field has the wrong type.",
+            "details": invalid_details,
+            "uncertainties": [],
+        }
+        return _decision(
+            "SUBMIT_FINDINGS",
+            status="FINDINGS",
+            findings=[finding],
+        )
+
+    client._responses.extend(
+        [
+            _decision("TOOL", tool_name="INSPECT_METHOD", arguments={"entity_id": method.entity_id}),
+            submit,
+        ]
+    )
+
+    run = runtime.run(_task(SpecialistRole.INPUT, seed_entity_ids=(method.entity_id,)))
+
+    assert run.result.status is SpecialistResultStatus.FAILED
+    assert run.failures[0].failure_class == "MODEL_OUTPUT_INVALID"
+    assert run.failures[0].message == "specialist finding details must be an object"
+    assert len(run.result.tool_calls) == 1
     assert not run.result.findings
 
 

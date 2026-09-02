@@ -33,13 +33,17 @@ Coordinator TaskSpec
 
 | role | version | SHA-256 |
 |---|---|---|
-| Input | `M8_INPUT_AGENT_V2` | `8c3eb00150e5c22abb8ecc2ee465ab88d5affb2c4fc77aa4c844f0b520d992fc` |
-| Effect | `M8_EFFECT_AGENT_V2` | `1939aa9aecf6be39ffab25c41da3bb8a1f6dc5692606cd1cba7e47df6f84845e` |
-| Bridge | `M8_BRIDGE_AGENT_V2` | `e1bd0ff9012178ef0d287b32469888af87065da31f2594ffeff5cac2da6e1600` |
+| Input | `M8_INPUT_AGENT_V3` | `65f79a095c8a12b040c6a46971dd89bbe6480a882d60425ad643d64fac24ce31` |
+| Effect | `M8_EFFECT_AGENT_V3` | `4507245419c1ddceccc02249daa2ab2583c19d697bc220c8f012bb24765b8539` |
+| Bridge | `M8_BRIDGE_AGENT_V3` | `96318fc66e1b79bd318784f338d34d825cf04b23971fd795323f7081d19d5517` |
 
 共同 prompt 明确：finding 不是 proposal，ADMISSIBLE 不是漏洞，Candidate Path 不是已确认漏洞；不读 benchmark/evaluator/CVE/patch/M6 diagnostic；不生成 arbitrary QL；CodeQL `EMPTY/UNAVAILABLE/ERROR/ENTITY_NOT_MAPPED` 不是否定证据。
 
 V2 是 CloudStudio real-LLM attempt2 后的通用合同修复。V1 只列出 closed key set，没有声明每个 JSON 字段的类型；真实 specialist 因而把 `next_suggested_evidence` 或 `uncertainty` 写成字符串。V2 明确 `arguments` 必须为 object，`findings`、`next_suggested_evidence`、`uncertainty` 必须为 array，无值使用 `[]`，TOOL 的 `status` 使用 `null` 且两个 advisory array 必须为空。`M8_SPECIALIST_RUNTIME_V2` 只同步严格执行该 advisory-empty 合同，避免接受随后会被丢弃的 advisory 值。parser 和 normalizer 没有增加 scalar-to-array coercion，字符串和 TOOL 非空 advisory array 均在工具执行前 fail closed。V1 版本和哈希继续保存在 attempt1/attempt2 manifest 与 Git 历史中。
+
+V3 是 attempt3 后的第二层通用合同修复。attempt3 证明 V2 顶层 array 合同有效，但三个 specialist 都把嵌套 `finding.details` 输出成字符串。V3 逐一声明 finding draft 的六个 JSON 字段类型，明确 `details` 必须直接为 nested object，并在 Input/Effect/Bridge prompt 中分别冻结 role-specific object 形状。runtime 继续保持 V2 fail-closed 语义，不解析 stringified JSON、不猜测字段、不改 Gate、allow-list 或预算。V2 版本和哈希保留在 attempt3 manifest 与 Git 历史中。
+
+V3 冻结验证：specialist targeted `27 passed`，M8 targeted `69 passed, 2 warnings`，full regression `330 passed, 2 skipped, 5 warnings`，`compileall` 和 `git diff --check` 通过。
 
 角色 prompt 互不相同：
 
