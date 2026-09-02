@@ -10,9 +10,17 @@ import pytest
 from java_vuln_research.work1_agent.agent import (
     LLMAPIProtocol,
     LLMClientConfig,
+    MockLLMClient,
+    ModelCallError,
+    ModelFailureClass,
     StructuredOutputMode,
 )
-from java_vuln_research.work1_agent.m8_multiagent import read_board_snapshot, replay_board
+from java_vuln_research.work1_agent.m8_experiment import ProjectUsageLedger
+from java_vuln_research.work1_agent.m8_multiagent import (
+    read_board_snapshot,
+    replay_board,
+)
+from java_vuln_research.work1_agent.m8_multiagent.contracts import SpecialistRole
 from java_vuln_research.work1_agent.m8_multiagent.controlled_smoke import (
     ARTIFACT_FILES,
     M8ModelConfigs,
@@ -20,7 +28,6 @@ from java_vuln_research.work1_agent.m8_multiagent.controlled_smoke import (
     run_controlled_smoke,
 )
 from java_vuln_research.work1_agent.repository.indexer import build_repository_index
-
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "tests" / "fixtures" / "work1_agent_m8"
@@ -98,6 +105,10 @@ def test_controlled_smoke_forms_path_and_writes_replayable_audited_artifacts(
     assert manifest["tool_catalog_sha256"]
     assert manifest["components"]["m4_evidence_gate"]["source_sha256"]
     assert manifest["components"]["m5_hybrid_graph"]["source_sha256"]
+    assert manifest["shared_project_budget_sha256"]
+    assert manifest["usage_ledger_sha256"] == hashlib.sha256(
+        (output / "usage_ledger.json").read_bytes()
+    ).hexdigest()
     assert manifest["path_limits"] == {
         "max_depth": 12,
         "max_paths": 20,
@@ -133,6 +144,41 @@ def test_controlled_smoke_forms_path_and_writes_replayable_audited_artifacts(
     }
     for name, expected in manifest["output_hashes"].items():
         assert hashlib.sha256((output / name).read_bytes()).hexdigest() == expected
+
+    ledger = ProjectUsageLedger.from_canonical_json(
+        (output / "usage_ledger.json").read_text(encoding="utf-8").rstrip("\n")
+    )
+    usage = ledger.summary()
+    charged = usage["charged_usage"]
+    assert {
+        key: charged[key]
+        for key in (
+            "model_attempts",
+            "output_tokens",
+            "repository_tool_calls",
+            "codeql_calls",
+            "proposal_families",
+            "admissible_proposals",
+            "candidate_paths",
+        )
+    } == {
+        "model_attempts": 13,
+        "output_tokens": 13 * 2_048,
+        "repository_tool_calls": 3,
+        "codeql_calls": 0,
+        "proposal_families": 3,
+        "admissible_proposals": 3,
+        "candidate_paths": 1,
+    }
+    assert charged["canonical_input_tokens"] > 0
+    assert charged["wall_clock_ms"] >= 0
+    assert usage["model_attempts_by_actor"] == {
+        "coordinator": 7,
+        "specialist": 6,
+    }
+    assert usage["terminal_status_counts"] == {"success": 23}
+    assert usage["pending_attempt_ids"] == []
+    assert usage["is_breached"] is False
 
     audit = json.loads((output / "artifact_audit.json").read_text(encoding="utf-8"))
     leakage = json.loads((output / "no_leakage_audit.json").read_text(encoding="utf-8"))
@@ -189,6 +235,42 @@ def test_controlled_smoke_rejects_partial_or_unmanifested_client_configuration(
             specialist_clients=specialists,
         )
     assert not unmanifested_output.exists()
+
+
+@pytest.mark.parametrize(
+    ("coordinator_response", "expected_status"),
+    [
+        ({"unexpected": "shape"}, "invalid-output"),
+        (ModelCallError(ModelFailureClass.MODEL_TIMEOUT, "controlled"), "timeout"),
+        (
+            ModelCallError(ModelFailureClass.MODEL_UNAVAILABLE, "controlled"),
+            "provider-error",
+        ),
+    ],
+)
+def test_controlled_smoke_ledgers_coordinator_failure_before_audited_stop(
+    tmp_path: Path,
+    coordinator_response: object,
+    expected_status: str,
+) -> None:
+    output = tmp_path / expected_status
+    summary = run_controlled_smoke(
+        repository_root=FIXTURE,
+        schema_root=SCHEMAS,
+        artifact_root=output,
+        git_sha="TEST-M8-FAILURE-LEDGER",
+        coordinator_client=MockLLMClient([coordinator_response]),
+        specialist_clients={role: MockLLMClient([]) for role in SpecialistRole},
+        model_configs=_configs(),
+    )
+
+    ledger = ProjectUsageLedger.from_canonical_json(
+        (output / "usage_ledger.json").read_text(encoding="utf-8").rstrip("\n")
+    )
+    assert ledger.summary()["terminal_status_counts"] == {expected_status: 1}
+    assert ledger.summary()["pending_attempt_ids"] == []
+    assert summary["artifact_audit_pass"] is True
+    assert summary["no_leakage_pass"] is True
 
 
 @pytest.mark.parametrize(

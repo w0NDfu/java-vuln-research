@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-from java_vuln_research.work1_agent.agent.actions import TOOL_ACTIONS, ActionType, AgentAction
+from java_vuln_research.work1_agent.agent.actions import (
+    TOOL_ACTIONS,
+    ActionType,
+    AgentAction,
+)
 from java_vuln_research.work1_agent.agent.feedback import evidence_from_tool_result
 from java_vuln_research.work1_agent.agent.llm_client import (
     LLMClient,
@@ -15,18 +19,21 @@ from java_vuln_research.work1_agent.agent.llm_client import (
     ModelCallError,
 )
 from java_vuln_research.work1_agent.agent.parser import validate_tool_arguments
-from java_vuln_research.work1_agent.agent.structured_output import StructuredOutputNormalizer
+from java_vuln_research.work1_agent.agent.structured_output import (
+    StructuredOutputNormalizer,
+)
 from java_vuln_research.work1_agent.agent.tool_adapter import (
     AgentToolResult,
+    AgentToolStatus,
     RepositoryCodeQLToolAdapter,
 )
 from java_vuln_research.work1_agent.proposal.evidence import EvidenceRef
 from java_vuln_research.work1_agent.repository.indexer import RepositoryIndex
 
-from .agent_registry import AgentModelSpec, SPECIALIST_AGENT_REGISTRY
+from .agent_registry import SPECIALIST_AGENT_REGISTRY, AgentModelSpec
 from .contracts import (
-    FindingType,
     ROLE_FINDING_TYPES,
+    FindingType,
     SpecialistFinding,
     SpecialistResult,
     SpecialistResultStatus,
@@ -38,6 +45,11 @@ from .observation import SpecialistObservation, build_specialist_observation
 from .prompts.bridge_agent import SYSTEM_PROMPT as BRIDGE_SYSTEM_PROMPT
 from .prompts.effect_agent import SYSTEM_PROMPT as EFFECT_SYSTEM_PROMPT
 from .prompts.input_agent import SYSTEM_PROMPT as INPUT_SYSTEM_PROMPT
+
+if TYPE_CHECKING:
+    from java_vuln_research.work1_agent.m8_experiment.runtime_usage import (
+        RuntimeUsageRecorder,
+    )
 
 
 SPECIALIST_RUNTIME_VERSION = "M8_SPECIALIST_RUNTIME_V2"
@@ -312,6 +324,7 @@ class SpecialistAgentRuntime:
         llm_client: LLMClient,
         tool_adapter: RepositoryCodeQLToolAdapter,
         normalizer: StructuredOutputNormalizer | None = None,
+        usage_recorder: RuntimeUsageRecorder | None = None,
     ) -> None:
         if not project_id:
             raise ValueError("specialist runtime project_id is required")
@@ -324,6 +337,7 @@ class SpecialistAgentRuntime:
         self.llm_client = llm_client
         self.tool_adapter = tool_adapter
         self.normalizer = normalizer or StructuredOutputNormalizer()
+        self.usage_recorder = usage_recorder
         config = getattr(llm_client, "config", None)
         configured_model = getattr(config, "model_id", None)
         if configured_model is None and not isinstance(llm_client, MockLLMClient):
@@ -361,6 +375,133 @@ class SpecialistAgentRuntime:
             known_types = {str(item.get("finding_type")) for item in task.known_findings}
             if not {FindingType.INPUT.value, FindingType.EFFECT.value}.issubset(known_types):
                 raise ValueError("Bridge Agent requires existing input and effect findings")
+
+    def _complete_and_parse(
+        self,
+        *,
+        task: SpecialistTaskSpec,
+        request: LLMRequest,
+        model_responses: list[Mapping[str, Any]],
+    ) -> tuple[LLMResponse, _SpecialistDecision]:
+        from java_vuln_research.work1_agent.m8_experiment.usage import (
+            TerminalStatus,
+            UsageActorKind,
+        )
+
+        attempt = (
+            self.usage_recorder.reserve_model_attempt(
+                client=self.llm_client,
+                request=request,
+                actor_kind=UsageActorKind.SPECIALIST,
+                agent_id=self.model_spec.id,
+                role=self.role.value,
+                configured_model_id=self.model_spec.model_id,
+            )
+            if self.usage_recorder is not None
+            else None
+        )
+        try:
+            response = self.llm_client.complete(request)
+        except ModelCallError as exc:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=self.usage_recorder.status_for_model_error(exc),
+                    error=exc,
+                )
+            raise
+        except Exception as exc:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=TerminalStatus.PROVIDER_ERROR,
+                    error=exc,
+                )
+            raise
+
+        model_responses.append(response.to_dict())
+        try:
+            decision = _parse_decision(response, task=task, normalizer=self.normalizer)
+        except ModelCallError as exc:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=self.usage_recorder.status_for_model_error(exc),
+                    response=response,
+                )
+            if exc.model_call_id is None:
+                exc.model_call_id = response.model_call_id
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=TerminalStatus.INVALID_OUTPUT,
+                    response=response,
+                )
+            exc.model_call_id = response.model_call_id
+            raise
+        except Exception:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=TerminalStatus.INVALID_OUTPUT,
+                    response=response,
+                )
+            raise
+
+        if attempt is not None:
+            self.usage_recorder.reconcile_model_attempt(
+                attempt,
+                status=TerminalStatus.SUCCESS,
+                response=response,
+            )
+        return response, decision
+
+    def _execute_tool(self, action: AgentAction) -> AgentToolResult:
+        from java_vuln_research.work1_agent.m8_experiment.usage import (
+            TerminalStatus,
+            UsageActionKind,
+            UsageActorKind,
+        )
+
+        action_kind = (
+            UsageActionKind.CODEQL_CALL
+            if action.action_type.value.startswith("CODEQL_")
+            else UsageActionKind.REPOSITORY_TOOL_CALL
+        )
+        attempt = (
+            self.usage_recorder.reserve_action(
+                action_kind=action_kind,
+                actor_kind=UsageActorKind.SPECIALIST,
+                agent_id=self.model_spec.id,
+                role=self.role.value,
+                action_name=action.action_type.value,
+                identity=action.action_id,
+                max_wall_clock_ms=120_000,
+            )
+            if self.usage_recorder is not None
+            else None
+        )
+        try:
+            result = self.tool_adapter.execute(action)
+        except Exception:
+            if attempt is not None:
+                self.usage_recorder.reconcile_action(
+                    attempt,
+                    status=TerminalStatus.TOOL_ERROR,
+                )
+            raise
+        if attempt is not None:
+            self.usage_recorder.reconcile_action(
+                attempt,
+                status=(
+                    TerminalStatus.TOOL_ERROR
+                    if result.status is AgentToolStatus.ERROR
+                    else TerminalStatus.SUCCESS
+                ),
+            )
+        return result
 
     def _result(
         self,
@@ -480,6 +621,8 @@ class SpecialistAgentRuntime:
         )
 
     def run(self, task: SpecialistTaskSpec) -> SpecialistRuntimeRun:
+        from java_vuln_research.work1_agent.m8_experiment.usage import UsageLedgerError
+
         self._validate_task(task)
         observations: list[SpecialistObservation] = []
         model_responses: list[Mapping[str, Any]] = []
@@ -518,9 +661,30 @@ class SpecialistAgentRuntime:
                 observation=observation.to_dict(),
             )
             try:
-                response = self.llm_client.complete(request)
-                model_responses.append(response.to_dict())
-                decision = _parse_decision(response, task=task, normalizer=self.normalizer)
+                response, decision = self._complete_and_parse(
+                    task=task,
+                    request=request,
+                    model_responses=model_responses,
+                )
+            except UsageLedgerError as exc:
+                failure = SpecialistRuntimeFailure(
+                    failure_class="BUDGET_EXHAUSTED",
+                    message=str(exc),
+                    internal_round=internal_round,
+                )
+                failures.append(failure)
+                result = self._result(
+                    task=task,
+                    status=SpecialistResultStatus.BUDGET_EXHAUSTED,
+                    rounds_used=internal_round,
+                    tool_results=tool_results,
+                    evidence_refs=evidence_refs,
+                    uncertainty=(str(exc),),
+                    extra_provenance={"failure": failure.to_dict()},
+                )
+                return SpecialistRuntimeRun(
+                    result, tuple(observations), tuple(model_responses), tuple(failures)
+                )
             except ModelCallError as exc:
                 failure = SpecialistRuntimeFailure(
                     failure_class=exc.failure_class.value,
@@ -546,7 +710,7 @@ class SpecialistAgentRuntime:
                     failure_class="MODEL_OUTPUT_INVALID",
                     message=str(exc),
                     internal_round=internal_round,
-                    model_call_id=response.model_call_id,
+                    model_call_id=getattr(exc, "model_call_id", None),
                 )
                 failures.append(failure)
                 result = self._result(
@@ -590,7 +754,31 @@ class SpecialistAgentRuntime:
                         "benchmark_informed": False,
                     },
                 )
-                tool_result = self.tool_adapter.execute(action)
+                try:
+                    tool_result = self._execute_tool(action)
+                except UsageLedgerError as exc:
+                    failure = SpecialistRuntimeFailure(
+                        failure_class="BUDGET_EXHAUSTED",
+                        message=str(exc),
+                        internal_round=internal_round,
+                        model_call_id=response.model_call_id,
+                    )
+                    failures.append(failure)
+                    result = self._result(
+                        task=task,
+                        status=SpecialistResultStatus.BUDGET_EXHAUSTED,
+                        rounds_used=internal_round,
+                        tool_results=tool_results,
+                        evidence_refs=evidence_refs,
+                        uncertainty=(str(exc),),
+                        extra_provenance={"failure": failure.to_dict()},
+                    )
+                    return SpecialistRuntimeRun(
+                        result,
+                        tuple(observations),
+                        tuple(model_responses),
+                        tuple(failures),
+                    )
                 tool_results.append(tool_result)
                 evidence_refs.extend(evidence_from_tool_result(tool_result, self.repository_index))
                 continue

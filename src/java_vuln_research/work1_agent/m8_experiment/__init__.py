@@ -1,5 +1,6 @@
 """Study-level contracts for the Work1 V11 M8 experiment."""
 
+from .analysis_sets import PreTreatmentAnalysisSetRegistry, PrimaryEligibleLineage
 from .arms import (
     ARM_REGISTRY,
     COMMON_ARM_CONTRACT_FIELDS,
@@ -41,7 +42,6 @@ from .arms import (
     preregistered_contrasts,
     validate_arm_only_differences,
 )
-from .analysis_sets import PreTreatmentAnalysisSetRegistry, PrimaryEligibleLineage
 from .commitments import (
     CommitmentPurpose,
     ManifestCommitment,
@@ -49,6 +49,11 @@ from .commitments import (
     commit_manifest,
     commit_split_manifest,
     verify_manifest_commitment,
+)
+from .runtime_usage import (
+    RuntimeActionAttempt,
+    RuntimeModelAttempt,
+    RuntimeUsageRecorder,
 )
 from .subjects import (
     ArtifactIdentity,
@@ -137,8 +142,8 @@ __all__ = [
     "ModelIdentityDecision",
     "ModelIdentityDriftPolicy",
     "ModelTokenUsage",
-    "PreTreatmentAnalysisSetRegistry",
     "PreRegisteredContrast",
+    "PreTreatmentAnalysisSetRegistry",
     "PrimaryEligibleLineage",
     "ProjectBudgetCeilings",
     "ProjectUsageLedger",
@@ -147,6 +152,9 @@ __all__ = [
     "ReservationExceeded",
     "RevisionRole",
     "RunKey",
+    "RuntimeActionAttempt",
+    "RuntimeModelAttempt",
+    "RuntimeUsageRecorder",
     "SharedUsageLedger",
     "TerminalStatus",
     "TokenCountSource",
@@ -157,8 +165,8 @@ __all__ = [
     "WorkerBundle",
     "arm_registry_sha256",
     "arm_registry_to_dict",
-    "audit_model_backend_identities",
     "assert_confirmatory_budget_comparability",
+    "audit_model_backend_identities",
     "commit_eligibility_manifest",
     "commit_manifest",
     "commit_split_manifest",

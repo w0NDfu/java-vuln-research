@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from java_vuln_research.work1_agent.agent.actions import (
     CODEQL_ACTIONS,
@@ -25,9 +25,12 @@ from java_vuln_research.work1_agent.agent.llm_client import (
     ModelCallError,
 )
 from java_vuln_research.work1_agent.agent.parser import validate_tool_arguments
-from java_vuln_research.work1_agent.agent.structured_output import StructuredOutputNormalizer
+from java_vuln_research.work1_agent.agent.structured_output import (
+    StructuredOutputNormalizer,
+)
 from java_vuln_research.work1_agent.agent.tool_adapter import (
     AgentToolResult,
+    AgentToolStatus,
     RepositoryCodeQLToolAdapter,
 )
 from java_vuln_research.work1_agent.proposal import (
@@ -45,13 +48,26 @@ from java_vuln_research.work1_agent.repository.indexer import RepositoryIndex
 
 from .agent_registry import COORDINATOR_AGENT
 from .board import SharedEvidenceBoard
-from .contracts import FindingType, SpecialistFinding, SpecialistRole, SpecialistTaskSpec
-from .coordinator_observation import CoordinatorObservation, build_coordinator_observation
-from .prompts.coordinator import SYSTEM_PROMPT as COORDINATOR_SYSTEM_PROMPT
+from .contracts import (
+    FindingType,
+    SpecialistFinding,
+    SpecialistRole,
+    SpecialistTaskSpec,
+)
+from .coordinator_observation import (
+    CoordinatorObservation,
+    build_coordinator_observation,
+)
 from .prompts.common import prompt_sha256
+from .prompts.coordinator import SYSTEM_PROMPT as COORDINATOR_SYSTEM_PROMPT
 from .role_helper import ProposalAnchor, RoleOption, build_role_guidance
 from .scope_helper import build_valid_scope
 from .specialists import SpecialistAgentRuntime, SpecialistRuntimeRun
+
+if TYPE_CHECKING:
+    from java_vuln_research.work1_agent.m8_experiment.runtime_usage import (
+        RuntimeUsageRecorder,
+    )
 
 
 COORDINATOR_RUNTIME_VERSION = "M8_COORDINATOR_RUNTIME_V2"
@@ -521,6 +537,7 @@ class CoordinatorRuntime:
         graph_path_adapter: AgentGraphPathAdapter,
         budget_limits: CoordinatorBudgetLimits | None = None,
         normalizer: StructuredOutputNormalizer | None = None,
+        usage_recorder: RuntimeUsageRecorder | None = None,
     ) -> None:
         if not project_id:
             raise ValueError("Coordinator project_id is required")
@@ -538,6 +555,8 @@ class CoordinatorRuntime:
                 raise ValueError("Coordinator specialist runtime is cross-role or cross-project")
             if runtime.repository_index is not repository_index or runtime.tool_adapter is not tool_adapter:
                 raise ValueError("Coordinator and specialists must share repository/tool components")
+            if runtime.usage_recorder is not usage_recorder:
+                raise ValueError("Coordinator and specialists must share one usage recorder")
         config = getattr(llm_client, "config", None)
         configured_model = getattr(config, "model_id", None)
         if configured_model is None and not isinstance(llm_client, MockLLMClient):
@@ -555,6 +574,7 @@ class CoordinatorRuntime:
         self.graph_path_adapter = graph_path_adapter
         self.budget = CoordinatorBudgetState(budget_limits or CoordinatorBudgetLimits())
         self.normalizer = normalizer or StructuredOutputNormalizer()
+        self.usage_recorder = usage_recorder
         self.actions: list[CoordinatorAction] = []
         self.observations: list[CoordinatorObservation] = []
         self.model_responses: list[Mapping[str, Any]] = []
@@ -574,6 +594,129 @@ class CoordinatorRuntime:
         self.role_repairs_prepared = 0
         self.role_repairs_admitted = 0
         self._sync_board_evidence()
+
+    def _complete_and_parse_action(
+        self,
+        *,
+        request: LLMRequest,
+        observation: CoordinatorObservation,
+        coordinator_round: int,
+    ) -> CoordinatorAction:
+        from java_vuln_research.work1_agent.m8_experiment.usage import (
+            TerminalStatus,
+            UsageActorKind,
+        )
+
+        attempt = (
+            self.usage_recorder.reserve_model_attempt(
+                client=self.llm_client,
+                request=request,
+                actor_kind=UsageActorKind.COORDINATOR,
+                agent_id=COORDINATOR_AGENT.id,
+                role="coordinator",
+                configured_model_id=COORDINATOR_AGENT.model_id,
+            )
+            if self.usage_recorder is not None
+            else None
+        )
+        try:
+            response = self.llm_client.complete(request)
+        except ModelCallError as exc:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=self.usage_recorder.status_for_model_error(exc),
+                    error=exc,
+                )
+            raise
+        except Exception as exc:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=TerminalStatus.PROVIDER_ERROR,
+                    error=exc,
+                )
+            raise
+
+        self.budget.record_model_call(response)
+        self.model_responses.append(
+            {
+                "request_id": request.request_id,
+                "observation_id": observation.observation_id,
+                "prompt_sha256": prompt_sha256(COORDINATOR_SYSTEM_PROMPT),
+                "response": response.to_dict(),
+            }
+        )
+        try:
+            action = _parse_action(
+                response=response,
+                project_id=self.project_id,
+                coordinator_round=coordinator_round,
+                normalizer=self.normalizer,
+            )
+        except ModelCallError as exc:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=self.usage_recorder.status_for_model_error(exc),
+                    response=response,
+                )
+            if exc.model_call_id is None:
+                exc.model_call_id = response.model_call_id
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=TerminalStatus.INVALID_OUTPUT,
+                    response=response,
+                )
+            exc.model_call_id = response.model_call_id
+            raise
+        except Exception:
+            if attempt is not None:
+                self.usage_recorder.reconcile_model_attempt(
+                    attempt,
+                    status=TerminalStatus.INVALID_OUTPUT,
+                    response=response,
+                )
+            raise
+
+        if attempt is not None:
+            self.usage_recorder.reconcile_model_attempt(
+                attempt,
+                status=TerminalStatus.SUCCESS,
+                response=response,
+            )
+        return action
+
+    def _record_usage_event(
+        self,
+        *,
+        action_kind: UsageActionKind,
+        action_name: str,
+        identity: Any,
+    ) -> None:
+        from java_vuln_research.work1_agent.m8_experiment.usage import (
+            TerminalStatus,
+            UsageActorKind,
+        )
+
+        if self.usage_recorder is None:
+            return
+        attempt = self.usage_recorder.reserve_action(
+            action_kind=action_kind,
+            actor_kind=UsageActorKind.VERIFIER,
+            agent_id="m8_verifier",
+            role="verifier",
+            action_name=action_name,
+            identity=identity,
+            max_wall_clock_ms=1_000,
+        )
+        self.usage_recorder.reconcile_action(
+            attempt,
+            status=TerminalStatus.SUCCESS,
+        )
 
     def _sync_board_evidence(self) -> None:
         tools = {str(item["tool_call_id"]): dict(item) for item in self.board.tool_calls}
@@ -691,6 +834,12 @@ class CoordinatorRuntime:
             self.evidence_gate.register_evidence(evidence, tool_artifact=artifact)
 
     def _request_codeql(self, action: CoordinatorAction) -> None:
+        from java_vuln_research.work1_agent.m8_experiment.usage import (
+            TerminalStatus,
+            UsageActionKind,
+            UsageActorKind,
+        )
+
         self.budget.record_codeql()
         arguments = dict(action.arguments)
         try:
@@ -720,7 +869,37 @@ class CoordinatorRuntime:
                 "benchmark_informed": False,
             },
         )
-        result = self.tool_adapter.execute(tool_action)
+        usage_attempt = (
+            self.usage_recorder.reserve_action(
+                action_kind=UsageActionKind.CODEQL_CALL,
+                actor_kind=UsageActorKind.COORDINATOR,
+                agent_id=COORDINATOR_AGENT.id,
+                role="coordinator",
+                action_name=tool_action.action_type.value,
+                identity=tool_action.action_id,
+                max_wall_clock_ms=120_000,
+            )
+            if self.usage_recorder is not None
+            else None
+        )
+        try:
+            result = self.tool_adapter.execute(tool_action)
+        except Exception:
+            if usage_attempt is not None:
+                self.usage_recorder.reconcile_action(
+                    usage_attempt,
+                    status=TerminalStatus.TOOL_ERROR,
+                )
+            raise
+        if usage_attempt is not None:
+            self.usage_recorder.reconcile_action(
+                usage_attempt,
+                status=(
+                    TerminalStatus.TOOL_ERROR
+                    if result.status is AgentToolStatus.ERROR
+                    else TerminalStatus.SUCCESS
+                ),
+            )
         evidence = evidence_from_tool_result(result, self.repository_index)
         for item in evidence:
             self.evidence_gate.register_evidence(item, tool_artifact=result.to_dict())
@@ -921,6 +1100,8 @@ class CoordinatorRuntime:
         )
 
     def _rebuild_path(self, coordinator_round: int) -> AgentGraphPathResult:
+        from java_vuln_research.work1_agent.m8_experiment.usage import UsageActionKind
+
         if not self.active_proposals:
             raise CoordinatorConstraint(
                 "NO_ADMISSIBLE_PROPOSAL",
@@ -931,6 +1112,17 @@ class CoordinatorRuntime:
             proposals=tuple(self.active_proposals.values()),
             gate_results=tuple(self.gate_results),
         )
+        prior_path_ids = {
+            str(item.get("candidate_path_id")) for item in self.board.candidate_paths
+        }
+        for path in result.path_search.all_candidate_paths:
+            candidate_path_id = str(path["candidate_path_id"])
+            if candidate_path_id not in prior_path_ids:
+                self._record_usage_event(
+                    action_kind=UsageActionKind.CANDIDATE_PATH,
+                    action_name="CANDIDATE_PATH_FORMED",
+                    identity=candidate_path_id,
+                )
         self.graph_results.append(result)
         self.board.record_coordinator_event(
             event_type="PATH_REBUILT",
@@ -950,10 +1142,42 @@ class CoordinatorRuntime:
         proposal: SecurityProposal,
         finding_ids: Sequence[str],
     ) -> None:
+        from java_vuln_research.work1_agent.m8_experiment.usage import (
+            TerminalStatus,
+            UsageActionKind,
+            UsageActorKind,
+        )
+
         self._validate_proposal_support(proposal, finding_ids)
         self._enforce_codeql_policy(proposal)
         self.budget.record_proposal()
-        result = self.evidence_gate.evaluate(proposal)
+        usage_attempt = (
+            self.usage_recorder.reserve_action(
+                action_kind=UsageActionKind.PROPOSAL_FAMILY,
+                actor_kind=UsageActorKind.VERIFIER,
+                agent_id="m8_verifier",
+                role="verifier",
+                action_name="EVIDENCE_GATE_EVALUATE",
+                identity=proposal.proposal_id,
+                max_wall_clock_ms=120_000,
+            )
+            if self.usage_recorder is not None
+            else None
+        )
+        try:
+            result = self.evidence_gate.evaluate(proposal)
+        except Exception:
+            if usage_attempt is not None:
+                self.usage_recorder.reconcile_action(
+                    usage_attempt,
+                    status=TerminalStatus.TOOL_ERROR,
+                )
+            raise
+        if usage_attempt is not None:
+            self.usage_recorder.reconcile_action(
+                usage_attempt,
+                status=TerminalStatus.SUCCESS,
+            )
         self.proposals.append(proposal)
         self.proposal_attempts[proposal.proposal_id] = proposal
         self.proposal_support[proposal.proposal_id] = tuple(finding_ids)
@@ -975,6 +1199,11 @@ class CoordinatorRuntime:
             is_new = proposal.proposal_id not in self.active_proposals
             if is_new:
                 self.budget.record_admissible()
+                self._record_usage_event(
+                    action_kind=UsageActionKind.ADMISSIBLE_PROPOSAL,
+                    action_name="PROPOSAL_ADMITTED",
+                    identity=proposal.proposal_id,
+                )
                 self.active_proposals[proposal.proposal_id] = proposal
                 repair_kind = proposal.provenance.get("repair_kind")
                 if repair_kind == "SCOPE":
@@ -1200,6 +1429,8 @@ class CoordinatorRuntime:
         self.role_repairs_prepared += 1
 
     def run(self) -> CoordinatorRunResult:
+        from java_vuln_research.work1_agent.m8_experiment.usage import UsageLedgerError
+
         while self.stop_reason is None:
             try:
                 coordinator_round = self.budget.begin_round()
@@ -1231,14 +1462,23 @@ class CoordinatorRuntime:
                 observation=observation.to_dict(),
             )
             try:
-                response = self.llm_client.complete(request)
-                self.budget.record_model_call(response)
-                action = _parse_action(
-                    response=response,
-                    project_id=self.project_id,
+                action = self._complete_and_parse_action(
+                    request=request,
+                    observation=observation,
                     coordinator_round=coordinator_round,
-                    normalizer=self.normalizer,
                 )
+            except UsageLedgerError as exc:
+                self._feedback(
+                    coordinator_round=coordinator_round,
+                    failure_class="BUDGET_EXHAUSTED",
+                    message=str(exc),
+                    next_required_action=CoordinatorActionType.STOP.value,
+                    action_id=None,
+                    retryable=False,
+                )
+                self._budget_event(coordinator_round)
+                self._stop(coordinator_round, StopReason.BUDGET_EXHAUSTED)
+                break
             except (ModelCallError, KeyError, TypeError, ValueError) as exc:
                 failure_class = (
                     exc.failure_class.value if isinstance(exc, ModelCallError) else "MODEL_OUTPUT_INVALID"
@@ -1254,14 +1494,6 @@ class CoordinatorRuntime:
                 self._budget_event(coordinator_round)
                 self._stop(coordinator_round, StopReason.OTHER)
                 break
-            self.model_responses.append(
-                {
-                    "request_id": request.request_id,
-                    "observation_id": observation.observation_id,
-                    "prompt_sha256": prompt_sha256(COORDINATOR_SYSTEM_PROMPT),
-                    "response": response.to_dict(),
-                }
-            )
             self.actions.append(action)
             self.board.record_coordinator_event(
                 event_type="COORDINATOR_ACTION_RECORDED",
@@ -1284,6 +1516,16 @@ class CoordinatorRuntime:
                 else:
                     assert action.stop_reason is not None
                     self._stop(coordinator_round, action.stop_reason)
+            except UsageLedgerError as exc:
+                self._feedback(
+                    coordinator_round=coordinator_round,
+                    failure_class="BUDGET_EXHAUSTED",
+                    message=str(exc),
+                    next_required_action=CoordinatorActionType.STOP.value,
+                    action_id=action.action_id,
+                    retryable=False,
+                )
+                self._stop(coordinator_round, StopReason.BUDGET_EXHAUSTED)
             except CoordinatorConstraint as exc:
                 self._feedback(
                     coordinator_round=coordinator_round,

@@ -29,7 +29,17 @@ from java_vuln_research.work1_agent.agent import (
     bounded_tool_catalog,
     runtime_roots,
 )
-from java_vuln_research.work1_agent.hybrid_graph import RelationKind, SearchLimits, SupportClass
+from java_vuln_research.work1_agent.hybrid_graph import (
+    RelationKind,
+    SearchLimits,
+    SupportClass,
+)
+from java_vuln_research.work1_agent.m8_experiment import (
+    ProjectBudgetCeilings,
+    ProjectUsageLedger,
+    RunKey,
+    RuntimeUsageRecorder,
+)
 from java_vuln_research.work1_agent.proposal import (
     EntityRole,
     EntityRoleRef,
@@ -41,8 +51,14 @@ from java_vuln_research.work1_agent.proposal import (
     SecurityProposal,
 )
 from java_vuln_research.work1_agent.proposal.model import canonical_json
-from java_vuln_research.work1_agent.repository.entity import ProgramEntity, ProgramEntityKind
-from java_vuln_research.work1_agent.repository.indexer import RepositoryIndex, build_repository_index
+from java_vuln_research.work1_agent.repository.entity import (
+    ProgramEntity,
+    ProgramEntityKind,
+)
+from java_vuln_research.work1_agent.repository.indexer import (
+    RepositoryIndex,
+    build_repository_index,
+)
 
 from .agent_registry import COORDINATOR_AGENT, M8_AGENT_REGISTRY
 from .board import SharedEvidenceBoard
@@ -59,16 +75,26 @@ from .prompts import (
     INPUT_SYSTEM_PROMPT,
     prompt_sha256,
 )
-from .scope_helper import build_valid_scope
-from .scope_helper import SCOPE_HELPER_VERSION
 from .role_helper import ROLE_HELPER_VERSION
+from .scope_helper import SCOPE_HELPER_VERSION, build_valid_scope
 from .specialists import BridgeAgentRuntime, EffectAgentRuntime, InputAgentRuntime
-
 
 CONTROLLED_PROJECT_ID = "CONTROLLED_M8"
 CONTROLLED_PRODUCER = "M8_CONTROLLED_SMOKE_V1"
 COORDINATOR_ENV_PREFIX = "M8_COORDINATOR_LLM_"
 SPECIALIST_ENV_PREFIX = "M8_SPECIALIST_LLM_"
+
+CONTROLLED_USAGE_BUDGET = ProjectBudgetCeilings(
+    max_model_attempts=64,
+    max_canonical_input_tokens=10_000_000,
+    max_reserved_output_tokens=4_194_304,
+    max_repository_tool_calls=78,
+    max_codeql_calls=90,
+    max_proposal_families=10,
+    max_admissible_proposals=8,
+    max_candidate_paths=20,
+    max_wall_clock_ms=60_000_000,
+)
 
 ARTIFACT_FILES = (
     "runtime_input_manifest.json",
@@ -90,6 +116,7 @@ ARTIFACT_FILES = (
     "board_events.jsonl",
     "evidence_board.json",
     "failure_taxonomy.json",
+    "usage_ledger.json",
     "summary.json",
     "no_leakage_audit.json",
     "manifest.json",
@@ -277,6 +304,7 @@ def _build_runtime(
     git_sha: str,
     coordinator_client: LLMClient,
     specialist_clients: Mapping[SpecialistRole, LLMClient],
+    usage_recorder: RuntimeUsageRecorder,
 ) -> tuple[CoordinatorRuntime, RuntimeSecurityBoundary, tuple[EvidenceRef, ...]]:
     boundary = RuntimeSecurityBoundary(
         project_id=CONTROLLED_PROJECT_ID,
@@ -340,18 +368,21 @@ def _build_runtime(
             repository_index=index,
             llm_client=specialist_clients[SpecialistRole.INPUT],
             tool_adapter=adapter,
+            usage_recorder=usage_recorder,
         ),
         SpecialistRole.EFFECT: EffectAgentRuntime(
             project_id=CONTROLLED_PROJECT_ID,
             repository_index=index,
             llm_client=specialist_clients[SpecialistRole.EFFECT],
             tool_adapter=adapter,
+            usage_recorder=usage_recorder,
         ),
         SpecialistRole.BRIDGE: BridgeAgentRuntime(
             project_id=CONTROLLED_PROJECT_ID,
             repository_index=index,
             llm_client=specialist_clients[SpecialistRole.BRIDGE],
             tool_adapter=adapter,
+            usage_recorder=usage_recorder,
         ),
     }
     runtime = CoordinatorRuntime(
@@ -363,6 +394,7 @@ def _build_runtime(
         tool_adapter=adapter,
         evidence_gate=gate,
         graph_path_adapter=graph,
+        usage_recorder=usage_recorder,
     )
     return runtime, boundary, fixture_evidence
 
@@ -616,6 +648,7 @@ def _write_artifacts(
     fixture_evidence: Sequence[EvidenceRef],
     model_manifest: Mapping[str, Any],
     secrets: Sequence[str],
+    usage_ledger: ProjectUsageLedger,
 ) -> dict[str, Any]:
     latest_graph = result.graph_results[-1] if result.graph_results else None
     evidence = {item.evidence_id: item.to_dict() for item in fixture_evidence}
@@ -654,6 +687,11 @@ def _write_artifacts(
     _write(output / "evidence_board.json", canonical_json(result.board.to_dict()) + "\n")
     failure = _failure_taxonomy(result)
     _write(output / "failure_taxonomy.json", canonical_json(failure) + "\n")
+    usage_summary = usage_ledger.summary()
+    _write(
+        output / "usage_ledger.json",
+        usage_ledger.to_canonical_json() + "\n",
+    )
     summary = {
         **result.summary(),
         "input_findings": len(result.board.input_findings),
@@ -666,6 +704,7 @@ def _write_artifacts(
             else 0.0
         ),
         "artifact_root": str(output),
+        "usage": usage_summary,
         "interpretation": "Controlled Candidate Paths are not confirmed vulnerabilities.",
     }
     _write(output / "summary.json", canonical_json(summary) + "\n")
@@ -754,12 +793,16 @@ def _write_artifacts(
         "tool_catalog_sha256": _value_sha256(bounded_tool_catalog()),
         "components": component_manifest,
         "budget": dict(result.budget_state),
+        "shared_project_budget": usage_ledger.to_dict()["budget"],
+        "shared_project_budget_sha256": usage_ledger.to_dict()["budget_sha256"],
+        "usage_ledger_sha256": _sha256(output / "usage_ledger.json"),
+        "usage": usage_summary,
         "path_limits": {
             "max_depth": limits.max_depth,
             "max_paths": limits.max_paths,
             "max_nodes_expanded": limits.max_nodes_expanded,
         },
-        "token_counts": dict(result.budget_state.get("usage", {})),
+        "token_counts": usage_summary["token_measurements"],
         "tool_counts": {
             "all": len(result.board.tool_calls),
             "codeql": len(result.codeql_results),
@@ -830,6 +873,22 @@ def run_controlled_smoke(
             if model_configs
             else ()
         )
+    run_key = RunKey(
+        study_id="m8-controlled-smoke",
+        split="development-only",
+        subject_id=CONTROLLED_PROJECT_ID,
+        arm_id="m8_m2",
+        replicate_index=1,
+        run_id=(
+            f"controlled-{git_sha[:12]}-"
+            f"{_value_sha256(str(output))[:12]}"
+        ),
+    )
+    usage_ledger = ProjectUsageLedger(run_key, CONTROLLED_USAGE_BUDGET)
+    usage_recorder = RuntimeUsageRecorder(
+        usage_ledger,
+        tool_catalog_sha256=_value_sha256(bounded_tool_catalog()),
+    )
     runtime, boundary, fixture_evidence = _build_runtime(
         repository_root=repository_root.resolve(),
         schema_root=schema_root.resolve(),
@@ -837,6 +896,7 @@ def run_controlled_smoke(
         git_sha=git_sha,
         coordinator_client=coordinator_client,
         specialist_clients=specialist_clients,
+        usage_recorder=usage_recorder,
     )
     result = runtime.run()
     input_manifest = boundary.seal()
@@ -853,6 +913,7 @@ def run_controlled_smoke(
         fixture_evidence=fixture_evidence,
         model_manifest=model_manifest,
         secrets=secrets,
+        usage_ledger=usage_ledger,
     )
 
 

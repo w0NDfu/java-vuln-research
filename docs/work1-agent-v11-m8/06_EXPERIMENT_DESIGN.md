@@ -522,15 +522,15 @@ formal schedule 开始后不按中间效果提前停止，也不允许 evaluator
 
 ## 14. 当前实现缺口与 P0 工程序列
 
-本文目前是可审计设计，不是已经可执行的 harness。代码审计确认：
+本文目前已有 P0 合同与 controlled runtime 集成，但还不是可执行的正式比较 harness。代码审计确认：
 
 1. `N0` 只有旧 CodeQL runner，缺 arm/replicate/study seal；`H0` 只适合作历史导入；
 2. `S0/S1` 没有现代化 single-Agent runtime；
 3. `M0/M1` 会被现有 frozen Opus Coordinator 检查拒绝；
 4. `M2` 目前只支持 `CONTROLLED_M8` fixture，不能作为真实项目 runner；
 5. `G1` 被 specialist prompt、allow-list 和 finding type 硬绑定；
-6. 没有 `ArmSpec`、formal profile、feedback visibility、curator/scheduler 权限隔离、keyed commitments、shared usage ledger、replicate scheduler、health classifier、analysis disposition、outcome registry、study seal、blind evaluator 或 statistics implementation；
-7. 当前 M8 token summary 漏掉 specialists 和失败 attempts；
+6. 已实现 `ArmSpec`、formal profile、feedback visibility 类型合同、detector/evaluator manifest 分离、keyed commitments、lineage/analysis-set verifier 与 shared usage ledger；尚未实现 feedback observation projection、独立 curator/scheduler 进程边界、replicate scheduler、health classifier、analysis disposition、outcome registry、study seal、blind evaluator 或 statistics implementation；
+7. controlled M2 runtime 已把 Coordinator、specialists、success/timeout/provider-error/invalid-output、repository/CodeQL、Gate admission 和 Candidate Path 接入同一 append-only ledger；其他 arms 尚无 runtime adapter，因此不能据此宣称正式组间预算已经可比；
 8. 当前 M5 fingerprint 包含 run-specific IDs，只适合 run 内去重，也没有分离 semantic candidate 与 evidence package identity。
 
 正式 development 前按以下顺序实现：
@@ -545,10 +545,13 @@ formal schedule 开始后不按中间效果提前停止，也不允许 evaluator
 8. machine-readable outcome registry、exact McNemar、paired risk difference、lineage bootstrap、Holm 和 power simulation；
 9. N0 adapter、H0 historical importer 与 prior-assisted baseline provenance。
 
+当前完成状态：步骤 1--3 的机器合同及单元测试已完成，其中步骤 3 已接入 controlled M2 artifact；步骤 4--9 均未完成。该状态只消除了“方法写在文档里但执行不记账”的一部分工程风险，不授权跳过 M8-5、dev-tune 或 `DEVELOPMENT_CANDIDATE_FROZEN`。
+
 最低测试集合：
 
 - `test_m8_arm_registry.py`、`test_m8_formal_profile.py`、`test_m8_feedback_visibility.py`；
 - `test_m8_usage_ledger.py`、`test_m8_budget_comparability.py`；
+- `test_m8_runtime_usage.py`，并由 `test_m8_controlled_smoke.py` 覆盖成功、无效输出、timeout 与 provider error 的 artifact 结算；
 - `test_m8_subject_split.py`、`test_m8_analysis_sets.py`、`test_m8_manifest_commitments.py`、`test_m8_schedule_assigned_arm.py`；
 - `test_m8_model_identity_drift.py`；
 - `test_m8_health_classifier.py`、`test_m8_analysis_disposition.py`；
