@@ -1,5 +1,7 @@
 # Work1 V11 M8-5: Controlled Multi-Agent Smoke
 
+> **编号说明（2026-09-02）**：本文历史段落中的“不得进入 M8-6”均指不得开始真实 development cohort。实验方法修订后，`06_EXPERIMENT_DESIGN.md` 是不运行项目的预注册协议，允许在 M8-5 FAIL 时先行撰写；真实 development 结果顺延为 `07_DEVELOPMENT_COHORT.md`，其运行门保持不变。
+
 ## 范围与结论
 
 M8-5 增加一个非 benchmark Java fixture 和可审计的四 Agent smoke runner。它只验证真实模型调用前所需的 prompt、dispatch、evidence、proposal、Gate、graph/path、artifact 与 no-leakage 链路，不代表真实项目 detection、autonomous recovery 或漏洞确认。
@@ -45,7 +47,7 @@ Evidence Board snapshot 可以由 `board_events.jsonl` 完整 replay。artifact 
 
 ## Real-LLM gate
 
-CloudStudio real smoke 必须在 clean worktree checkout 本 milestone exact commit，使用唯一且非覆盖的 artifact attempt 目录。进入 M8-6 的硬条件是至少形成一条 Candidate Path 且 no-leakage audit 为 PASS。真实 Claude 结果和 exact commit/attempt identity 在云端复验完成后追加记录；失败 attempt 也必须保留，且不得通过覆盖目录或在同一 attempt 上调 prompt 规避负结果。
+CloudStudio real smoke 必须在 clean worktree checkout 本 milestone exact commit，使用唯一且非覆盖的 artifact attempt 目录。进入真实 development cohort 的硬条件是至少形成一条 Candidate Path 且 no-leakage audit 为 PASS。真实 Claude 结果和 exact commit/attempt identity 在云端复验完成后追加记录；失败 attempt 也必须保留，且不得通过覆盖目录或在同一 attempt 上调 prompt 规避负结果。
 
 ## CloudStudio real-LLM attempt 1
 
@@ -86,7 +88,7 @@ manifest 只记录 API key 对应环境变量名和 `api_key_present=true`；运
 - `no_leakage_audit.json` 为 `status=PASS`、`no_leakage_pass=true`、`runtime_boundary_pass=true`、`model_secret_scan_pass=true`、`violation_count=0`；
 - `artifact_audit.json` 为 `required_files_present=true`、`no_leakage_pass=true`。
 
-M8-5 gate 结论为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。本 attempt 作为不可覆盖的负结果保留，不在同一目录重跑，也不进入 M8-6 development cohort。
+M8-5 gate 结论为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。本 attempt 作为不可覆盖的负结果保留，不在同一目录重跑，也不进入真实 development cohort。
 
 ## Attempt1 后的通用修复冻结
 
@@ -101,7 +103,7 @@ M8-5 gate 结论为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至
 - 只有通过 preflight 并真正创建 TaskSpec 的 dispatch 扣 specialist quota，非法 action 仍扣 Coordinator round/model-call budget；
 - observation 的 policy 使用独立精确序列化，避免通用 evidence 压缩器把 17 项工具数组截断为 12 项。
 
-该修复不读取 benchmark/evaluator，不包含 fixture entity、项目名、CVE/CWE、危险 API 或 case-specific rule，不修改 M4 Gate、M5 path builder、specialist tool allow-list、CodeQL tool catalog 或预算上限。attempt2 必须使用新 Git SHA 和新的非覆盖 artifact root；只有 attempt2 同时满足 Candidate Paths 至少 1 条和 no-leakage PASS，才重新评估 M8-6 gate。
+该修复不读取 benchmark/evaluator，不包含 fixture entity、项目名、CVE/CWE、危险 API 或 case-specific rule，不修改 M4 Gate、M5 path builder、specialist tool allow-list、CodeQL tool catalog 或预算上限。attempt2 必须使用新 Git SHA 和新的非覆盖 artifact root；只有 attempt2 同时满足 Candidate Paths 至少 1 条和 no-leakage PASS，才重新评估 development gate。
 
 本地冻结验证为：M8 targeted `48 passed, 2 warnings`，full regression `319 passed, 2 skipped, 5 warnings`，`compileall` 和 `git diff --check` 均通过。
 
@@ -147,7 +149,7 @@ attempt1 的 `SPECIALIST_TOOL_RESTRICTION` 已消失：Coordinator 发出的 5 �
 - `manifest.output_hashes` 和 `artifact_audit.artifacts` 两组 SHA-256 均逐项复算通过；
 - manifest 的 Git/project/prompt identity、四 Agent `id == name`、`claude-opus-5` / `claude-sonnet-5` 分配和仅记录 key presence 的合同检查通过。
 
-M8-5 gate 结论仍为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。attempt2 作为第二个不可覆盖负结果保留，不进入 M8-6。后续修复只应补全通用 specialist JSON 类型合同，保持 parser fail closed；不得把字符串静默包装为数组，也不得修改 specialist allow-list、预算、M4 Gate 或 M5 path builder。修复后必须使用新 Git SHA 和新的 attempt3 artifact root。
+M8-5 gate 结论仍为 **FAIL**：no-leakage 条件通过，但 Candidate Paths 至少 1 条的硬条件未通过。attempt2 作为第二个不可覆盖负结果保留，不进入真实 development cohort。后续修复只应补全通用 specialist JSON 类型合同，保持 parser fail closed；不得把字符串静默包装为数组，也不得修改 specialist allow-list、预算、M4 Gate 或 M5 path builder。修复后必须使用新 Git SHA 和新的 attempt3 artifact root。
 
 ## Attempt2 后的 specialist 合同修复冻结
 
@@ -206,7 +208,7 @@ Coordinator 第 4 轮另有一次 provider timeout。`failure_taxonomy.json` 记
 - 两个 API-key 环境变量的实际值在全部 artifact 中均为 0 命中，审计不输出 secret；
 - Agent/model/prompt/project/Git identity 全部正确。
 
-M8-5 gate 结论仍为 **FAIL**。attempt3 作为第三个不可覆盖负结果保留，不进入 M8-6。
+M8-5 gate 结论仍为 **FAIL**。attempt3 作为第三个不可覆盖负结果保留，不进入真实 development cohort。
 
 ## Attempt3 后的 nested finding 合同修复冻结
 

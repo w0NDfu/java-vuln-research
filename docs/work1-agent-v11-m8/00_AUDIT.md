@@ -1,5 +1,7 @@
 # Work1 V11 M8-0：多 Agent 实验前审计
 
+> **协议修订说明（2026-09-02）**：本文保存 M8-0 时点的历史审计和实施计划，不作为后续因果实验的最终设计。旧 `E0=M7 / E1=full M8` 只能估计整个 harness/model/prompt/tool/feedback bundle，不能证明多 Agent 架构效应；“看到 formal recovery 后才选择消融”也已废止。后续 arms、separately initialized runs、failure-inclusive analysis、盲评、统计与文件编号以 `06_EXPERIMENT_DESIGN.md` 为准。当前 M8-5 仍为 `FAIL`，尚未进入 development。
+
 ## 1. 审计结论
 
 M8 必须作为新的、与 M7 隔离的研究分支继续，不能在旧 M7 正式 cohort 或 artifacts 上调参。当前证据支持 M8 的核心假设：M7 的 transport、structured-output、source-root 和基础 schema 问题已经排除，剩余失败主要位于单一通用 Agent 同时承担 input、effect、bridge、tool choice、proposal construction 与反馈调度所造成的任务混杂。

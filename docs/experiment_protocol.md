@@ -1,5 +1,12 @@
 # Experiment protocol
 
+This file defines repository-wide local/CloudStudio execution and report
+boundaries. Its `MSA-P0-E0` gates are historical and do not define the M8 causal
+study. For M8 arms, analysis sets, repeated runs, integrity dispositions,
+blinding, statistics, and freeze states, the controlling protocol is
+`docs/work1-agent-v11-m8/06_EXPERIMENT_DESIGN.md`. M8-5 remains failing, so this
+cross-reference does not authorize development or formal execution.
+
 ## Roles and write boundaries
 
 - Local Windows is the only source-editing authority.
@@ -36,4 +43,3 @@ Each `reports/runs/<RUN_ID>/report.md` records status, commit, cloud environment
 dataset and database inventory, runnable projects, baseline summary, failures,
 scientific interpretation, and next action. Unmeasured fields are
 `NOT_APPLICABLE`, not fabricated zeroes.
-
