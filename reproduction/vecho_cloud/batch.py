@@ -8,10 +8,12 @@ from pathlib import Path
 from common import REPRO, samples, write_json
 
 
-def collect():
+def collect(sample_names=None):
     done = {}
     for path in sorted((REPRO / "runs").glob("*/sample_*/run.json")):
         run = json.loads(path.read_text())
+        if sample_names is not None and run["sample"] not in sample_names:
+            continue
         evaluation = path.parent / "evaluation.json"
         if run.get("status") == "complete" and evaluation.exists():
             score = json.loads(evaluation.read_text())
@@ -51,16 +53,26 @@ def summarize(done, total):
             "results": done}
 
 
-def main():
+def main(argv=None):
+    import argparse
     import fcntl
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--limit", type=int, help="Only run the first N sample IDs")
+    args = parser.parse_args(argv)
+    rows = sorted(samples(), key=lambda r: int(r["id"]))
+    if args.limit is not None:
+        if not 1 <= args.limit <= len(rows):
+            parser.error("--limit must be between 1 and the dataset size")
+        rows = rows[:args.limit]
+    names = {"sample_" + str(int(row["id"])).zfill(4) for row in rows}
     lock = (REPRO / "batch.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    rows = sorted(samples(), key=lambda r: int(r["id"]))
     state = {"status": "running", "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
              "authorized_budget_usd": 15, "budget_control": "Existing provider token total quota is $8 as verified in UI; no quota increase or recharge. This is below the authorized $15 cap.",
              "current_sample": None, "failed_samples": [], "failure_details": {},
+             "expected_samples": len(rows), "sample_ids": [int(row["id"]) for row in rows],
              "policy": "Attempt every sample once before repairing or retrying failures"}
-    done = collect()
+    done = collect(names)
     write_json(REPRO / "batch-summary.json", summarize(done, len(rows)))
     for row in rows:
         name = "sample_" + str(int(row["id"])).zfill(4)
@@ -80,7 +92,7 @@ def main():
         log = REPRO / "logs" / ("batch-" + name + ".log")
         with log.open("a") as output:
             process = subprocess.run([sys.executable, "-u", str(REPRO / "run.py"), "--sample-id", row["id"]], stdout=output, stderr=subprocess.STDOUT)
-        done = collect()
+        done = collect(names)
         write_json(REPRO / "batch-summary.json", summarize(done, len(rows)))
         if process.returncode or name not in done:
             state["failed_samples"].append(name)
