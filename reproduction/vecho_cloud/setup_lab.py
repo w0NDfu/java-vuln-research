@@ -61,7 +61,7 @@ def main():
     repro = artifact / "repro"
     repro.mkdir(exist_ok=True)
     for source in helpers.iterdir():
-        if source.is_file() and source.suffix in {".py", ".md", ".txt"}:
+        if source.is_file() and (source.suffix in {".py", ".md", ".txt"} or source.name == "env.example"):
             target = repro / source.name
             if source.resolve() != target.resolve():
                 shutil.copy2(source, target)

@@ -70,4 +70,3 @@ text-embedding-3-small；并非论文的 GPT-4.1 主配置。
 
 关键文件：`run.json`、`final-report.json`、`evaluation.json`、
 `recovery-audit.json`，以及两个阶段的 `usage.json` 和复核 `summary.json`。
-
