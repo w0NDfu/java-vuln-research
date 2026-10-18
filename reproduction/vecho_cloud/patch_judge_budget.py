@@ -30,6 +30,11 @@ def patch(source):
     if new_identity not in source:
         assert source.count(old_identity) == 1, "Unexpected save_result implementation"
         source = source.replace(old_identity, new_identity)
+    metadata = '            "verdict_protocol": "explicit final-turn save_result; original turn limit; unknown allowed",'
+    if metadata not in source:
+        anchor = '        judge_metadata={\n'
+        assert source.count(anchor) == 1, "Unexpected judge metadata implementation"
+        source = source.replace(anchor, anchor + metadata + '\n', 1)
     return source
 
 
