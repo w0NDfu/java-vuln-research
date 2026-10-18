@@ -53,7 +53,7 @@ def summarize(done, total):
             "results": done}
 
 
-def main(argv=None):
+def main(argv=()):
     import argparse
     import fcntl
     parser = argparse.ArgumentParser(description=__doc__)
@@ -104,8 +104,9 @@ def main(argv=None):
         print("DONE", name, "completed", len(done), "of", len(rows), flush=True)
     state.update(status="first_pass_complete" if state["failed_samples"] else "complete", current_sample=None, completed_samples=len(done), attempted_samples=len(rows), needs_repair=bool(state["failed_samples"]))
     write_json(REPRO / "batch-state.json", state)
+    lock.close()
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
