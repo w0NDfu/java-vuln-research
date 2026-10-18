@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import shutil
 
 from common import ROOT, REPRO, DATASET, load_env, required, samples, write_json
 
@@ -63,6 +64,34 @@ def execute(command, cwd, logfile, env):
         subprocess.run(command, cwd=cwd, env=env, stdout=output, stderr=subprocess.STDOUT, check=True)
 
 
+def scanner_stage(scanner, stage, flags, directory, logfile, env, resume=False, extra=()):
+    """Resume incomplete stages with preserved snapshots; never restart over them."""
+    session = directory / "session.json"
+    if session.exists():
+        if not resume:
+            raise RuntimeError("Scanner stage already exists; explicit resume required")
+        metadata = json.loads(session.read_text())
+        if metadata["status"] == "completed":
+            return
+        marker = REPRO / "scanner-repair-installation.json"
+        if not marker.exists():
+            raise RuntimeError("Install scanner checkpoint repair before resuming incomplete stages")
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        backup = directory.with_name(directory.name + "-before-resume-" + stamp)
+        shutil.copytree(directory, backup)
+        if logfile.exists():
+            shutil.copy2(logfile, backup / "stage-process.log")
+        timeout = os.environ.get("VECHO_SCAN_TIMEOUT", str(int(metadata["config"]["timeout"] / 1_000_000_000)) + "s")
+        execute([scanner, stage, "resume", "--session", str(directory), "--timeout", timeout], ROOT, logfile, env)
+        return
+    if directory.exists() and any(directory.iterdir()):
+        raise RuntimeError("Partial stage has no session manifest; inspect it before restarting")
+    command = [scanner, stage, "run", *flags, "--out", str(directory), *extra]
+    if os.environ.get("VECHO_SCAN_TIMEOUT"):
+        command += ["--timeout", os.environ["VECHO_SCAN_TIMEOUT"]]
+    execute(command, ROOT, logfile, env)
+
+
 def score_report(slug, target, report, output):
     # Native parser failures must not kill the supervising runner and leave a
     # stale "running" manifest. This subprocess performs no model requests.
@@ -83,6 +112,7 @@ def run_one(row, root, resume=False):
         old = json.loads((root / "run.json").read_text())
         assert old["sample"] == name and old["initial_source"] == row["buggy_commit_id"]
         assert old["scan_model"] == os.environ.get("VECHO_SCAN_MODEL")
+        assert old["judge_model"] == os.environ.get("VECHO_JUDGE_MODEL"), "Judge model changed; use a separate experiment"
         write_json(root / ("run-before-resume-" + datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".json"), old)
     env = dict(os.environ, PYTHONPATH=str(ROOT / "judge"), VECHO_SCAN_API_KEY=key, VECHO_JUDGE_API_KEY=key, VECHO_MEMORY_PROJECT=name)
     from urllib.request import Request, urlopen
@@ -101,11 +131,7 @@ def run_one(row, root, resume=False):
     scanner = str(REPRO / "bin/vecho-scan")
     flags = ["--repo", str(target), "--language", "java", "--project-id", name, "--project-name", name, "--memory-enabled", "--memory-url", env["VECHO_MEMORY_URL"], "--memory-project", name, "--memory-timeout-seconds", "120", "--context-concurrency", str(config["context_concurrency"])]
     try:
-        scan_session = root / "scan/session.json"
-        if resume and scan_session.exists():
-            assert json.loads(scan_session.read_text())["status"] == "completed", "Incomplete scan must be resumed through scanner session API"
-        else:
-            execute([scanner, "scan", "run", *flags, "--out", str(root / "scan")], ROOT, root / "scan.log", env)
+        scanner_stage(scanner, "scan", flags, root / "scan", root / "scan.log", env, resume=resume)
         report = root / "scan/vecho/report.json"
         report_payload = json.loads(report.read_text())
         if not report_payload.get("vulnerabilities"):
@@ -127,11 +153,8 @@ def run_one(row, root, resume=False):
             confirmed = {item.fingerprint for item in results if item.vuln_status == "true"}
             final_records = [item.to_dict() for item in normalized if item.fingerprint in confirmed]
             if guidance:
-                rescan_session = root / "rescan/session.json"
-                if resume and rescan_session.exists():
-                    assert json.loads(rescan_session.read_text())["status"] == "completed", "Incomplete rescan requires scanner session resume; refusing to overwrite"
-                else:
-                    execute([scanner, "rescan", "run", *flags, "--out", str(root / "rescan"), "--bundle", str(judged / "rescan_bundle.json"), "--guidance", str(judged / "guidance/guidance.json")], ROOT, root / "rescan.log", env)
+                scanner_stage(scanner, "rescan", flags, root / "rescan", root / "rescan.log", env, resume=resume,
+                              extra=["--bundle", str(judged / "rescan_bundle.json"), "--guidance", str(judged / "guidance/guidance.json")])
                 new_report = root / "rescan/vecho/report.json"
                 if json.loads(new_report.read_text()).get("vulnerabilities"):
                     cfg.state_dir = root / "rescan-judge"
@@ -170,4 +193,8 @@ if __name__ == "__main__":
         if args.resume_run:
             assert len(chosen) == 1 and args.resume_run.resolve().is_relative_to((REPRO / "runs").resolve())
         root = args.resume_run if args.resume_run else batch / ("sample_" + str(int(row["id"])).zfill(4))
-        print(json.dumps(run_one(row, root, resume=bool(args.resume_run))), flush=True)
+        import fcntl
+        root.parent.mkdir(parents=True, exist_ok=True)
+        with root.with_name(root.name + ".lock").open("a") as sample_lock:
+            fcntl.flock(sample_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            print(json.dumps(run_one(row, root, resume=bool(args.resume_run))), flush=True)

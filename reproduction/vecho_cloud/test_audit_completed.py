@@ -7,6 +7,26 @@ from common import write_json
 
 
 class AuditGatesTests(unittest.TestCase):
+    def test_resumed_stage_counts_only_latest_pass_and_validated_reuse(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.stage_fixture(root)
+            directory = root / "scan"
+            events = [json.loads(line) for line in (directory / "events.ndjson").read_text().splitlines()]
+            events += [{"type": "contextaudit_started", "data": {"case_count": 2}},
+                       {"type": "case_reused", "data": {"case_id": "a", "status": "blocked"}},
+                       {"type": "case_completed", "data": {"case_id": "b", "status": "dead_end"}},
+                       {"type": "scan_completed"}]
+            (directory / "events.ndjson").write_text("\n".join(json.dumps(e) for e in events))
+            result = audit_stage(root, "scan")
+            self.assertEqual(result["closed_cases"], 2)
+            self.assertEqual(result["reused_cases"], 1)
+            events[-2]["data"]["status"] = "failed"
+            (directory / "events.ndjson").write_text("\n".join(json.dumps(e) for e in events))
+            with self.assertRaisesRegex(ValueError, "failed or unfinished"):
+                audit_stage(root, "scan")
+
     def judge_fixture(self, root):
         directory = root / "judge/20260101"
         write_json(directory / "inputs/normalized.json", [{"fingerprint": "a"}, {"fingerprint": "b"}])

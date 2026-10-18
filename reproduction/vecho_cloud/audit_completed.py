@@ -26,17 +26,23 @@ def audit_stage(root, stage):
     session = read(directory / "session.json")
     require(session["status"] == "completed", stage + " session is incomplete")
     events = [json.loads(line) for line in (directory / "events.ndjson").read_text().splitlines()]
-    require(any(e["type"] == stage + "_completed" for e in events), stage + " has no completion event")
+    # Earlier attempt events remain as evidence. Audit closures from the latest
+    # ContextAudit pass, including checkpoints validated and reused by the engine.
+    beginnings = [i for i, e in enumerate(events) if e["type"] == "contextaudit_started"]
+    current = events[beginnings[-1]:] if beginnings else events
+    require(any(e["type"] == stage + "_completed" for e in current), stage + " has no completion event")
     starts = [e["data"]["case_count"] for e in events if e["type"] == "contextaudit_started"]
-    closed = [e["data"] for e in events if e["type"] == "case_completed"]
+    closed = [e["data"] for e in current if e["type"] in {"case_completed", "case_reused"}]
     planned = starts[-1] if starts else 0
     require(len(closed) == planned, stage + " case count does not match plan")
     require(len({c["case_id"] for c in closed}) == len(closed), stage + " duplicate case closures")
+    require(all(c["status"] in {"confirmed", "dead_end", "blocked", "rejected"} for c in closed), stage + " has failed or unfinished cases")
     usage = read(directory / "usage.json")["total"]
-    require(usage["prompt_tokens"] + usage["completion_tokens"] == usage["total_tokens"], stage + " inconsistent token totals")
+    require(usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0) == usage.get("total_tokens", 0), stage + " inconsistent token totals")
     return {"session_id": session["session_id"], "planned_cases": planned, "closed_cases": len(closed),
             "case_statuses": dict(collections.Counter(c["status"] for c in closed)),
-            "event_errors": sum(bool(e.get("error")) for e in events), "usage": usage}
+            "event_errors": sum(bool(e.get("error")) for e in events), "usage": usage,
+            "reused_cases": sum(e["type"] == "case_reused" for e in current)}
 
 
 def audit_judge(root, stage):
