@@ -29,7 +29,7 @@ func NewRunner(cfg config.Config, store *Store, events interface{ Emit(model.Eve
 		Store:  store,
 		Events: events,
 		Tools:  tools.NewRegistry(cfg.AllowMutatingBash),
-		LLM:    &llm.Client{BaseURL: cfg.BaseURL, APIKey: cfg.APIKey, Model: cfg.Model, DiagnosticPath: filepath.Join(cfg.OutDir, "llm-attempts.ndjson")},
+		LLM:    &llm.Client{BaseURL: cfg.BaseURL, APIKey: cfg.APIKey, Model: cfg.Model, DiagnosticPath: filepath.Join(cfg.OutDir, "llm-attempts.ndjson"), AttemptTimeout: cfg.Timeout},
 	}
 }
 
@@ -234,9 +234,7 @@ func (r *Runner) runCaseStep(ctx context.Context, c *Case, lineCache map[string]
 	messages := []llm.Message{{Role: "system", Content: systemPrompt()}, {Role: "user", Content: casePrompt(*c, 5)}}
 	var lastResult CaseResult
 	for turn := 0; turn < r.maxContextTurns(); turn++ {
-		cctx, cancel := context.WithTimeout(ctx, r.Config.Timeout)
-		result, err := r.LLM.ChatWithUsage(cctx, messages)
-		cancel()
+		result, err := r.LLM.ChatWithUsage(ctx, messages)
 		if err != nil {
 			return CaseResult{}, false, err
 		}

@@ -30,7 +30,7 @@ type Runner struct {
 }
 
 func New(cfg config.Config, store *session.Store, events *output.EventBus) *Runner {
-	client := &llm.Client{BaseURL: cfg.BaseURL, APIKey: cfg.APIKey, Model: cfg.Model, DiagnosticPath: filepath.Join(cfg.OutDir, "llm-attempts.ndjson")}
+	client := &llm.Client{BaseURL: cfg.BaseURL, APIKey: cfg.APIKey, Model: cfg.Model, DiagnosticPath: filepath.Join(cfg.OutDir, "llm-attempts.ndjson"), AttemptTimeout: cfg.Timeout}
 	r := &Runner{Config: cfg, Store: store, Events: events, Tools: tools.NewRegistry(cfg.AllowMutatingBash), LLM: client, Collector: scanner.NewCollector()}
 	if cfg.ResumeSessionDir != "" {
 		files, _ := os.ReadDir(store.ToolResultDir)
@@ -75,9 +75,7 @@ func (a *Runner) runLLMBlock(ctx context.Context, inv model.Inventory, plan *mod
 	block := &plan.Blocks[index]
 	messages := []llm.Message{{Role: "system", Content: systemPrompt()}, {Role: "user", Content: blockPrompt(inv, *plan, *block, a.Config.MaxFilesPerBlock, a.Config.RescanGuidancePrompt)}}
 	for turn := 0; turn < a.Config.MaxTurnsPerBlock; turn++ {
-		cctx, cancel := context.WithTimeout(ctx, a.Config.Timeout)
-		result, err := a.LLM.ChatWithUsage(cctx, messages)
-		cancel()
+		result, err := a.LLM.ChatWithUsage(ctx, messages)
 		if err != nil {
 			return err
 		}

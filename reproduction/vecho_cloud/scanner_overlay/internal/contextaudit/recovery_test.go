@@ -59,7 +59,7 @@ func TestTimeoutIsolationResumeAndSourceValidation(t *testing.T) {
 	if first.Failed != 1 || first.ByStatus[StatusDeadEnd] != 1 || first.Total != 2 {
 		t.Fatalf("failed case canceled healthy sibling: %+v", first)
 	}
-	if requests.Load() != 2 {
+	if requests.Load() != 4 {
 		t.Fatalf("unexpected requests %d", requests.Load())
 	}
 	before := map[string][]byte{}
@@ -75,7 +75,7 @@ func TestTimeoutIsolationResumeAndSourceValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Failed != 0 || second.Reused != 1 || second.ByStatus[StatusDeadEnd] != 2 || requests.Load() != 3 {
+	if second.Failed != 0 || second.Reused != 1 || second.ByStatus[StatusDeadEnd] != 2 || requests.Load() != 5 {
 		t.Fatalf("resume re-ran complete case: %+v requests=%d", second, requests.Load())
 	}
 	for path, data := range before {
@@ -94,7 +94,7 @@ func TestTimeoutIsolationResumeAndSourceValidation(t *testing.T) {
 	if _, err = NewRunner(cfg, store, nil).Run(context.Background(), seeds); err == nil {
 		t.Fatal("accepted changed source")
 	}
-	if requests.Load() != 3 {
+	if requests.Load() != 5 {
 		t.Fatal("called model before validating source")
 	}
 	if err = os.WriteFile(filepath.Join(repo, "A.java"), code, 0600); err != nil {
@@ -104,7 +104,7 @@ func TestTimeoutIsolationResumeAndSourceValidation(t *testing.T) {
 	if _, err = NewRunner(cfg, store, nil).Run(context.Background(), seeds); err == nil {
 		t.Fatal("accepted changed seed")
 	}
-	if requests.Load() != 3 {
+	if requests.Load() != 5 {
 		t.Fatal("called model before validating seed identity")
 	}
 	canceled, cancel := context.WithCancel(context.Background())

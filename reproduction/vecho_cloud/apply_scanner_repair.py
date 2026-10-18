@@ -12,9 +12,9 @@ def digest(data):
     return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
-def install(artifact):
+def install(artifact, source=None):
     artifact = Path(artifact).resolve()
-    source = Path(__file__).resolve().parent / "scanner_overlay"
+    source = Path(source) if source is not None else Path(__file__).resolve().parent / "scanner_overlay"
     manifest = json.loads((source / "manifest.json").read_text())
     actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=artifact, text=True).strip()
     if actual != manifest["artifact_commit"]:
@@ -31,7 +31,7 @@ def install(artifact):
         current = digest(target.read_bytes()) if target.exists() else None
         if current == expected["patched_sha256"]:
             continue
-        if current != expected["original_sha256"]:
+        if current != expected["original_sha256"] and current not in expected.get("accepted_previous_sha256", []):
             raise RuntimeError("Unrecognized local scanner changes: " + relative)
         changes.append((relative, target, payload))
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")

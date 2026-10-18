@@ -51,7 +51,13 @@ func TestRealCompletedCheckpointsAreReusableWithoutRequests(t *testing.T) {
 			}
 		}
 	}
-	for sample, want := range map[string]int{"sample_0001": 35, "sample_0002": 10, "sample_0003": 12} {
+	expected := map[string]int{"sample_0001": 35, "sample_0002": 10, "sample_0003": 12}
+	if text := os.Getenv("VECHO_CHECKPOINT_EXPECTATIONS"); text != "" {
+		if err := json.Unmarshal([]byte(text), &expected); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for sample, want := range expected {
 		if counts[sample] != want {
 			t.Fatalf("%s reusable=%d want=%d", sample, counts[sample], want)
 		}

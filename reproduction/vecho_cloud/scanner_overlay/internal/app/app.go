@@ -239,8 +239,12 @@ func Resume(ctx context.Context, cfg config.Config) error {
 	meta.Status = "running"
 	meta.Error = ""
 	normalizeStoredMode(&stored)
+	meta.Config = redactedConfig(stored)
 	store := session.NewStore(abs)
 	if err := store.Init(); err != nil {
+		return err
+	}
+	if err := store.SaveMetadata(meta); err != nil {
 		return err
 	}
 	events, err := output.NewEventBus(stored.SessionID, filepath.Join(abs, "events.ndjson"), stored.Format, os.Stdout)

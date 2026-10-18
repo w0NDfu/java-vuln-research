@@ -26,6 +26,7 @@ type Client struct {
 	Model          string
 	HTTPClient     *http.Client
 	DiagnosticPath string
+	AttemptTimeout time.Duration
 
 	mu    sync.Mutex
 	usage Usage
@@ -88,16 +89,24 @@ func (u *Usage) UnmarshalJSON(data []byte) error {
 }
 
 type CallDiagnostic struct {
-	Time         time.Time `json:"time"`
-	Model        string    `json:"model"`
-	ElapsedMS    int64     `json:"elapsed_ms"`
-	Attempts     int       `json:"attempts"`
-	HTTPStatus   int       `json:"http_status,omitempty"`
-	FinishReason string    `json:"finish_reason,omitempty"`
-	ErrorClass   string    `json:"error_class,omitempty"`
-	Usage        Usage     `json:"usage,omitempty"`
-	UsageKnown   bool      `json:"usage_known"`
-	LoggingError bool      `json:"-"`
+	Time           time.Time           `json:"time"`
+	Model          string              `json:"model"`
+	ElapsedMS      int64               `json:"elapsed_ms"`
+	Attempts       int                 `json:"attempts"`
+	HTTPStatus     int                 `json:"http_status,omitempty"`
+	FinishReason   string              `json:"finish_reason,omitempty"`
+	ErrorClass     string              `json:"error_class,omitempty"`
+	Usage          Usage               `json:"usage,omitempty"`
+	UsageKnown     bool                `json:"usage_known"`
+	UsageScope     string              `json:"usage_scope"`
+	AttemptDetails []AttemptDiagnostic `json:"attempt_details,omitempty"`
+}
+
+type AttemptDiagnostic struct {
+	Attempt    int    `json:"attempt"`
+	ElapsedMS  int64  `json:"elapsed_ms"`
+	HTTPStatus int    `json:"http_status,omitempty"`
+	ErrorClass string `json:"error_class,omitempty"`
 }
 
 func (c *Client) diagnostic(d CallDiagnostic) {
@@ -131,7 +140,7 @@ func (c *Client) Chat(ctx context.Context, messages []Message) (string, error) {
 
 func (c *Client) ChatWithUsage(ctx context.Context, messages []Message) (output ChatResult, callErr error) {
 	started := time.Now()
-	d := CallDiagnostic{Time: started.UTC(), Model: c.Model}
+	d := CallDiagnostic{Time: started.UTC(), Model: c.Model, UsageScope: "final response only; earlier failed attempts may have unreported billed usage"}
 	defer func() {
 		d.ElapsedMS = time.Since(started).Milliseconds()
 		d.FinishReason = output.FinishReason
@@ -150,6 +159,15 @@ func (c *Client) ChatWithUsage(ctx context.Context, messages []Message) (output 
 		return ChatResult{}, fmt.Errorf("missing API key")
 	}
 	httpClient := c.httpClient()
+	attemptTimeout := c.AttemptTimeout
+	if attemptTimeout <= 0 {
+		attemptTimeout = 180 * time.Second
+	}
+	// Each attempt gets its own deadline; caller cancellation still bounds all
+	// attempts. Three attempts and bounded backoff cap the logical operation.
+	operationCtx, cancelOperation := context.WithTimeout(ctx, 3*attemptTimeout+3*time.Second)
+	defer cancelOperation()
+	ctx = operationCtx
 	body, err := json.Marshal(chatRequest{Model: c.Model, Messages: messages, Temperature: 0.1})
 	if err != nil {
 		return ChatResult{}, err
@@ -160,23 +178,40 @@ func (c *Client) ChatWithUsage(ctx context.Context, messages []Message) (output 
 			return ChatResult{}, err
 		}
 		d.Attempts++
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL, bytes.NewReader(body))
+		attemptStarted := time.Now()
+		attemptCtx, cancelAttempt := context.WithTimeout(ctx, attemptTimeout)
+		req, err := http.NewRequestWithContext(attemptCtx, http.MethodPost, c.BaseURL, bytes.NewReader(body))
 		if err != nil {
+			cancelAttempt()
 			return ChatResult{}, err
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
 		resp, err := httpClient.Do(req)
+		var data []byte
+		if err == nil {
+			data, err = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+		}
+		ad := AttemptDiagnostic{Attempt: attempt + 1, ElapsedMS: time.Since(attemptStarted).Milliseconds()}
+		if resp != nil {
+			ad.HTTPStatus = resp.StatusCode
+		}
+		if err != nil {
+			ad.ErrorClass = "transport"
+			if errors.Is(err, context.DeadlineExceeded) {
+				ad.ErrorClass = "timeout"
+			} else if errors.Is(err, context.Canceled) {
+				ad.ErrorClass = "canceled"
+			}
+		}
+		d.AttemptDetails = append(d.AttemptDetails, ad)
+		cancelAttempt()
 		if err != nil {
 			lastErr = err
 		} else {
 			d.HTTPStatus = resp.StatusCode
-			data, readErr := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			if readErr != nil {
-				return ChatResult{}, readErr
-			}
-			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 				lastErr = fmt.Errorf("llm status %d", resp.StatusCode)
 			} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				return ChatResult{}, fmt.Errorf("llm status %d", resp.StatusCode)

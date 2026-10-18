@@ -111,7 +111,7 @@ func runResume(ctx context.Context, args []string, isRescan bool) error {
 	cfg := config.Default()
 	fs := flag.NewFlagSet("resume", flag.ContinueOnError)
 	fs.StringVar(&cfg.ResumeSessionDir, "session", "", "session output directory to resume")
-	timeout := fs.Duration("timeout", cfg.Timeout, "per LLM/tool operation timeout")
+	timeout := fs.Duration("timeout", cfg.Timeout, "per HTTP attempt/tool operation timeout; up to 3 transient HTTP attempts")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ func bindRunFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.MemoryMCP.URL, "memory-url", cfg.MemoryMCP.URL, "memory MCP URL")
 	fs.StringVar(&cfg.MemoryMCP.Project, "memory-project", cfg.MemoryMCP.Project, "memory MCP project header")
 	fs.IntVar(&cfg.MemoryMCP.TimeoutSeconds, "memory-timeout-seconds", cfg.MemoryMCP.TimeoutSeconds, "memory MCP timeout seconds")
-	fs.Var(durationValue{target: &cfg.Timeout}, "timeout", "per LLM/tool operation timeout")
+	fs.Var(durationValue{target: &cfg.Timeout}, "timeout", "per HTTP attempt/tool operation timeout; up to 3 transient HTTP attempts")
 }
 
 type durationValue struct {
