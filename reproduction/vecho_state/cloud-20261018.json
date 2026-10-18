@@ -1,0 +1,24 @@
+{
+  "format": "VECHO-STATE-1",
+  "recipient_sha256": "7f440ddddea7760430cdeb90f9ccde5fef21ca6921512f508a338fdd4a928645",
+  "ciphertext_sha256": "2729cf9326d932cb8645aeb2bcd8c6c0abdf71de84d0636f941ae0a0a02dfa89",
+  "ciphertext_bytes": 7470999,
+  "source_archive_sha256": "104bcdc295b0acfaac79a367353764edad8eb8d18f0880a3f133a7f532cd1131",
+  "source_artifact_commit": "68da10388878f8626f0a1d124e500c979ac1e82d",
+  "completed_samples": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    8,
+    9
+  ],
+  "interrupted_samples": [
+    7,
+    10
+  ],
+  "contains_credentials": true,
+  "plaintext_keys_committed": false
+}
