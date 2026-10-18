@@ -1,0 +1,15 @@
+__pycache__/
+evidence/
+runs/
+targets/
+bin/
+audits/
+migration/
+*.json
+*.jsonl
+*.csv
+*.log
+*.tar.gz
+.env
+.env.*
+!.env.example
