@@ -1,0 +1,96 @@
+{
+  "checked_at": "2026-10-19T09:28:50.5160128+08:00",
+  "upstream": "https://github.com/vEcho-project/vEcho",
+  "commit": "68da10388878f8626f0a1d124e500c979ac1e82d",
+  "tracked_files": 103,
+  "upstream_head_verified": "68da10388878f8626f0a1d124e500c979ac1e82d",
+  "working_tree_clean": true,
+  "paper_full_text_reviewed": "https://arxiv.org/html/2603.01154v2",
+  "ssrn_abstract_reviewed": "https://ssrn.com/abstract=6981148",
+  "ssrn_full_text_available": false,
+  "ssrn_full_text_limitation": "Official PDF fetch returned HTTP 403; model/parameters of this version not verified",
+  "result_csv_statistics": [
+    {
+      "file": "vEcho_Result.csv",
+      "rows": 120,
+      "detected": 73,
+      "avg_f1": 0.3973870669166665
+    },
+    {
+      "file": "IRIS_Result.csv",
+      "rows": 120,
+      "detected": 50,
+      "avg_f1": 0.1166300541666667
+    }
+  ],
+  "source_hashes": [
+    {
+      "path": "README.md",
+      "sha256": "538d732267929ce1d6d79cf84a35e33b0456943254e8e57faba85332bf8e178c"
+    },
+    {
+      "path": "scaner/internal/config/config.go",
+      "sha256": "614834c9e287fc628573231837d5b0d93b8d942c98e27916b02a86d01aeb2763"
+    },
+    {
+      "path": "scaner/internal/app/app.go",
+      "sha256": "5499c07786818e42e9216126e0d395e62022cc96393f79bed3679e6b67a30876"
+    },
+    {
+      "path": "scaner/internal/contextaudit/runner.go",
+      "sha256": "94e12d106f6d7487170183b7d1c6e809a96c9545048a96d2cc2c5e9e2db4454b"
+    },
+    {
+      "path": "scaner/internal/rescan/load.go",
+      "sha256": "1897cfbe0726105c5df5f34f51dbd64d4fc1c859c2d210c41722a38c0c83b493"
+    },
+    {
+      "path": "judge/vecho_judge/app/config.py",
+      "sha256": "30e450121640e411338a51b3b8726d0953cc0b67de14756d1e899dc7093ef01d"
+    },
+    {
+      "path": "judge/vecho_judge/adapters/__init__.py",
+      "sha256": "14881e8fcbb9972be4453da001ac9c26a5866b3560d6e0b00e0ac0e789094936"
+    },
+    {
+      "path": "judge/vecho_judge/prompts/prompt_judger.txt",
+      "sha256": "26b2cb90e9ee55c47c27907b54505b63469a7dffb1cc7cf1dd02c6fc14ae36e7"
+    },
+    {
+      "path": "judge/vecho_judge/runtime/llm_loop.py",
+      "sha256": "ebac76be5739d6139952a3a035b9cfd38149e289eedffa8256394fb53876e8ae"
+    },
+    {
+      "path": "judge/vecho_judge/outputs/writer.py",
+      "sha256": "f3411abdd4a2ff8d96dc3e9068acd4181b31c15b0afc2ffd61efd94cc31ab037"
+    },
+    {
+      "path": "judge/vecho_judge/memory_client/client.py",
+      "sha256": "ca4168c5b15b21450bf9059bc2a710d14aea2de7cb7f89d79d3e5fa5e81050cb"
+    },
+    {
+      "path": "memory/config.example.yaml",
+      "sha256": "0119c84265d10156d9f6ecd932a66562e57ff22a0e48b6dba4d89c02422afbd7"
+    },
+    {
+      "path": "memory/services/mcp_service.py",
+      "sha256": "a3b4ecf2caa262d71774b371f0329333d41d8fee701feefcc97153143d1f5014"
+    },
+    {
+      "path": "memory/services/web_service.py",
+      "sha256": "3376e1237f4bc0593575d2cf757c899cf517261fa12fa62f010e5814fae59d1d"
+    },
+    {
+      "path": "Result/vEcho_Result.csv",
+      "sha256": "5e7a168b410ffc1e740814aa6444e127647acefe9a0e46069054720851f2930c"
+    },
+    {
+      "path": "Result/IRIS_Result.csv",
+      "sha256": "3d7b82d2ec70e15ae30171f51b91740b815001c0b1dd139ba8d80c6f3b1a88a1"
+    }
+  ],
+  "original_default_prompt_exists": false,
+  "actual_prompt_exists": true,
+  "model_calls_started": false,
+  "experiment_resumed": false
+}
