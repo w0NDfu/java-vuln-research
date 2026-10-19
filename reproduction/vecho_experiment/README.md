@@ -134,3 +134,36 @@ VECHO_UPSTREAM_TEST_ROOT=/path/to/upstream-clean python -m unittest discover -s 
 测试覆盖真实 Git 快照、输入转换、反馈闭环、失败续跑、知识策略、路径评分和并发预算；第二条还用真实上游 Judge + OpenAI SDK + 本地假提供商验证接线。所有模型响应均为测试夹具，不是漏洞发现效果证据。
 
 仍需外部提供：静态工具与许可证、真实报告或可重建查询配置、实际模型价格与凭据，以及可能由作者补充的历史实验材料。仅补代码不能制造这些输入，也不能保证获得作者相同的数字。
+# Library repair variant (2026-10-19)
+
+`configs/library-pilot.json` is an explicit `analysis_policy: library-v1`
+ablation for samples 32 and 78. It retains GPT-4.1 and the original reasoning
+limits; budget and prices remain zero until a separately authorized paid run.
+Use a **fresh workspace** and `prepare` for this variant. The runtime policy and
+stage receipts reject reuse under a different analysis policy. Existing pilot
+results and runtimes are preserved.
+
+- Missing production callers in a reusable library remain unresolved; the model
+  must inspect the API contract and declare external-context assumptions.
+  Recognized missing-caller dismissals are downgraded to `blocked`, never forced
+  to `confirmed`. Text recognition is conservative and cannot understand every
+  equivalent natural-language claim.
+  Blocked cases with hash-verified read source locations enter Judge as explicitly
+  unresolved, location-only candidates. They become findings only if Judge saves
+  a true verdict; no vulnerability path is invented for them.
+- `effect=blocks` requires a use-site proof plus read implementation evidence,
+  a specific constraint, output context and explanation. The engine overwrites
+  model-supplied validation flags. A call such as `s.sanitize()` cannot close a
+  case on its own. This validates minimum evidence structure, not the semantic
+  correctness or completeness of the model's safety claim.
+- `FindJavaSymbol` excludes comments and string literals, lists exact method
+  occurrences and prioritizes declaration candidates. It is a lexical navigation
+  aid; `Read` evidence remains required. Repeated queries and truncated pages
+  receive navigation/pagination hints without increasing reasoning limits.
+- Evaluation reports `location_match` separately from strict path metrics.
+  Location-only alerts never acquire synthetic paths or an inflated path recall.
+
+The variant does not restore missing author Coverity reports, initial knowledge,
+or historical parameter choices. Offline tests are not evidence of improved
+benchmark recall. Any subsequent comparison must report the changed policy and
+keep the original run as the baseline.

@@ -29,6 +29,17 @@ def prepare(cfg):
     subprocess.run(["git", "clone", "--no-hardlinks", str(original), str(artifact)], check=True, capture_output=True)
     installer = module(HELPERS / "apply_scanner_repair.py", "vecho_scanner_installer")
     installer.install(artifact)
+    policy = cfg.get("analysis_policy", "legacy")
+    if policy == "library-v1":
+        installer.install(artifact, Path(__file__).parent / "library_overlay")
+        prompt = artifact / "judge/vecho_judge/prompts/prompt_judger.txt"
+        prompt.write_text(prompt.read_text(encoding="utf-8") + "\n\nLibrary-v1 evidence policy:\n"
+            "Missing production callers or only test usages in a reusable library do not establish safety. "
+            "Inspect the public API contract, caller-controlled parameters and returned output semantics. "
+            "Explicitly state any external consumer/output-context assumptions; never invent an external application. "
+            "If the contract or exploitability cannot be established, save unknown, not false solely because callers are absent. "
+            "A sanitizer name/call/documentation is not proof of safety: inspect its implementation and bypass conditions.\n",
+            encoding="utf-8")
     if cfg["judge"]["final_save_adapter"]:
         # This adapter changes termination behavior and is an explicit variant.
         sys.path.insert(0, str(HELPERS))
@@ -45,6 +56,7 @@ def prepare(cfg):
     record = {"prepared_at": now(), "upstream": PIN, "artifact": str(artifact), "scanner_binary": str(binary),
               "scanner_sha256": file_hash(binary), "source_tree_sha256": tree_hash(artifact),
               "judge_final_save_adapter": cfg["judge"]["final_save_adapter"],
+              "analysis_policy": policy,
               "go_version": subprocess.check_output([go, "version"], text=True).strip(),
               "python_version": sys.version, "model_requests_started": False}
     write(root / "runtime.json", record)
@@ -55,6 +67,8 @@ def verify(cfg):
     record = read(Path(cfg["workspace"]) / "runtime/runtime.json")
     if record["upstream"] != PIN or record["judge_final_save_adapter"] != cfg["judge"]["final_save_adapter"]:
         raise ValueError("Runtime variant does not match experiment")
+    if record.get("analysis_policy", "legacy") != cfg.get("analysis_policy", "legacy"):
+        raise ValueError("Runtime analysis policy changed; prepare a separate runtime and workspace")
     if file_hash(record["scanner_binary"]) != record["scanner_sha256"] or tree_hash(record["artifact"]) != record["source_tree_sha256"]:
         raise ValueError("Runtime changed since preparation")
     return record

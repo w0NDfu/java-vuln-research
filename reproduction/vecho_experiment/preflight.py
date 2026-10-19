@@ -45,4 +45,6 @@ def check(cfg):
     if not (Path(cfg["workspace"]) / "runtime/runtime.json").is_file(): errors.append("Isolated runtime not prepared")
     warnings += ["Anonymization and scoring are reconstructed, not the authors' historical scripts.",
                  "Opening spend, prices and historical missing materials require operator verification."]
+    if cfg.get("analysis_policy") == "library-v1":
+        warnings.append("library-v1 changes library boundaries, sanitizer evidence and navigation; it is an improvement variant, not an exact author run.")
     return {"ready": not errors, "errors": sorted(set(errors)), "warnings": warnings, "static_inputs": sources, "model_requests_started": False}

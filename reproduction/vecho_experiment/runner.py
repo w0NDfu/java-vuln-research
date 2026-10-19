@@ -10,7 +10,7 @@ from pathlib import Path
 from . import inputs, snapshot, evaluation, runtime
 from .config import identity
 from .gateway import Ledger, Gateway
-from .io import read, write, now, file_hash, tree_hash, digest, lock
+from .io import read, write, now, file_hash, tree_hash, digest, lock, inside
 from .state import Stages
 from . import memory
 
@@ -123,8 +123,35 @@ class Backend:
         if summary.get("failed_count", 0) or any(x.get("status") == "failed" for x in summary["results"]):
             raise RuntimeError("Scanner has unfinished cases")
         report = inputs.canonical(read(directory / "vecho/report.json"), vecho_paths=True)
+        unresolved = []
+        if self.cfg.get("analysis_policy") == "library-v1":
+            for case in summary["results"]:
+                if case.get("status") != "blocked": continue
+                case_id = case["case_id"]
+                saved = read(inside(directory / "contextaudit/cases", case_id + "/case.json"))
+                if saved["case_id"] != case_id or saved["status"] != "blocked":
+                    raise ValueError("Unresolved scanner case identity mismatch")
+                loc = saved["seed"]["location"]
+                source = inside(self.target, loc["file"])
+                line = loc["line"]
+                if type(line) is not int or not 1 <= line <= len(source.read_bytes().splitlines()):
+                    raise ValueError("Unresolved scanner seed has an invalid source location")
+                if not any(w["file"] == loc["file"] and w["start_line"] <= line <= w["end_line"]
+                           and w.get("sha256") == file_hash(source) for w in saved.get("read_windows", [])):
+                    raise ValueError("Unresolved scanner seed lacks a verified read window")
+                unresolved.append({"description": "UNRESOLVED candidate, not a confirmed vulnerability. "
+                    + saved["seed"].get("title", "") + ". Scanner limitation: " + saved.get("reason", ""),
+                    "short_description": "Unresolved library evidence", "category": "unresolved-library-evidence",
+                    "source_scanner": "vEcho-unresolved", "cwe": "", "severity": "",
+                    "affected_files": [{"file_path": loc["file"], "line_numbers": [line]}],
+                    "tainted_data_flow": [], "metadata": {"candidate_only": True, "case_id": case_id,
+                    "original_status": "blocked", "path_evidence": "location_only"}})
+            report += unresolved
+            write(attempt / "unresolved-candidates.json", {"vulnerabilities": unresolved,
+                  "note": "Candidates for Judge review only; not detected vulnerabilities or synthetic paths."})
         # Preserve blocked/unknown counts; completed transport != exhaustive audit.
-        write(attempt / "coverage.json", {"case_total": summary["total"], "statuses": summary["by_status"]})
+        write(attempt / "coverage.json", {"case_total": summary["total"], "statuses": summary["by_status"],
+                                         "unresolved_candidates_for_judge": len(unresolved)})
         write(attempt / "canonical.json", {"vulnerabilities": report})
         return attempt / "canonical.json"
 
@@ -181,7 +208,8 @@ def feedback(cfg, stages, initial, backend, redactor):
         if number == cfg["loop"]["max_rescans"]: stop = "max_rescans"; break
         if not guidance: stop = "no_actionable_guidance"; break
         known = redactor.report(list(accepted.values()))
-        scan_inputs = {"round": number + 1, "guidance": guidance, "known": known}
+        scan_inputs = {"round": number + 1, "guidance": guidance, "known": known,
+                       "analysis_policy": cfg.get("analysis_policy", "legacy")}
         p = stages.run(f"rescan-{number + 1:02d}", scan_inputs,
                        lambda attempt: backend.scan("rescan", attempt, guidance, known))
         candidates, excluded = inputs.merge_records(read(p)["vulnerabilities"])
@@ -209,7 +237,8 @@ def run_project(cfg, rt, row, root, gateway_url, token, resume, backend_factory=
     directory = Path(cfg["workspace"]) / "knowledge" / ("campaign" if cfg["memory"]["scope"] == "campaign" else sample)
     with memory.serve({**cfg, "artifact": rt["artifact"]}, directory, gateway_url, token, sample, redactor) as memory_url:
         backend = backend_factory(cfg, rt, gateway_url, token, memory_url, sample, target)
-        p = stages.run("initial-scan", {"scanner": cfg["scanner"], "target_tree": provenance["tree_sha256"]},
+        p = stages.run("initial-scan", {"scanner": cfg["scanner"], "target_tree": provenance["tree_sha256"],
+                       "analysis_policy": cfg.get("analysis_policy", "legacy")},
                        lambda attempt: backend.scan("scan", attempt, [], []))
         initial += read(p)["vulnerabilities"]
         initial, excluded = inputs.merge_records(initial)
@@ -236,6 +265,7 @@ def run_project(cfg, rt, row, root, gateway_url, token, resume, backend_factory=
 
 def plan(cfg):
     return {"config_sha256": identity(cfg), "profile": cfg["profile"], "ordered_samples": cfg["samples"],
+            "analysis_policy": cfg.get("analysis_policy", "legacy"),
             "models": {role: {k: v for k, v in model.items() if k != "key_env"} for role, model in cfg["models"].items()},
             "loop": cfg["loop"], "memory": cfg["memory"], "budget": cfg["budget"], "assumptions": cfg["assumptions"],
             "model_requests_started": False, "exact_author_reproduction": False}

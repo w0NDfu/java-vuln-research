@@ -8,6 +8,7 @@ from .io import read, digest
 PIN = "68da10388878f8626f0a1d124e500c979ac1e82d"
 DEFAULTS = {
     "schema_version": 1, "profile": "reconstruction", "artifact_commit": PIN,
+    "analysis_policy": "legacy",
     "samples": [1], "replicate": 1,
     "scanner": {"concurrency": 5, "turns_per_block": 8, "steps_per_case": 8,
                 "turns_per_step": 6, "tools_per_case": 30, "timeout_seconds": 600},
@@ -55,6 +56,10 @@ def validate(cfg):
         raise ValueError("Unsupported schema or artifact revision")
     if cfg["profile"] not in {"reconstruction", "enhanced", "ablation"}:
         raise ValueError("Unknown experiment profile")
+    if cfg.get("analysis_policy", "legacy") not in {"legacy", "library-v1"}:
+        raise ValueError("Unknown analysis policy")
+    if cfg.get("analysis_policy") == "library-v1" and cfg["profile"] == "reconstruction":
+        raise ValueError("Library evidence changes must use enhanced or ablation profile")
     if not cfg["samples"] or len(set(cfg["samples"])) != len(cfg["samples"]) or any(type(i) is not int or i < 1 for i in cfg["samples"]):
         raise ValueError("samples must be an explicit ordered list of distinct positive IDs")
     for value in [cfg["replicate"], *cfg["scanner"].values(), cfg["judge"]["max_turns"],

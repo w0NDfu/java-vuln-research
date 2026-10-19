@@ -24,6 +24,7 @@ def evaluate(repo, records, fixes):
     targets = {(r["file"], r["class"], r["method"]) for r in fixes if "/test/" not in "/" + r["file"]}
     if not targets:
         return {"status": "unavailable_no_labels", "recall": None, "precision": None, "f1": None,
+                "location_match": {"status": "unavailable_no_labels", "hit": None, "matches": []},
                 "alerts": len(records), "paths": sum(len(r.get("tainted_data_flow", [])) for r in records)}
     cache, parse_errors, invalid_nodes = {}, [], []
     def method_at(node):
@@ -60,6 +61,7 @@ def evaluate(repo, records, fixes):
             return None
         return visit(tree.root_node)
     details, tp_paths, total = [], 0, 0
+    location_hits, location_invalid, location_parse_errors = [], [], []
     for record in records:
         hits, matched_paths = set(), 0
         for flow in record.get("tainted_data_flow", []):
@@ -69,6 +71,22 @@ def evaluate(repo, records, fixes):
         details.append({"fingerprint": record["fingerprint"], "benchmark_hit": bool(hits),
                         "paths": len(record.get("tainted_data_flow", [])), "tp_paths": matched_paths,
                         "matched_methods": sorted(hits)})
+    # Separate diagnostic: never turn a location-only finding into a path, and
+    # never let its parsing failures change the original strict-path metric.
+    path_errors, path_invalid = list(parse_errors), list(invalid_nodes)
+    for record in records:
+        for affected in record.get("affected_files", []):
+            for line in affected["line_numbers"]:
+                n = {"file_path": affected["file_path"], "line_number": line}
+                old_invalid = len(invalid_nodes)
+                match = method_at(n)
+                if len(invalid_nodes) > old_invalid: location_invalid.append(n)
+                if affected["file_path"] in cache and cache[affected["file_path"]].root_node.has_error:
+                    location_parse_errors.append(affected["file_path"])
+                if match in targets:
+                    location_hits.append({"fingerprint": record["fingerprint"], "file": n["file_path"],
+                                          "line": line, "method": match})
+    parse_errors, invalid_nodes = path_errors, path_invalid
     recall = int(tp_paths > 0); precision = tp_paths / total if total else 0
     return {"status": "available" if not parse_errors and not invalid_nodes else "unscorable_source_or_locations",
             "metric": "IRIS path/method intersection, reconstructed with tree-sitter; not exact author evaluator",
@@ -78,6 +96,11 @@ def evaluate(repo, records, fixes):
             "alerts": len(records), "paths": total, "tp_paths": tp_paths, "tp_alerts": sum(d["benchmark_hit"] for d in details),
             "location_only_alerts": sum(not r.get("tainted_data_flow") for r in records),
             "targets": sorted(targets), "parse_error_files": parse_errors, "invalid_nodes": invalid_nodes,
+            "location_match": {"status": "unscorable_source_or_locations" if location_invalid or location_parse_errors else "available",
+                               "hit": None if location_invalid or location_parse_errors else bool(location_hits),
+                               "matches": location_hits, "invalid_nodes": location_invalid,
+                               "parse_error_files": sorted(set(location_parse_errors)),
+                               "note": "Affected positions intersect labelled methods; not a vulnerability path or a replacement for path recall."},
             "details": details, "note": "Unmatched alerts are not independently proved false positives; no PoC verification implied."}
 
 
