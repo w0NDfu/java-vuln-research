@@ -304,7 +304,11 @@ class ExecutionController:
                 if ranked[cwe]:self.enqueue({'method_id':ranked[cwe][rank],'cwe':cwe,'reason':'Original static/boundary recall fallback.'})
         self.origin=discovery_origin
         dispatched=sum(t['dispatches'] for t in self.book.state['tasks'].values())
-        while not self.r.stop and dispatched<self.r.limits.max_focus:
+        cooperative=getattr(self,'cooperative_scheduler',None)
+        if cooperative is not None:
+            cooperative(self)
+            dispatched=sum(t['dispatches'] for t in self.book.state['tasks'].values())
+        while cooperative is None and not self.r.stop and dispatched<self.r.limits.max_focus:
             if self.r.request_headroom()<1 or self.r.tool_calls>=self.r.tool_limit-3:break
             task=self.book.next()
             if task is None:break
@@ -313,7 +317,7 @@ class ExecutionController:
             except (ValueError,KeyError,TypeError) as e:
                 self.book.pause_task(task['task_id'],'TOOL_OR_STATE_FAILURE',{'error':str(e)});self.r.last_error='TOOL_OR_STATE_ERROR';break
         self.verify_pending()
-        reason=self.r.stop or self.r.last_error or ('TASK_LIMIT' if any(t['status']=='QUEUED' for t in self.book.state['tasks'].values()) else 'GRAPH_COMPLETE')
+        reason=self.r.stop or self.r.last_error or getattr(self,'actual_stop_trigger',None) or ('TASK_LIMIT' if any(t['status']=='QUEUED' for t in self.book.state['tasks'].values()) else 'GRAPH_COMPLETE')
         for q in self.book.state['questions'].values():
             pending=[r for r in q['actions'] if not any(self.book.get(t)['action']==self.book.get(r) for t in q['tool_returns'])]
             pause_reason=reason if reason!='GRAPH_COMPLETE' else ('UNEXECUTED_ACTION_REQUIRES_NEW_DISPATCH' if pending else 'NO_NEW_EXECUTABLE_ACTION_WITH_AVAILABLE_TOOLS')
