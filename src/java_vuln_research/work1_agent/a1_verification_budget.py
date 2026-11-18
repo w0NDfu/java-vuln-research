@@ -32,14 +32,14 @@ def reservation(runner,archive,context,verification_policy,lookup=None,candidate
         reusable=cached is not None and type(known)is int
         body_bytes=len(json.dumps(ctx,ensure_ascii=False).encode())
         batches.append({'candidate_ids':[c['candidate_path_id'] for c in batch],'context':ctx,'estimate_method':method,
-                        'logical_request_reserve':1,'logical_token_reserve':known if reusable else estimate,
+                        'logical_request_reserve':0 if reusable else 1,'logical_token_reserve':0 if reusable else estimate,'historical_original_tokens_not_new_charge':known if reusable else 0,
                         'physical_request_reserve':0 if reusable else 1,'physical_token_reserve':0 if reusable else estimate,
                         'seconds_reserve':0 if reusable else 240+body_bytes/800*0.012,'cache_origin':cached.get('origin') if reusable else None})
     future=request_reserve(context,verification_policy)[0] if context else None
     return {'actual_pending_candidates':len(pending),'actual_batches':batches,
             'held_requests':sum(b['physical_request_reserve'] for b in batches),
             'held_tokens':sum(b['physical_token_reserve'] for b in batches),
-            'held_logical_requests':len(batches),'held_logical_tokens':sum(b['logical_token_reserve'] for b in batches),
+            'held_logical_requests':sum(b['logical_request_reserve'] for b in batches),'held_logical_tokens':sum(b['logical_token_reserve'] for b in batches),
             'held_seconds':sum(b['seconds_reserve'] for b in batches),
             'future_request_estimate_not_held':future,'candidate_total_cap':None,'candidate_per_cwe_cap':None,
             'correction_rule':'One original protocol correction only when remaining unheld capacity permits; other candidates retain their primary Verification opportunity.'}
@@ -49,18 +49,21 @@ class BudgetAdmission:
         self.r=runner;self.archive=archive;self.journal=journal;self.policy=verification_policy;self.lookup=lookup;self.clock=clock;self.engine=None
     def available(self):
         physical=physical_account(self.journal.path)
+        disabled=getattr(self.journal,'token_limit_disabled',False)
+        tokens=None if disabled else self.journal.max_tokens-physical['reported_tokens']-physical['unsettled_reserved_tokens']
         return {**physical,'physical_available_requests':self.journal.max_requests-physical['physical_requests'],
-                'physical_available_tokens':self.journal.max_tokens-physical['reported_tokens']-physical['unsettled_reserved_tokens'],
-                'logical_reported_tokens':self.r.usage.get('total_tokens',0),'logical_available_tokens':self.journal.max_tokens-self.r.usage.get('total_tokens',0),
-                'logical_available_requests':self.journal.max_requests-self.r.model_calls,
+                'physical_available_tokens':tokens,'token_cap_enforced':not disabled,
+                'logical_reported_tokens':self.r.usage.get('total_tokens',0),'logical_available_tokens':tokens,
+                'logical_available_requests':self.journal.max_requests-physical['physical_requests'],
+                'historical_logical_usage_is_not_new_resource_reservation':True,
                 'available_seconds':self.journal.max_seconds-(self.clock()-self.journal.created_at)}
     def plan(self,candidates=None,reviews=None):
         if candidates is None and self.engine is not None and self.engine.in_review:candidates=self.engine.review_all
         return reservation(self.r,self.archive,{},self.policy,self.lookup,candidates,reviews)
     def fits(self,plan):
         a=self.available()
-        return (plan['held_requests']<=a['physical_available_requests'] and plan['held_tokens']<=a['physical_available_tokens']
-                and plan['held_logical_requests']<=a['logical_available_requests'] and plan['held_logical_tokens']<=a['logical_available_tokens']
+        return (plan['held_requests']<=a['physical_available_requests'] and (a['physical_available_tokens'] is None or plan['held_tokens']<=a['physical_available_tokens'])
+                and plan['held_logical_requests']<=a['logical_available_requests'] and (a['logical_available_tokens'] is None or plan['held_logical_tokens']<=a['logical_available_tokens'])
                 and plan['held_seconds']<=a['available_seconds'])
     def can_accept(self,candidates,reviews):return self.fits(self.plan(candidates,reviews))
     def admit(self,context,policy):
@@ -71,9 +74,9 @@ class BudgetAdmission:
             current={c['candidate_path_id'] for c in context['candidates']};other={k:c for k,c in all_candidates.items() if k not in current}
         held=self.plan(other,self.r.reviews);estimate,method=request_reserve(context,policy);a=self.available()
         checks={'physical_requests':a['physical_available_requests']>=held['held_requests']+1,
-                'physical_tokens':a['physical_available_tokens']>=held['held_tokens']+estimate,
+                'physical_tokens':a['physical_available_tokens'] is None or a['physical_available_tokens']>=held['held_tokens']+estimate,
                 'logical_requests':a['logical_available_requests']>=held['held_logical_requests']+1,
-                'logical_tokens':a['logical_available_tokens']>=held['held_logical_tokens']+estimate,
+                'logical_tokens':a['logical_available_tokens'] is None or a['logical_available_tokens']>=held['held_logical_tokens']+estimate,
                 'seconds':a['available_seconds']>=held['held_seconds']+240}
         self.r.event('verification_budget_reservation',account=a,actual_pending_reservation=held,current_request_estimate=estimate,estimate_method=method,admission_checks=checks)
         if not all(checks.values()):raise VerificationReserve('Actual candidate Verification reservations or request budget exhausted: '+str([k for k,v in checks.items() if not v]))

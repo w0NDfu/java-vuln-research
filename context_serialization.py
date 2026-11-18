@@ -4,7 +4,7 @@ from java_vuln_research.work1_agent.experiment_policy import _token_encoding
 
 def canonical(value):return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
 def sha(value):return hashlib.sha256(canonical(value).encode()).hexdigest()
-PROTECTED={'source_evidence','contract_evidence','conditions','uncertainties','critical_evidence_closure'}
+PROTECTED={'conditions','uncertainties'}
 KINDS=['inventory','relations_navigation','source','codeql','historical_observations','contract_material','other_and_framing']
 def category(path):
     keys=[str(k).lower() for k in path]
@@ -12,7 +12,7 @@ def category(path):
     if any(k in {'source_evidence','source','source_window'} for k in keys):return 'source'
     if any(k in {'recent_observations','existing_candidates','feedback','critical_evidence_closure'} for k in keys):return 'historical_observations'
     if any('codeql' in k or 'native_alert' in k or 'native_finding' in k for k in keys):return 'codeql'
-    if any(k in {'web_surface_inventory','class_views','related_methods','resource_references','retrieval_results','guidance','callers','callees'} for k in keys):return 'relations_navigation'
+    if any(k in {'web_surface_inventory','class_views','related_methods','resource_references','retrieval_results','guidance','callers','callees','navigation_facts','source_boundaries','caller_edges','investigation_tool_results'} for k in keys):return 'relations_navigation'
     if 'inventory' in keys:return 'inventory'
     return 'other_and_framing'
 
@@ -23,7 +23,7 @@ def pack(context):
         if any(k in PROTECTED for k in path):return
         if isinstance(v,dict):
             raw=canonical(v)
-            if path and len(raw.encode())>=256 and 'source' not in v:
+            if path and len(raw.encode())>=256:
                 counts[raw]+=1;objects[raw]=v
             for k,x in v.items():scan(x,(*path,k))
         elif isinstance(v,list):

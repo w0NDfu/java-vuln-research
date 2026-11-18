@@ -87,7 +87,8 @@ def prepare():
         'inspect_entity':{'entity_id':'exact provided Java method ID or provided resource_id','start_line':'optional integer','end_line':'optional integer','max_lines':160,'resource_byte_limit':9000,'ambiguous_identity':'refuse, never guess'},
         'search_symbols':{'query':'bounded literal string,1..160 chars'},
         'search_code':{'query':'bounded literal string,1..160 chars'},
-        'follow_graph':{'entity_id':'existing entity ID'}},
+        'follow_graph':{'entity_id':'existing entity ID'},
+        'read_file_range':{'file':'exact repository-relative path','start_line':'explicit integer','end_line':'explicit integer,at most160 lines','Java_file_evidence':'not a method identity or candidate step'}},
         'critical_questions':'B-only declared in actual Reasoning prompt; indexes refer to original requests; valid original candidates survive invalid question entries',
         'candidate_schema':'Original A1 fields plus existing mixed Java/resource exact-location adapter; no relaxed references; total/per-CWE caps null',
         'verification_schema':'Original reviews with candidate_path_id, verdict, reason, evidence_refs; unchanged'})
@@ -152,7 +153,8 @@ def detect():
     write(R/'batch-status.json',{'status':'RUNNING','order':ORDER})
     for case in ORDER:
         verify(R,'snapshot.sha256');entry=inputs['projects'][case];root=Path(entry['source_root']);assert source_hash(root)==entry['source_tree_sha256']
-        out=R/'detection'/case;out.mkdir();start=time.monotonic();journal=IdentityJournal(out/'requests.jsonl',source_identity=entry['source_tree_sha256'],max_requests=28,max_tokens=300000,max_seconds=1200,binding=f'{sha(R/"snapshot.sha256")}:{case}:{MODEL}')
+        out=R/'detection'/case;out.mkdir();start=time.monotonic();journal=IdentityJournal(out/'requests.jsonl',source_identity=entry['source_tree_sha256'],max_requests=28,max_tokens=2**60,max_seconds=1200,binding=f'{sha(R/"snapshot.sha256")}:{case}:{MODEL}')
+        journal.token_limit_disabled=True
         verification_policy=Policy(key,pp[case]['verification'],out)
         history=HistoryIndex(R/'history/history.sqlite',read_only=True)
         budget_ref=[None]
@@ -161,14 +163,14 @@ def detect():
             return HistoryFirst(history,p,send,out/'logical-work.jsonl',entry['source_tree_sha256'],guard=lambda ctx,policy:budget_ref[0].admit(ctx,policy),journal=journal)
         team=AgentTeam(**{role:role_policy(role,p) for role,p in pp[case].items()})
         base=baseline(BASE)
-        runner=build_runner(root,out,team,r12_implementation=BASE,strategy='A1',static_report=Path(entry['native_report']['file']),static_graph=Path(entry['graph_csv']['file']),limits=base.BenchmarkLimits(max_candidates=None,per_cwe=None),request_headroom=lambda:28-journal.requests,token_headroom=lambda:300000-journal.tokens)
+        runner=build_runner(root,out,team,r12_implementation=BASE,strategy='A1',static_report=Path(entry['native_report']['file']),static_graph=Path(entry['graph_csv']['file']),limits=base.BenchmarkLimits(max_candidates=None,per_cwe=None,max_focus=28),request_headroom=lambda:28-journal.requests,token_headroom=lambda:journal.max_tokens-journal.tokens)
         archive=mixed_install(runner,automatic=True,physical_requests=lambda:journal.requests)
         contract_install(runner,inputs['dependency_catalog'][case])
         questions=targeted_install(runner,SWITCHES[case],archive,chain_managed=True)
         lookup=lambda ctx,p:team.verification.preview(ctx,p)
         budget_ref[0]=BudgetAdmission(runner,archive,journal,verification_policy,lookup)
         engine=ExecutionController(runner,archive,f'{sha(R/"snapshot.sha256")}:{case}',critical=SWITCHES[case].critical_evidence_closure,budget=budget_ref[0])
-        runner.request_headroom=lambda:min(28-journal.requests,28-runner.model_calls)
+        runner.request_headroom=lambda:28-journal.requests
         core=runner.targeted_original_core
         original_class=next(c for c in type(runner).__mro__ if c.__name__=='BenchmarkRun' and Path(inspect.getsourcefile(c)).resolve()==BASE.resolve())
         assert core['original_core_object'] is original_class.explore

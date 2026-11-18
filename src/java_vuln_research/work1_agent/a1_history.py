@@ -21,6 +21,9 @@ def body_key(body,endpoint=ENDPOINT):
     users=[m['content'] for m in body.get('messages',[]) if m.get('role')=='user']
     if len(systems)!=1 or len(users)!=1:raise ValueError('Unsupported archived message structure')
     context=json.loads(users[0]);limit=body.get('max_completion_tokens',body.get('max_tokens'))
+    if '_shared_metadata' in context:
+        from context_serialization import unpack
+        context=unpack(context)
     return hashlib.sha256(json.dumps({'context':context,'system':systems[0],'model':body['model'],
         'endpoint':endpoint,'output_limit':limit},ensure_ascii=False,sort_keys=True).encode()).hexdigest()
 

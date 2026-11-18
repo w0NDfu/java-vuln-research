@@ -1,4 +1,4 @@
-# FastTrack A1
+# FastTrack R2 / recovery-01
 
 这是历史冻结源码的同步；没有在此次 GitHub 同步中重跑检测或评分。
 

@@ -16,7 +16,16 @@ REASONING_ADDENDUM = (
     "an exact contiguous substring across the indicated lines, preserving line breaks. "
     "Cite only visible source windows. Resolved resource references identify declarations and files, "
     "not value propagation. Preserve unresolved connections as uncertainties. The existing candidate "
-    "conditions, uncertainty and verdict rules apply to both location types."
+    "conditions, uncertainty and verdict rules apply to both location types. "
+    "R2 position-selection mode: a step may omit expression only when it explicitly supplies evidence_id, "
+    "method_id or resource_id, line, end_line, and role. The program extracts the exact delivered text "
+    "before calling the unchanged validator. Optional start_anchor/end_anchor are exact unique literal "
+    "substrings in the first/last selected lines for partial-line boundaries, including minified code. "
+    "Never select outside the supplied window. An expression supplied explicitly remains subject to "
+    "the original exact-text checks; it is never silently repaired. "
+    "You may also request {action:read_file_range,file,start_line,end_line} using the safe repository file reader, "
+    "with at most160 lines. Java file-level evidence has a file identity, not a method_id, and cannot be used "
+    "as a candidate step; select/read each exact method separately for method evidence."
 )
 VERIFICATION_ADDENDUM = (
     " Source evidence may identify a Java method or a non-Java resource. Review the actual supplied "
@@ -75,6 +84,35 @@ def candidate_step(step, proof, methods):
     else:
         node['entity_id'] = proof['method_id']
     return node
+
+
+def extract_selected_step(step,proof,methods):
+    """Build only an explicitly selected, already delivered range's exact text."""
+    if 'expression' in step:return dict(step)
+    first,last=step.get('line'),step.get('end_line')
+    if type(first)is not int or type(last)is not int or not proof['start_line']<=first<=last<=proof['end_line']:
+        raise ValueError('Exact line and end_line must be supplied and remain inside the delivered evidence window; obtain and select a new window explicitly.')
+    identity='resource_id' if 'resource_id' in proof else 'method_id'
+    if step.get('evidence_id')!=proof['evidence_id'] or step.get(identity)!=proof[identity]:raise ValueError('Selected evidence identity does not match the delivered window')
+    text={}
+    for row in proof['source'].split('\n'):
+        number,sep,raw=row.partition(' | ')
+        if not sep or not number.strip().isdigit() or int(number) in text:raise ValueError('Malformed delivered source record')
+        text[int(number)]=raw
+    if list(text)!=list(range(proof['start_line'],proof['end_line']+1)):raise ValueError('Delivered source record is not contiguous')
+    selected=[text[n] for n in range(first,last+1)]
+    if 'start_anchor' in step or 'end_anchor' in step:
+        left,right=step.get('start_anchor'),step.get('end_anchor')
+        if not isinstance(left,str) or not left or not isinstance(right,str) or not right:raise ValueError('Both exact position anchors must be supplied')
+        if selected[0].count(left)!=1 or selected[-1].count(right)!=1:raise ValueError('Position anchors must each occur exactly once in the chosen endpoint line')
+        start=selected[0].index(left);end=selected[-1].index(right)+len(right)
+        if first==last:
+            if start>=end:raise ValueError('Selected anchors have reversed positions')
+            selected=[selected[0][start:end]]
+        else:selected=[selected[0][start:],*selected[1:-1],selected[-1][:end]]
+    built={**step,'expression':'\n'.join(selected)}
+    candidate_step(built,proof,methods)
+    return built
 
 
 def install(runner, *, automatic, physical_requests=None, candidate_windows=None):

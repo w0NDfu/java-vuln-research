@@ -79,7 +79,8 @@ def preflight():
     assert not (e.R/'detection').exists()
     # Existing input/source/CodeQL receipts only. No query/model execution.
     e.prepare()
-    assert (e.R/'frozen-prompts.json').read_bytes()==(BASE_ROOT/'frozen-prompts.json').read_bytes()
+    new_prompts=e.read(e.R/'frozen-prompts.json');base_prompts=e.read(BASE_ROOT/'frozen-prompts.json')
+    assert all(new_prompts[key]['discovery']==base_prompts[key]['discovery'] and new_prompts[key]['verification']==base_prompts[key]['verification'] for key in e.ORDER)
     out=e.R/'preflight-context';out.mkdir(exist_ok=False);checks=[]
     class Capture(Policy):
         def __call__(self,context):
@@ -108,7 +109,7 @@ def preflight():
     packed,proof=pack(synthetic);assert packed!=synthetic and unpack(packed)==synthetic
     assert packed['source_evidence']==synthetic['source_evidence'] and packed['uncertainties']==synthetic['uncertainties']
     e.write(e.R/'context-preflight.json',{'passed':True,'model_requests':0,'actual_discovery_previews':checks,'synthetic_roundtrip':proof,
-         'prompts_byte_identical':True,'candidate_and_verification_semantics_changed':False,'no_source_truncation':True,'order_semantics_preserved':True})
+         'discovery_and_verification_prompts_byte_identical':True,'reasoning_selector_protocol_extension':True,'candidate_and_verification_semantics_changed':False,'no_source_truncation':True,'order_semantics_preserved':True})
     print(json.dumps([{'sample':v['sample'],'inventory':v['inventory_count'],'web_relations':v['web_relation_count'],'potential_removed_bytes':v['deduplication']['removed_duplicate_utf8_bytes'],'exact_history':v['history_reuse_available']} for v in checks]),flush=True)
 
 def freeze():
