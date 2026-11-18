@@ -18,7 +18,7 @@ class CooperativeScheduler:
         engine.book.event('cooperative_loop_started',ratio=[2,1],max_active_scopes=self.peer.max_scopes)
         while not self.r.stop:
             account=physical_account(self.budget.journal.path);available=self.budget.available()
-            if account['unsettled_requests']:self.stop(engine,'UNSETTLED_REQUEST');break
+            if account.get('active_unsettled_requests',account['unsettled_requests']):self.stop(engine,'UNSETTLED_REQUEST');break
             if available['available_seconds']<=0:self.stop(engine,'WALL_TIME_LIMIT');break
             if self.r.tool_calls+getattr(self.r,'evidence_service_non_reads',lambda:0)()>=self.budget.total_tools:self.stop(engine,'GLOBAL_TOOL_LIMIT');break
             engine.verify_pending()
@@ -36,6 +36,11 @@ class CooperativeScheduler:
                     engine.book.pause_task(task['task_id'],'TOOL_OR_STATE_FAILURE',{'reason':'Original complete dispatch raised; batch must stop'})
                     self.stop(engine,'TOOL_OR_STATE_ERROR');raise
                 finally:self.peer.role=old_role;self.budget.actor=old_actor
+                if self.r.stop=='REQUEST_QUARANTINED':
+                    # Original core already paused this task; this typed transport
+                    # outcome cannot mark a decision or cancel independent work.
+                    engine.book.event('transport_task_isolated',task_id=task['task_id'])
+                    self.r.stop=None
                 self.peer.publish_relevant_material();engine.verify_pending()
                 if self.peer.state.get('reliability_error'):break
             self.budget.advance(no_explorer_work=not self.explorer_has_work(engine))

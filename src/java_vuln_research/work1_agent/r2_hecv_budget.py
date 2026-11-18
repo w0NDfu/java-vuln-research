@@ -25,7 +25,7 @@ class ReservedBudget(BudgetAdmission):
         return 0 if p['ended'] else self.r2_seconds*max(0,1-progress)
     def reassessment_reserve(self,exclude=None):
         if not self.peer:return 0
-        return sum(bool(v.get('reassessment_pending')) and v['hypothesis_id']!=exclude for v in self.peer.state['issues'].values())
+        return sum(bool(v.get('reassessment_pending')) and not v.get('transport_quarantine') and v['hypothesis_id']!=exclude for v in self.peer.state['issues'].values())
     def reserved_tools(self):
         return 0 if self.protection()['ended'] else max(0,self.r2_tools-(self.r.tool_calls-self.investigator_tools))
     def investigator_tool_available(self,hid=None):

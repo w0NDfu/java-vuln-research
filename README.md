@@ -1,21 +1,44 @@
-# FastTrack 最新开发版（范围拒绝回流修复）
+# FastTrack latest repair source
 
-这是主线程当前源码的稳定复制。范围拒绝回流修复正在开发，尚未将该快照认定为回归或三例重跑通过；不包含任何检测成绩主张。
+This branch contains the frozen `82533 failure-01` source snapshot, including
+range-refusal feedback and request failure settlement/recovery changes.
+The original A1 core is preserved byte for byte.
 
-源码身份、文件哈希及发布状态见 [SOURCE_VERSION.json](SOURCE_VERSION.json) 和 [SOURCE_SHA256SUMS](SOURCE_SHA256SUMS)。原 A1 核心 SHA-256 为 `f4bb22a4457742b99ae08ade40c079165ecc75aed8fb0cb483d1a529b7890034`；三个版本的适配层不同，不能仅凭核心哈希认作同一版本。
+Source identities and hashes are in [SOURCE_VERSION.json](SOURCE_VERSION.json)
+and [SOURCE_SHA256SUMS](SOURCE_SHA256SUMS). Publication hashes are in
+[PUBLISHED_SHA256SUMS](PUBLISHED_SHA256SUMS).
 
-## 开发与入口
+## Validation
 
-需要 Python 3.10+。开发依赖：
+This publication ran scoped offline production-boundary tests on Windows:
+**106 passed; 2 failed because Windows does not provide `signal.SIGALRM`.**
+Both failures occurred in the Linux production entry point's wall-time guard.
+All 185 Python source files parsed successfully. See
+[SYNC_VALIDATION.json](SYNC_VALIDATION.json) for the exact scope and limitations.
+These are TEST ONLY engineering checks; this sync made no model requests,
+performed no detection reruns, and makes no new detection or score claim.
+
+## Running
+
+Use Python 3.10+ in the authorized Linux laboratory environment.
+Install dependencies with `python -m pip install -e ".[test,agentic]"`.
+The entry point is:
 
 ```sh
-python -m pip install -e ".[test,agentic]"
+python -m java_vuln_research.work1_agent.r2_hecv_run --help
 ```
 
-生产入口：`python -m java_vuln_research.work1_agent.r2_hecv_run --help`。正式检测仍须由实验室提供同版本源码身份、静态事实、依赖材料、预算和模型配置。
+Actual detection requires matching source, static-analysis receipts, dependency
+contracts, history, configuration and declared budgets from the experiment
+operator. They are not reconstructed by this source-only publication.
+Credentials, benchmark data, databases, request caches, raw requests/responses
+and experiment outputs remain outside this branch. In-progress 82534 changes
+are not included in this frozen source identity.
 
-同步仅包含项目源码、查询、Schema、合成测试及必要适配器，不包含模型凭据、数据库、请求缓存或原始实验输出。运行资料与历史证据保留在实验室，不因源码发布被认定为已重新验证。
+## Branches
 
-## 分支
-
-固定维护 [a1](https://github.com/w0NDfu/java-vuln-research/tree/a1)、[r2](https://github.com/w0NDfu/java-vuln-research/tree/r2)、[latest](https://github.com/w0NDfu/java-vuln-research/tree/latest)。后续直接更新这三个分支，不再新建同步分支，详见 [BRANCH_POLICY.md](BRANCH_POLICY.md)。
+Historical [a1](https://github.com/w0NDfu/java-vuln-research/tree/a1) and
+[r2](https://github.com/w0NDfu/java-vuln-research/tree/r2) are unchanged.
+Current repair source is published directly to
+[latest](https://github.com/w0NDfu/java-vuln-research/tree/latest).
+See [BRANCH_POLICY.md](BRANCH_POLICY.md).

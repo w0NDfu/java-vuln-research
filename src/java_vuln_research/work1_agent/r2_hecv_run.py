@@ -146,6 +146,7 @@ def build(args,team,investigator,journal,history,policies,holder):
     admission=ReservedBudget(r,archive,journal,policies['verification'],lambda c,p:team.verification.preview(c,p));holder['budget']=admission
     engine=ExecutionController(r,archive,args.binding,critical=True,budget=admission)
     mechanism_install(engine,json.loads(Path(args.dependency_catalog).read_bytes()))
+    if getattr(args,'source_cache',None):r.source_cache=json.loads(Path(args.source_cache).read_bytes())
     peer=PeerController(engine,investigator,source_id=args.source_identity,max_scopes=active_scopes(args));holder['peer']=peer
     holder['recovery']=ResponseRecovery(out,args.source_identity,journal,peer)
     engine.cooperative_scheduler=CooperativeScheduler(peer)
@@ -155,7 +156,8 @@ def run(args):
     out=Path(args.output);core=Path(args.core);token=os.environ.get('WORK1_AGENT_API_KEY')
     if not token:raise ValueError('Authorized credential missing')
     binding={'source_identity':args.source_identity,'binding':args.binding,'model':args.model,'core_sha256':hashlib.sha256(core.read_bytes()).hexdigest(),'static_report_sha256':hashlib.sha256(Path(args.static_report).read_bytes()).hexdigest(),'static_graph_sha256':hashlib.sha256(Path(args.static_graph).read_bytes()).hexdigest(),'dependency_catalog_sha256':hashlib.sha256(Path(args.dependency_catalog).read_bytes()).hexdigest(),'prompts':published(core),'max_requests':args.max_requests,'max_tools':args.max_tools,'max_seconds':args.max_seconds,'max_active_scopes':active_scopes(args),'dispatch_ratio':[2,1],'material_signature_version':'MATERIAL_V1','code_manifest_sha256':getattr(args,'code_manifest_sha256',None)}
-    binding['closed_loop_modules']={name:hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest() for name in ['r2_hecv.py','r2_hecv_run.py','r2_hecv_services.py','r2_hecv_budget.py','r2_hecv_coordination.py','a1_execution.py']}
+    binding['source_cache_sha256']=hashlib.sha256(Path(args.source_cache).read_bytes()).hexdigest() if getattr(args,'source_cache',None) else None
+    binding['closed_loop_modules']={name:hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest() for name in ['r2_hecv.py','r2_hecv_run.py','r2_hecv_services.py','r2_hecv_budget.py','r2_hecv_coordination.py','a1_execution.py','a1_history.py','a1_verification_budget.py','r2_hecv_recovery.py','request_outcomes.py']}
     if getattr(args,'resume',False):
         if not out.is_dir() or not (out/'RUN_INPUT_BINDING.json').is_file() or json.loads((out/'RUN_INPUT_BINDING.json').read_bytes())!=binding:raise ValueError('RECOVERY_BLOCKED: run input/configuration binding mismatch')
     else:
@@ -191,11 +193,12 @@ def run(args):
     atomic(out/'unfinished-tasks.json',{'Explorer':unresolved,'Investigator':{k:v for k,v in peer.state['issues'].items() if v['status'] in {'NEW','NEEDS_EVIDENCE','NEEDS_REASSESSMENT'} or v['status'].startswith('PAUSE')}})
     unreviewed=sorted(set(r.candidates)-set(r.reviews));stop=r.stop or r.last_error or (summary or {}).get('stop_reason')
     actual=getattr(e,'actual_stop_trigger',None) or ('WALL_TIME_LIMIT' if error and error['type']=='TimeoutError' else 'TOOL_OR_STATE_ERROR' if error else 'UNSETTLED_REQUEST' if account['unsettled_requests'] else 'MODEL_OR_PROTOCOL_ERROR' if peer.state.get('reliability_error') else stop)
-    if account['unsettled_requests']:actual='UNSETTLED_REQUEST'
+    if account.get('active_unsettled_requests',account['unsettled_requests']):actual='UNSETTLED_REQUEST'
     fault=actual in {'MODEL_OR_PROTOCOL_ERROR','TOOL_OR_STATE_ERROR','UNSETTLED_REQUEST'}
-    closed=(not error or error['type']=='TimeoutError') and not fault and not account['unsettled_requests'] and not unreviewed
-    result={'status':'CLOSED_BOUNDED_PARTIAL' if closed and unresolved else 'CLOSED' if closed else 'INCOMPLETE_ERROR_OR_UNSETTLED','error':error,'summary':summary,'physical_account':account,'new_provider_usage':usage,'currency_cost':'UNKNOWN','stop_reason':stop,'candidates':len(r.candidates),'reviews':len(r.reviews),'unreviewed_candidates':unreviewed,'unfinished_Explorer_tasks':len(unresolved),'strict_semantic_confirmation':0,'partial_is_not_complete_negative':True,'historical_candidate_injection':False,'R3_as_base':False}
-    result.update(execution_status='FAULT' if fault or error and error['type']!='TimeoutError' else 'UNSETTLED' if account['unsettled_requests'] else 'NORMAL_BOUNDED_END',coverage_status='SYSTEM_FAULT_INTERRUPTED' if fault or error and error['type']!='TimeoutError' else 'BUDGET_TRUNCATED' if actual in {'GLOBAL_REQUEST_LIMIT','GLOBAL_TOOL_LIMIT','WALL_TIME_LIMIT','PENDING_VERIFICATION_RESERVE'} or e.cooperative_scheduler.explorer_has_work(e) or peer.has_work() else 'UNRESOLVED_WITHOUT_EXECUTABLE_GAP' if unresolved else 'RUNNABLE_WORK_EXHAUSTED',actual_stop_trigger=actual,actual_stop_snapshot=e.book.state.get('cooperative_actual_stop',{}).get('snapshot'),Investigator_reliability_error=peer.state.get('reliability_error'))
+    quarantined=bool(account.get('quarantined_requests') or account.get('historical_quarantined_requests'))
+    closed=(not error or error['type']=='TimeoutError') and not fault and not account.get('active_unsettled_requests',account['unsettled_requests']) and not unreviewed
+    result={'status':'CLOSED_BOUNDED_PARTIAL' if closed and (unresolved or quarantined) else 'CLOSED' if closed else 'INCOMPLETE_ERROR_OR_UNSETTLED','error':error,'summary':summary,'physical_account':account,'new_provider_usage':usage,'currency_cost':'UNKNOWN','stop_reason':stop,'candidates':len(r.candidates),'reviews':len(r.reviews),'unreviewed_candidates':unreviewed,'unfinished_Explorer_tasks':len(unresolved),'strict_semantic_confirmation':0,'partial_is_not_complete_negative':True,'historical_candidate_injection':False,'R3_as_base':False}
+    result.update(execution_status='FAULT' if fault or error and error['type']!='TimeoutError' else 'UNSETTLED' if account.get('active_unsettled_requests',account['unsettled_requests']) else 'NORMAL_BOUNDED_END',coverage_status='TRANSPORT_QUARANTINED_PARTIAL' if quarantined and not fault and not error else 'SYSTEM_FAULT_INTERRUPTED' if fault or error and error['type']!='TimeoutError' else 'BUDGET_TRUNCATED' if actual in {'GLOBAL_REQUEST_LIMIT','GLOBAL_TOOL_LIMIT','WALL_TIME_LIMIT','PENDING_VERIFICATION_RESERVE'} or e.cooperative_scheduler.explorer_has_work(e) or peer.has_work() else 'UNRESOLVED_WITHOUT_EXECUTABLE_GAP' if unresolved else 'RUNNABLE_WORK_EXHAUSTED',actual_stop_trigger=actual,actual_stop_snapshot=e.book.state.get('cooperative_actual_stop',{}).get('snapshot'),Investigator_reliability_error=peer.state.get('reliability_error'))
     atomic(out/'RUN_RESULT.json',result)
     files=[p for p in out.rglob('*') if p.is_file() and p.name!='SHA256SUMS'];(out/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(out).as_posix()+'\n' for p in sorted(files)))
     return result
@@ -203,6 +206,6 @@ def run(args):
 if __name__=='__main__':
     p=argparse.ArgumentParser()
     for name in ['repository','output','core','source-identity','history','binding','static-report','static-graph','dependency-catalog']:p.add_argument('--'+name,required=True)
-    p.add_argument('--resume',action='store_true');scope=p.add_mutually_exclusive_group();scope.add_argument('--max-active-scopes',type=int,default=4);scope.add_argument('--max-scopes',type=int,default=None,help='Deprecated alias: active root window, not project lifetime scope cap');p.add_argument('--code-manifest-sha256')
+    p.add_argument('--source-cache');p.add_argument('--resume',action='store_true');scope=p.add_mutually_exclusive_group();scope.add_argument('--max-active-scopes',type=int,default=4);scope.add_argument('--max-scopes',type=int,default=None,help='Deprecated alias: active root window, not project lifetime scope cap');p.add_argument('--code-manifest-sha256')
     p.add_argument('--model',default='gpt-6.1-sol');p.add_argument('--max-requests',type=int,default=128);p.add_argument('--max-tools',type=int,default=1024);p.add_argument('--max-seconds',type=int,default=7200)
     print(json.dumps(run(p.parse_args()),ensure_ascii=False),flush=True)

@@ -3,6 +3,7 @@ from pathlib import Path
 from collections import defaultdict,Counter,deque
 import hashlib,json,os,sqlite3,time,tarfile
 from .harness import ModelTurn,PolicyError
+from .request_outcomes import RequestQuarantined,transport_failure
 from .experiment_policy import RequestJournal,request_reserve,BudgetExceeded
 
 ENDPOINT='https://api.openlux.ai/v1/chat/completions'
@@ -171,6 +172,25 @@ class IdentityJournal(RequestJournal):
     def identity(self,context,policy):
         body=policy.request_body(context);effective=getattr(policy,'tool_schema',None) or schema(body)
         return hashed({'legacy_key':legacy_key(context,policy),'body':body,'effective_schema':effective,'source_identity':self.source_identity,'endpoint':policy.endpoint})
+    def failure(self,key,details):
+        allowed={'outcome','http_status','provider_request_id','cause_type','error_type','elapsed_seconds','usage_status','currency_cost','automatic_retry_allowed','recovery_reason'}
+        if set(details)-allowed or details.get('outcome') not in {'FAILED_HTTP','UNKNOWN_QUARANTINED'}:raise PolicyError('Invalid failure receipt fields')
+        status=details.get('http_status')
+        if details['outcome']=='FAILED_HTTP' and not (type(status)is int and 400<=status<=599):raise PolicyError('Terminal HTTP failure needs an observed failure status')
+        if details.get('usage_status')!='UNKNOWN' or details.get('currency_cost')!='UNKNOWN' or details.get('automatic_retry_allowed') is not False:raise PolicyError('Failure receipt cannot invent usage, charges, or retries')
+        rows=[json.loads(x) for x in self.path.read_bytes().splitlines()] if self.path.exists() else []
+        if key in self.responses:return False
+        starts=[x for x in rows if x.get('event')=='request_started' and x.get('request_key')==key]
+        if len(starts)!=1:raise PolicyError('Failure settlement requires one exact physical start')
+        existing=[x for x in rows if x.get('event')=='request_outcome' and x.get('request_key')==key]
+        if existing:return False
+        start=starts[0]
+        self.append({'event':'request_outcome',**{k:v for k,v in start.items() if k not in {'event','binding','created_at'}},**details,'observed_at':time.time(),'model_content_available':False})
+        return True
+    def quarantine_historical(self,key,body,reason,origin):
+        rows=[json.loads(x) for x in self.path.read_bytes().splitlines()] if self.path.exists() else []
+        if any(x.get('event')=='historical_request_quarantined' and x.get('request_key')==key for x in rows):return
+        self.append({'event':'historical_request_quarantined','request_key':key,'body_sha256':hashed(body),'source_identity':self.source_identity,'reason':reason,'origin':origin,'new_physical_requests':0,'usage_status':'HISTORICAL_UNKNOWN_NOT_NEW_COST'})
     def preview(self,context,policy):
         key=self.identity(context,policy);r=self.responses.get(key)
         if not r:return None
@@ -182,14 +202,20 @@ class IdentityJournal(RequestJournal):
             if cached:return ModelTurn(cached['content'],cached['usage'],cached['metadata'])
             existing=[]
             if self.path.exists():existing=[json.loads(l) for l in self.path.read_bytes().splitlines()]
-            if any(r.get('event')=='request_started' and r.get('request_key')==key for r in existing):raise PolicyError('PREVIOUS_PHYSICAL_OUTCOME_UNSETTLED; no automatic physical resend')
+            if any(r.get('event')=='request_started' and r.get('request_key')==key for r in existing):raise RequestQuarantined('PREVIOUS_PHYSICAL_OUTCOME_UNSETTLED; no automatic physical resend',request_key=key)
             reserve,method=request_reserve(context,policy)
             if self.requests>=self.max_requests or self.tokens+reserve>self.max_tokens or time.time()-self.created_at>=self.max_seconds:raise BudgetExceeded('Current physical budget exhausted')
             body=policy.request_body(context);common={'request_key':key,'legacy_request_key':legacy_key(context,policy),'role':context['role'],'model':policy.model,'source_identity':self.source_identity,'body_sha256':hashed(body),'schema_sha256':hashed(getattr(policy,'tool_schema',None) or schema(body))}
             self.append({'event':'request_started',**common,'reserved_tokens':reserve,'reserve_method':method})
             self.requests+=1;self.tokens+=reserve
             if hasattr(policy,'deadline'):policy.deadline=time.monotonic()+max(0,self.max_seconds-(time.time()-self.created_at))
-            turn=policy(context);n=turn.usage.get('total_tokens');charged=n if type(n)is int and n>=0 else reserve
+            try:turn=policy(context)
+            except PolicyError as error:
+                details=transport_failure(error)
+                if details is None:raise
+                self.failure(key,details)
+                raise RequestQuarantined('Physical request isolated: '+details['outcome'],request_key=key,outcome=details['outcome']) from error
+            n=turn.usage.get('total_tokens');charged=n if type(n)is int and n>=0 else reserve
             row={'event':'response',**common,'reserved_tokens':reserve,'charged_tokens':charged,'content':turn.content,'usage':dict(turn.usage),'metadata':dict(turn.metadata)}
             self.append(row);self.tokens+=charged-reserve;self.responses[key]={'binding':self.binding,'created_at':self.created_at,**row};return turn
         return send
@@ -212,7 +238,9 @@ class HistoryFirst:
             self.append({'event':'logical_response_reused','request_key':key,'body_sha256':hashed(body),'source_identity':self.source_identity,'original_physical_receipt':cached['origin'],'logical_usage':cached['usage'],'new_physical_requests':0,'new_reported_tokens':0,'new_currency_cost':0})
             return ModelTurn(cached['content'],cached['usage'],{**cached['metadata'],'history_reused':True,'original_physical_receipt':cached['origin'],'new_physical_requests':0})
         unknown=self.index.unresolved(key)
-        if unknown:raise PolicyError('HISTORICAL_IDENTITY_NOT_RECONSTRUCTABLE: '+unknown[0]+'; no physical resend allowed.')
+        if unknown:
+            if self.journal is not None:self.journal.quarantine_historical(key,body,unknown[0],unknown[1])
+            raise RequestQuarantined('HISTORICAL_IDENTITY_NOT_RECONSTRUCTABLE: '+unknown[0]+'; no physical resend allowed.',request_key=key,origin=unknown[1])
         if self.guard:self.guard(context,self.policy)
         turn=self.physical_send(context)
         receipt=self.journal.preview(context,self.policy) if self.journal is not None else None

@@ -72,7 +72,13 @@ class ResponseRecovery:
                 row['status']='RECOVERED_OR_ALREADY_SETTLED'
             except Exception as exc:row.update(status='RECOVERY_BLOCKED',reason=type(exc).__name__+': '+str(exc))
             result.append(row)
-        atomic(self.root/'RESPONSE_DELIVERY_RECOVERY_AUDIT.json',{'model_requests':0,'records':result,'events':self.store.audit()})
+        # A missing response never becomes success. Isolate abandoned physical
+        # starts only after exact successful envelopes have had their recovery chance.
+        rows=[json.loads(x) for x in self.journal.path.read_bytes().splitlines()] if self.journal.path.exists() else []
+        for start in rows:
+            if start.get('event')!='request_started' or start['request_key'] in self.journal.responses:continue
+            self.journal.failure(start['request_key'],{'outcome':'UNKNOWN_QUARANTINED','usage_status':'UNKNOWN','currency_cost':'UNKNOWN','automatic_retry_allowed':False,'recovery_reason':'NO_EXACT_SUCCESS_RECEIPT'})
+        atomic(self.root/'RESPONSE_DELIVERY_RECOVERY_AUDIT.json' ,{'model_requests':0,'records':result,'events':self.store.audit()})
         return result
 
 def require_complete_protocol(turn):

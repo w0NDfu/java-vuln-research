@@ -2,6 +2,7 @@
 from pathlib import Path
 import copy,json
 from .a1_execution import atomic
+from .request_outcomes import RequestQuarantined
 from .benchmark import digest
 from .a1_resource_evidence import extract_selected_step,candidate_step
 from .hecv_protocol import _A1_PROMOTE_INSTRUCTIONS,_hypothesis_seed,_ids,_MAX_HYPOTHESES
@@ -125,6 +126,10 @@ class PeerController:
         return digest(['MATERIAL_V1',self.source_id,issue['hypothesis_id'],issue.get('question'),issue.get('mechanism'),issue.get('mechanism_identity'),issue.get('relation_identity'),proofs,results,issue.get('counter',[]),issue.get('unknowns',[]),issue.get('candidate_feedback',{}),issue.get('protocol_feedback') if protocol else None])
     def issue_runnable(self,issue):
         if issue.get('status')=='MERGED':return False
+        if issue.get('transport_quarantine'):
+            context=issue.get('pending_context_json')
+            # An exact persisted success may later unblock this same context.
+            return bool(context and hasattr(self.policy,'preview') and self.policy.preview(json.loads(context)))
         if issue.get('pending_context_json') or issue.get('pending_gaps'):return True
         sig=self.material_signature(issue)
         return not issue.get('bootstrapped') or (sig!=issue.get('last_judged_material_signature') and sig not in issue.get('blocked_material_signatures',[]))
@@ -270,6 +275,7 @@ class PeerController:
         old_role=self.role;old_actor=self.e.budget.actor;old_hid=getattr(self.e.budget,'current_hypothesis_id',None);self.e.budget.current_hypothesis_id=hid;self.role=self.e.budget.actor='investigator'
         try:
             turn=self.policy(ctx);value=json.loads(turn.content)
+            issue.pop('transport_quarantine',None)
             if not isinstance(value,dict) or not value or turn.metadata.get('finish_reason')=='length':raise ServiceError('Invalid Investigator protocol; original response retained')
             candidate_errors=[]
             for d in [*value.get('candidates',[]),*([value['candidate']] if isinstance(value.get('candidate'),dict) else [])]:
@@ -299,6 +305,9 @@ class PeerController:
             self.save();return True
         except Exception as exc:
             from .experiment_policy import VerificationReserve
+            if isinstance(exc,RequestQuarantined):
+                issue.update(status='PAUSED',reassessment_pending=False,last_pause_reason='REQUEST_QUARANTINED',transport_quarantine={'request_key':exc.request_key,'outcome':exc.outcome,'origin':exc.origin})
+                self.log('INVESTIGATOR_REQUEST_QUARANTINED',hypothesis_id=hid,**issue['transport_quarantine']);self.save();return False
             if isinstance(exc,VerificationReserve):issue.update(status='PAUSED',last_pause_reason='RESERVED_CAPACITY');self.save();return False
             issue.update(status='PAUSED',error=type(exc).__name__+': '+str(exc));self.state['reliability_error']={'trigger':'MODEL_OR_PROTOCOL_ERROR','hypothesis_id':hid,'error':issue['error']};self.log('INVESTIGATOR_FAILED_ISOLATED',**self.state['reliability_error']);self.save();return False
         finally:self.role=old_role;self.e.budget.actor=old_actor;self.e.budget.current_hypothesis_id=old_hid

@@ -173,13 +173,23 @@ def test_empty_truncation_not_valid_decision(content,finish):
 def test_reserved_r2_and_verification(env):
     budget=env.holder['budget'];assert budget.reserved_r2()==28
     env.journal.max_requests=28
-    with pytest.raises(Exception,match='protected R2'):budget.admit({'role':'investigator'},env.policies['investigator'])
+    with pytest.raises(Exception,match='INVESTIGATOR_PAUSED: R2'):budget.admit({'role':'investigator'},env.policies['investigator'])
     assert budget.reserved_r2()==28
 
 def test_scope_scheduler_independent_of_explorer(env):
     assert env.r.model_calls==0
     scopes=env.peer.initialize_scopes();assert scopes and env.r.model_calls==0
     assert all(s['related_facts']['evidence_level']=='STATIC_NAVIGATION_NOT_VALUE_PROPAGATION' for s in scopes)
+
+def run_current_scope_steps(env,steps):
+    """82533 is one decision per slice; finish only already admitted questions."""
+    env.peer.run_independent()
+    for _ in range(steps-1):
+        issue=next((v for v in env.peer.state['issues'].values() if env.peer.issue_runnable(v)),None)
+        if issue is None:break
+        scope=next(v for v in env.peer.state['scopes'] if v['scope_id']==issue['scope_id'])
+        env.peer.investigate(scope,issue['hypothesis_id'])
+
 
 def test_independent_scope_model_gap_and_candidate_closes_through_original_review(env):
     """No Explorer model lead: the actual Peer scheduler drives all I operations."""
@@ -192,7 +202,7 @@ def test_independent_scope_model_gap_and_candidate_closes_through_original_revie
         else:value={'action':'PROMOTE','reason':'Synthetic original-adapter wiring only','evidence_ids':[p['evidence_id']],'candidates':[draft(p)],'unknowns':['TEST ONLY: no impact claim.']}
         return ModelTurn(json.dumps(value),{'total_tokens':1},{'finish_reason':'stop','test_only':True})
     env.peer.policy=investigator;env.peer.max_scopes=1
-    env.peer.run_independent()
+    run_current_scope_steps(env,2)
     assert len(calls)==2 and not env.r.stop and env.r.model_calls==0
     assert env.r.candidates and all(p['roles']==['investigator'] for p in env.peer.state['candidate_provenance'].values())
     def verification(ctx):
@@ -230,6 +240,7 @@ def test_r2_reference_behavior_matches_repaired_explorer(env,tmp_path):
     env.r.team=AgentTeam(*(model(1,env.r) for _ in range(3)))
     # Both run the unchanged R2 dispatcher. Disable candidate work in this trace;
     # original candidate+Verification are exercised independently above.
+    env.e.cooperative_scheduler=None  # Reference parity excludes the optional dual-role scheduler.
     before=original.run();after=env.r.run()
     def projection(rows):
         return [{'role':v['role'],'focus':v.get('focus'),'source_evidence':v.get('source_evidence'),'supported_cwes':v.get('supported_cwes'),'retrieval_results':v.get('retrieval_results')} for v in rows]
@@ -299,7 +310,7 @@ def test_split_preserves_evidence_counter_unknowns_and_children_are_executed(env
             value={'action':'SPLIT','reason':'Two different source-visible consumer questions','evidence_ids':[eid],'counterevidence_ids':[eid],'unknowns':['Caller still unknown.'],'children':children}
         else:value={'action':'RETAIN','reason':'TEST ONLY child analysis completed','evidence_ids':[eid]}
         return ModelTurn(json.dumps(value),{}, {'finish_reason':'stop','test_only':True})
-    env.peer.policy=investigate;env.peer.run_independent()
+    env.peer.policy=investigate;run_current_scope_steps(env,3)
     assert len(seen)==3 and len(env.peer.state['issues'])==3
     parent=next(i for i in env.peer.state['issues'].values() if i.get('children'))
     for hid in parent['children']:
@@ -326,9 +337,9 @@ def test_pending_verification_and_tool_allowance_are_reserved_before_investigato
     p=proof(env);deliver(env,p,'investigator');cid=env.peer.submit(draft(p),'investigator',{'hypothesis_id':'reserve'})
     budget=env.holder['budget'];assert budget.plan()['held_requests']==1
     env.journal.max_requests=29
-    with pytest.raises(Exception,match='protected R2'):budget.admit({'role':'investigator'},env.policies['investigator'])
+    with pytest.raises(Exception,match='INVESTIGATOR_PAUSED: R2'):budget.admit({'role':'investigator'},env.policies['investigator'])
     assert cid in env.r.candidates and budget.reserved_r2()==28
-    env.r.tool_limit=128;assert not budget.investigator_tool_available()
+    env.r.tool_limit=budget.total_tools=128;assert not budget.investigator_tool_available()
 
 def test_unsettled_tool_is_recovery_blocked_without_physical_retry(env):
     from java_vuln_research.work1_agent.benchmark import digest
@@ -419,14 +430,15 @@ def test_search_navigation_is_delivered_before_followup_source_selection(env):
         calls.append(copy.deepcopy(ctx));assert not env.peer.validate_delivery('investigator',ctx,{'mode':'TEST_ONLY_HTTP','turn':len(calls)})
         if len(calls)==1:value=gap_value(ctx,[{'action':'search_symbols','query':'other'}])
         elif len(calls)==2:
-            hits=ctx['retrieval_results'][0]['original_result']['hits'];assert hits
+            search=next(v for v in ctx['retrieval_results'] if v['normalized_action']['action']=='search_symbols')
+            hits=search['original_result']['hits'];assert hits
             eid=hits[0]['entity']['entity_id'];assert eid in env.r.methods
             value=gap_value(ctx,[{'tool':'inspect_entity','arguments':{'entity_id':eid}}])
         else:
             assert any('return text' in p['source'] for p in ctx['source_evidence'])
             value={'action':'RETAIN','reason':'TEST ONLY source followed from actual search facts','evidence_ids':[p['evidence_id'] for p in ctx['source_evidence']]}
         return ModelTurn(json.dumps(value),{}, {'finish_reason':'stop','test_only':True})
-    env.peer.policy=policy;env.peer.run_independent()
+    env.peer.policy=policy;run_current_scope_steps(env,3)
     assert len(calls)==3 and next(iter(env.peer.state['issues'].values()))['status']=='DECIDED'
     records=env.peer.service.state['requests'];search=next(v for v in records.values() if v.get('result',{}).get('normalized_action',{}).get('action')=='search_symbols')
     assert search['delivered_to']['investigator']
@@ -441,9 +453,9 @@ def test_invalid_tool_gets_one_bounded_model_correction_without_implicit_transla
             value=gap_value(ctx,[{'action':'read_file_range','file':'F.java','start_line':7,'end_line':7}])
         else:value={'action':'RETAIN','reason':'TEST ONLY corrected request returned real source','evidence_ids':[p['evidence_id'] for p in ctx['source_evidence']]}
         return ModelTurn(json.dumps(value),{}, {'finish_reason':'stop','test_only':True})
-    env.peer.policy=policy;env.peer.run_independent();issue=next(iter(env.peer.state['issues'].values()))
+    env.peer.policy=policy;run_current_scope_steps(env,3);issue=next(iter(env.peer.state['issues'].values()))
     assert len(calls)==3 and issue['status']=='DECIDED' and not issue.get('error') and len(issue['protocol_rejections'])==1
-    before=env.r.tool_calls;env.peer.run_independent();assert len(calls)==3 and env.r.tool_calls==before
+    before=env.r.tool_calls;scope=next(v for v in env.peer.state['scopes'] if v['scope_id']==issue['scope_id']);env.peer.investigate(scope,issue['hypothesis_id']);assert len(calls)==3 and env.r.tool_calls==before
     assert all(v.get('result',{}).get('normalized_action',{}).get('action')!='retrieve_source' for v in env.peer.service.state['requests'].values())
 
 def test_unchanged_invalid_tool_does_not_loop_or_become_valid_decision(env):
@@ -451,9 +463,9 @@ def test_unchanged_invalid_tool_does_not_loop_or_become_valid_decision(env):
     def policy(ctx):
         calls.append(ctx);env.peer.validate_delivery('investigator',ctx,{'mode':'TEST_ONLY_HTTP'})
         return ModelTurn(json.dumps(gap_value(ctx,[{'action':'retrieve_source','arguments':{'file':'F.java'}}])),{}, {'finish_reason':'stop','test_only':True})
-    env.peer.policy=policy;env.peer.run_independent();issue=next(iter(env.peer.state['issues'].values()))
-    assert len(calls)==2 and issue['status']=='PAUSED' and issue['pause_reason']=='BOUNDED_PROTOCOL_REPAIR_EXHAUSTED'
-    before=env.r.tool_calls;env.peer.run_independent();assert len(calls)==2 and env.r.tool_calls==before
+    env.peer.policy=policy;run_current_scope_steps(env,3);issue=next(iter(env.peer.state['issues'].values()))
+    assert len(calls)==2 and issue['status']=='PAUSED' and issue['last_pause_reason']=='BOUNDED_PROTOCOL_REPAIR_EXHAUSTED'
+    before=env.r.tool_calls;scope=next(v for v in env.peer.state['scopes'] if v['scope_id']==issue['scope_id']);env.peer.investigate(scope,issue['hypothesis_id']);assert len(calls)==2 and env.r.tool_calls==before
 
 def test_existing_resource_window_is_reused_without_reader_or_file_text_access(env,monkeypatch):
     resource=env.r.request({'action':'read_file_range','file':'view.js','start_line':1,'end_line':2});before=env.r.tool_calls

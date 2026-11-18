@@ -10,17 +10,9 @@ def original_context(candidates,evidence):
             'candidates':candidates,'source_evidence':[{**evidence[r],'source':source_safe(evidence[r]['source'])} for r in sorted(refs)]}
 
 def physical_account(path):
-    pending=defaultdict(deque);reported=0;count=0;unknown=[]
-    for raw in path.read_bytes().splitlines() if path.exists() else []:
-        r=json.loads(raw);key=r.get('request_key')
-        if r.get('event')=='request_started':pending[key].append(r['reserved_tokens']);count+=1
-        elif r.get('event')=='response' and pending[key]:
-            held=pending[key].popleft();n=r.get('usage',{}).get('total_tokens')
-            if type(n)is int and n>=0:reported+=n
-            else:unknown.append(held)
-    unsettled=sum(sum(v) for v in pending.values())+sum(unknown)
-    return {'physical_requests':count,'reported_tokens':reported,'unsettled_reserved_tokens':unsettled,
-            'unsettled_requests':sum(len(v) for v in pending.values())+len(unknown)}
+    from .request_outcomes import accounting
+    return accounting(path)
+
 
 def reservation(runner,archive,context,verification_policy,lookup=None,candidates=None,reviews=None):
     evidence={**runner.evidence,**archive};candidates=runner.candidates if candidates is None else candidates;reviews=runner.reviews if reviews is None else reviews

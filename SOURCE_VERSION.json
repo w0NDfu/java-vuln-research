@@ -1,15 +1,18 @@
 {
   "branch": "latest",
-  "label": "FastTrack 最新开发版（范围拒绝回流修复）",
-  "source": "F:\\ForGithub\\java-vuln-research\\.codex-transfer\\fasttrack-r2-hecv-82533-range-01-20261118",
-  "state": "DEVELOPMENT_SNAPSHOT_NOT_YET_ACCEPTED",
-  "captured_UTC": "2026-11-18T09:22:59.643993+00:00",
-  "source_snapshot_sha256": "1043bf9c29f4dee6e5d96e43bbf74ccfe9c3e6fa13e989d60cbe7eada6f5d137",
-  "historical_manifest_sha256": null,
+  "label": "FastTrack latest repair source: 82533 failure-01",
+  "source_revision": "fasttrack-r2-hecv-82533-failure-01-20261118",
+  "state": "FROZEN_REPAIR_SOURCE_SNAPSHOT_WINDOWS_REGRESSION_PARTIAL",
+  "captured_UTC": "2026-11-18T15:12:47.252288+00:00",
+  "source_snapshot_sha256": "e6c2fb6b71c56c56652971bea15c40fdee17e816704594da7fa2be763f46fd3e",
+  "historical_manifest_sha256": "db74ef0dd120281957930f88521ec54dca682a238a96a2214f46bb54cddbbebd",
   "A1_core_sha256": "f4bb22a4457742b99ae08ade40c079165ecc75aed8fb0cb483d1a529b7890034",
-  "source_files": 265,
-  "syntax_checked_Python_files": 183,
-  "validation": "AST_PARSE_ONLY; no model calls or new detector experiments in this GitHub sync",
+  "source_files": 267,
+  "syntax_checked_Python_files": 185,
+  "validation": "106 scoped offline tests passed; 2 Windows SIGALRM failures; see SYNC_VALIDATION.json",
+  "source_identity_semantics": "SOURCE_SHA256SUMS covers runtime source plus context_serialization.py; the historical freeze also includes private run configuration/history artifacts, which are not published",
   "generated_caches_and_egg_info_excluded": true,
-  "original_working_tree_untouched": true
+  "original_working_tree_untouched": true,
+  "previous_remote_commit": "b9989108b1e02dacf9661a07e0ee445fecf688c9",
+  "82534_work_in_progress_not_included": true
 }

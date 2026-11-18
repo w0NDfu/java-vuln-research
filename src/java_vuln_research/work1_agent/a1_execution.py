@@ -214,8 +214,11 @@ class ExecutionController:
             self.context=context
         value=self.old_ask(role,context)
         self.origin={'role':role,'request_context':self.book.record(context),'response':self.book.record(value)}
+        if self.r.stop=='REQUEST_QUARANTINED':
+            if self.current:self.book.stage(self.current['task_id'],'model_request_quarantined',role=role)
+            return value
         if role=='reasoning' and self.current:
-            self.book.stage(self.current['task_id'],'subsequent_decision',raw_response=value,model_origin=self.origin)
+            self.book.stage(self.current['task_id'],'subsequent_decision' ,raw_response=value,model_origin=self.origin)
             self.current['last_response']=self.book.record(value)
             actions=value.get('requests',[])[:4]
             if self.critical:

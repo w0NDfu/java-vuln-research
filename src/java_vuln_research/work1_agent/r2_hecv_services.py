@@ -53,6 +53,16 @@ class EvidenceService:
         if 'non_read_operations' not in self.state:
             self.state['non_read_operations']=sum(v.get('result',{}).get('normalized_action',{}).get('action') in {'search_symbols','search_code','follow_graph','resolve_method'} for v in self.state['requests'].values() if v.get('result'))
         self.state.setdefault('raw_source_windows',{})
+        seed=getattr(runner,'source_cache',None)
+        if seed:
+            if seed.get('source_tree_sha256')!=source_id:raise ServiceError('Read cache source-version mismatch')
+            for key,value in seed['raw_source_windows'].items():
+                if value.get('status')!='SETTLED' or value.get('result') is None or digest(value['result'])!=value.get('result_sha256'):raise ServiceError('Unverified source cache seed')
+                if digest([source_id,value['arguments']])!=key:raise ServiceError('Source cache request identity mismatch')
+                current=self.state['raw_source_windows'].get(key)
+                if current and current.get('result_sha256')!=value['result_sha256']:raise ServiceError('Conflicting source cache results')
+                self.state['raw_source_windows'].setdefault(key,copy.deepcopy(value))
+
         self.original_range_reader=getattr(runner,'_hecv_original_range_reader',runner.tools.read_file_range)
         runner._hecv_original_range_reader=self.original_range_reader
         original_tools=getattr(runner,'_hecv_original_tools',runner.tools)

@@ -1,0 +1,33 @@
+{
+  "classification": "TEST ONLY: no provider requests or detection reruns",
+  "source_python_syntax_checked": 185,
+  "offline_regression": {
+    "platform": "Windows / Python 3.10.3",
+    "passed": 106,
+    "failed": 2,
+    "failure_cause": "Linux production wall-time guard uses signal.SIGALRM, which is unavailable on Windows. Production source was not changed for this sync.",
+    "failed_tests": [
+      "test_r2_hecv_82532.py::test_production_run_and_explicit_resume_make_no_duplicate_sdk_calls",
+      "test_failure_recovery_82533.py::test_production_run_and_resume_report_quarantine_as_partial_not_success_or_complete_negative"
+    ],
+    "test_files": [
+      "test_r2_hecv_82532.py",
+      "test_r2_hecv_82533.py",
+      "test_r2_hecv_range_refusal.py",
+      "test_r2_hecv_transport_82532.py",
+      "test_failure_recovery_82533.py"
+    ],
+    "isolated_dependencies": {
+      "tree-sitter": "0.25.2",
+      "tree-sitter-java": "0.23.5"
+    },
+    "initial_attempt": "33 passed, 75 setup errors: missing tree_sitter; rerun after isolated dependencies were installed",
+    "full_log_sha256": "7732b0d74bc284238f95b46559b31a75f29a5297fbf563a1b45bed6271f8b683"
+  },
+  "original_A1_core_sha256": "f4bb22a4457742b99ae08ade40c079165ecc75aed8fb0cb483d1a529b7890034",
+  "source_freeze_manifest_sha256": "db74ef0dd120281957930f88521ec54dca682a238a96a2214f46bb54cddbbebd",
+  "validated_UTC": "2026-11-18T15:11:54.884991+00:00",
+  "all_tests_passed": false,
+  "model_requests": 0,
+  "new_detection_or_score_claim": false
+}
