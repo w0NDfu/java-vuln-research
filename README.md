@@ -1,35 +1,21 @@
-# java-vuln-research
+# FastTrack A1
 
-Reproducible research framework for project-level Java vulnerability detection
-with multi-semantic security analysis.
+这是历史冻结源码的同步；没有在此次 GitHub 同步中重跑检测或评分。
 
-The current scope is **Work 1** only: project-level vulnerability-path discovery
-using multi-semantic security behavior modeling. The first milestone is
-`MSA-P0-E0`, a frozen native-CodeQL baseline that proves the complete local,
-GitHub, CloudStudio, experiment, and report provenance loop.
+源码身份、文件哈希及发布状态见 [SOURCE_VERSION.json](SOURCE_VERSION.json) 和 [SOURCE_SHA256SUMS](SOURCE_SHA256SUMS)。原 A1 核心 SHA-256 为 `f4bb22a4457742b99ae08ade40c079165ecc75aed8fb0cb483d1a529b7890034`；三个版本的适配层不同，不能仅凭核心哈希认作同一版本。
 
-## Operating model
+## 开发与入口
 
-- **Local = WRITE**: version-controlled research code is changed only in the
-  local Windows workspace.
-- **Cloud = RUN**: CloudStudio owns toolchain discovery, CodeQL execution, raw
-  outputs, caches, and generated reports.
-- **GitHub = SYNC + AUDIT**: source commits and compact run reports provide the
-  audit trail; raw datasets, databases, logs, and credentials never enter Git.
+需要 Python 3.10+。开发依赖：
 
-See [the research protocol](docs/research_protocol.md) and
-[the experiment protocol](docs/experiment_protocol.md) before running an
-experiment.
-
-## Cloud entry point
-
-```bash
-cp configs/examples/cloud.paths.yaml configs/local/cloud.paths.yaml
-# Edit only configs/local/cloud.paths.yaml with paths discovered on the server.
-bash scripts/cloud_preflight.sh
-bash scripts/run_p0.sh
+```sh
+python -m pip install -e ".[test,agentic]"
 ```
 
-`configs/local/`, raw experiment output, datasets, and CodeQL databases are
-ignored. Each run writes a compact report under `reports/runs/<RUN_ID>/` only
-after execution.
+`reference_entrypoints/` 保留原实验入口及冻结提示/规则；这些入口含历史实验室路径，仅供复现审查，不能作为通用一键运行脚本。
+
+同步仅包含项目源码、查询、Schema、合成测试及必要适配器，不包含模型凭据、数据库、请求缓存或原始实验输出。运行资料与历史证据保留在实验室，不因源码发布被认定为已重新验证。
+
+## 分支
+
+固定维护 [a1](https://github.com/w0NDfu/java-vuln-research/tree/a1)、[r2](https://github.com/w0NDfu/java-vuln-research/tree/r2)、[latest](https://github.com/w0NDfu/java-vuln-research/tree/latest)。后续直接更新这三个分支，不再新建同步分支，详见 [BRANCH_POLICY.md](BRANCH_POLICY.md)。

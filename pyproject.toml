@@ -11,6 +11,11 @@ dependencies = []
 
 [project.optional-dependencies]
 test = ["pytest>=8,<9"]
+agentic = [
+    "tree-sitter==0.25.2",
+    "tree-sitter-java==0.23.5",
+    "python-dotenv==1.2.4",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

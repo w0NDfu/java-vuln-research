@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "profile": "enhanced",
+  "artifact_commit": "68da10388878f8626f0a1d124e500c979ac1e82d",
+  "samples": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "replicate": 1,
+  "scanner": {
+    "concurrency": 5,
+    "turns_per_block": 8,
+    "steps_per_case": 8,
+    "turns_per_step": 12,
+    "tools_per_case": 60,
+    "timeout_seconds": 600
+  },
+  "judge": {
+    "max_turns": 20,
+    "final_save_adapter": true
+  },
+  "loop": {
+    "max_rescans": 4,
+    "patience": 2,
+    "max_new_candidates": 1000
+  },
+  "memory": {
+    "policy": "auto_index",
+    "scope": "campaign",
+    "seed": null
+  },
+  "anonymization": {
+    "enabled": true,
+    "tokens": [],
+    "redact_dependency_coordinates": true
+  },
+  "static_sources": [
+    {
+      "tool": "CodeQL",
+      "version": "CONFIGURE_ACTUAL_VERSION",
+      "queries": "CONFIGURE_QUERY_PACK_AND_LOCK_HASH",
+      "format": "sarif",
+      "path": "../static/sample_{id}/codeql.sarif",
+      "source_root": "/CONFIGURE/ORIGINAL/REPORT/ROOT",
+      "required": true
+    },
+    {
+      "tool": "Coverity",
+      "version": "CONFIGURE_ACTUAL_VERSION",
+      "queries": "CONFIGURE_CHECKER_POLICY_HASH",
+      "format": "coverity-json",
+      "path": "../static/sample_{id}/coverity.json",
+      "source_root": "/CONFIGURE/ORIGINAL/REPORT/ROOT",
+      "required": true
+    }
+  ],
+  "require_static": true,
+  "budget": {
+    "limit_usd": 0,
+    "opening_spend_usd": 0,
+    "max_requests": 0
+  },
+  "assumptions": [
+    "Unpublished historical sampling and termination settings are reconstructed.",
+    "This configuration is not a claim of exact paper reproduction.",
+    "GPT-4.1 matches arXiv v2 model family; exact API snapshot is not known. Not a verified model claim for SSRN CSV.",
+    "Sampling 0.1, 600s timeout and 2 rescan limit are declared reconstruction choices, not historical values.",
+    "Prices are placeholders; live execution rejects zero prices. Budget stays zero; set cumulative opening spend before any run.",
+    "Auto-index admission and fixed-order campaign knowledge reconstruct the paper learning loop; the authors historical admission/order are unknown. Empty initial KB is declared.",
+    "Enhanced variant: increased reasoning/rescan limits and final-save adapter. Same models, memory policy and inputs as reconstruction. Evaluate separately; no asserted improvement.",
+    "Context reservation bounds are conservative example values, not a declaration of historical model limits; verify actual provider bounds and pricing before execute."
+  ],
+  "artifact": "/home/dcj/java_vuln_work1/vecho-reproduction/upstream-clean",
+  "dataset": "/home/dcj/java_vuln_work1/vecho-reproduction/dataset",
+  "workspace": "/home/dcj/java_vuln_work1/vecho-reproduction/experiments/enhanced-v1",
+  "models": {
+    "scan": {
+      "model": "gpt-4.1",
+      "base_url": "https://api.openlux.ai/v1",
+      "key_env": "OPENLUX_API_KEY",
+      "context_tokens": 1100000,
+      "input_usd_per_million": 0,
+      "output_usd_per_million": 0,
+      "max_output_tokens": 4096,
+      "sampling": {
+        "temperature": 0.1
+      }
+    },
+    "judge": {
+      "model": "gpt-4.1",
+      "base_url": "https://api.openlux.ai/v1",
+      "key_env": "OPENLUX_API_KEY",
+      "context_tokens": 1100000,
+      "input_usd_per_million": 0,
+      "output_usd_per_million": 0,
+      "max_output_tokens": 4096,
+      "sampling": {
+        "temperature": 0.1
+      }
+    },
+    "memory": {
+      "model": "gpt-3.5-turbo",
+      "base_url": "https://api.openlux.ai/v1",
+      "key_env": "OPENLUX_API_KEY",
+      "context_tokens": 32768,
+      "input_usd_per_million": 0,
+      "output_usd_per_million": 0,
+      "max_output_tokens": 2000,
+      "sampling": {
+        "temperature": 0.7
+      }
+    },
+    "embedding": {
+      "model": "text-embedding-ada-002",
+      "base_url": "https://api.openlux.ai/v1",
+      "key_env": "OPENLUX_API_KEY",
+      "context_tokens": 8192,
+      "input_usd_per_million": 0,
+      "output_usd_per_million": 0
+    }
+  }
+}

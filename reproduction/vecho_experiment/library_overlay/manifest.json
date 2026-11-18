@@ -1,0 +1,56 @@
+{
+  "artifact_commit": "68da10388878f8626f0a1d124e500c979ac1e82d",
+  "policy": "library-v1",
+  "files": {
+    "internal/contextaudit/chain.go": {
+      "original_sha256": "3a6473c43c5aa762f2a68193310b6ad908255dd47fc53441c4dd05dad667ef98",
+      "patched_sha256": "3b66859c640000b4081d089ae2df920e6e99a9871f16339ac0563155c941e42a",
+      "accepted_previous_sha256": []
+    },
+    "internal/contextaudit/chain_test.go": {
+      "original_sha256": "25a9c8b77cd5fb1719970dfb1bce29d0ace4a70e61aa8bba7592e719339cf4d6",
+      "patched_sha256": "d171563f70d271e30355e4e7a813a78a5ec6776242257d4bdf09f2540f7a1fd7",
+      "accepted_previous_sha256": []
+    },
+    "internal/contextaudit/library_policy.go": {
+      "original_sha256": null,
+      "patched_sha256": "e09c263dbed6c2e903dd3743d4a536dcad4888393d708239e599f7478a64cdfb",
+      "accepted_previous_sha256": []
+    },
+    "internal/contextaudit/library_policy_test.go": {
+      "original_sha256": null,
+      "patched_sha256": "55009113518eb44855f640e58dae9e68b98a97085735e756650c518bd7ffc433",
+      "accepted_previous_sha256": []
+    },
+    "internal/contextaudit/prompt.go": {
+      "original_sha256": "2d98e1acc52073bbdcb706dabd11edf3bc8d452f2dece4c218e9aebb3f28f3fd",
+      "patched_sha256": "14d6a75c24f0e640ff685420c18bc90f5430ee1e8f1764952233fb608c289017",
+      "accepted_previous_sha256": []
+    },
+    "internal/contextaudit/runner.go": {
+      "original_sha256": "19f40fdab58f3032fb02d40c499d16dea4baf9c4a33b28aaf846378dab632ab7",
+      "patched_sha256": "e94d0b6d838e46274a32effeb1981f7ac11c31ff5672a15923f5b748512eb2a6",
+      "accepted_previous_sha256": []
+    },
+    "internal/seedscan/prompt.go": {
+      "original_sha256": "e3efca390dd6204edcf953062684111979816e14a92ac555e0d62b68c45411ff",
+      "patched_sha256": "0c11db4e08f76b811172c971b27dafc43c991843a52a4ead64e102018813e294",
+      "accepted_previous_sha256": []
+    },
+    "internal/tools/java_symbol.go": {
+      "original_sha256": null,
+      "patched_sha256": "0e6f9953b6e421162dae117ac9e4e756af679e08806b4d1cbc1bb40006031835",
+      "accepted_previous_sha256": []
+    },
+    "internal/tools/java_symbol_test.go": {
+      "original_sha256": null,
+      "patched_sha256": "1ae22bf01317a25ab7ef9d3a26e53fd526511bcb54759bd33f939f46580d58c6",
+      "accepted_previous_sha256": []
+    },
+    "internal/tools/tool.go": {
+      "original_sha256": "97a6cc39be867fe5c82cce67ea44f9e8db8049fae72ed5a3fab46015d0f87572",
+      "patched_sha256": "dea505ad0b06ee62b1d3581e4f96e2b99759016779ec01a6e5740e43cfb13568",
+      "accepted_previous_sha256": []
+    }
+  }
+}

@@ -60,3 +60,28 @@ def test_report_preserves_failures_and_not_applicable_semantic_metrics(tmp_path)
         encoding="utf-8"
     )
 
+
+def test_report_marks_empty_baseline_as_infrastructure_blocker(tmp_path) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    write_json(
+        raw / "run_manifest.json",
+        {
+            "run_id": "MSA-P0-E0-empty",
+            "status": "FAILED",
+            "git_commit": "abc",
+            "git_branch": "main",
+            "timestamp_start": "start",
+            "timestamp_end": "end",
+            "projects_requested": 0,
+            "projects_runnable": 0,
+        },
+    )
+
+    generate_e0_report(raw_run_dir=raw, report_dir=tmp_path / "report")
+
+    report = (tmp_path / "report" / "report.md").read_text(encoding="utf-8")
+    failures = (tmp_path / "report" / "failures.jsonl").read_text(encoding="utf-8")
+    assert "NO_RUNNABLE_PROJECTS" in report
+    assert "NO_RUNNABLE_PROJECTS" in failures
+    assert "Resolve recorded execution failures" in report

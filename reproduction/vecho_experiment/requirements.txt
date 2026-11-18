@@ -1,0 +1,6 @@
+# Offline scoring and configuration. Full Memory additionally uses the upstream
+# requirements; keep its installed freeze with the experiment provenance.
+tree-sitter==0.25.2
+tree-sitter-java==0.23.5
+PyYAML==6.0.3
+openai==1.109.1

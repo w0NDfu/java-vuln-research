@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "structural_frontier.schema.json",
+  "title": "W1-E1 structural frontier diagnostic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["structural_frontier_id", "project_id", "input_candidate_id", "effect_candidate_id", "fw_frontier_node", "bw_frontier_node", "structural_distance", "frontier_reason", "input_analysis_anchor", "effect_analysis_anchor", "diagnostic_only", "adds_propagation_edge", "classification", "schema_version"],
+  "properties": {
+    "structural_frontier_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "input_candidate_id": {"type": "string", "minLength": 1},
+    "effect_candidate_id": {"type": "string", "minLength": 1},
+    "fw_frontier_node": {"$ref": "#/$defs/node"},
+    "bw_frontier_node": {"$ref": "#/$defs/node"},
+    "structural_distance": {"type": "integer", "minimum": 0},
+    "frontier_reason": {"enum": ["SAME_METHOD", "CALL_ADJACENT", "SAME_RECEIVER", "FIELD_RELATED", "NEAR_CALL_REGION", "OTHER_STRUCTURAL"]},
+    "input_analysis_anchor": {"type": "object"},
+    "effect_analysis_anchor": {"type": "object"},
+    "diagnostic_only": {"const": true},
+    "adds_propagation_edge": {"const": false},
+    "classification": {"const": "STRUCTURAL_FRONTIER"},
+    "schema_version": {"const": 1}
+  },
+  "$defs": {
+    "location": {"type": "object", "required": ["file", "line"], "properties": {"file": {"type": "string"}, "line": {"type": "integer", "minimum": 1}}},
+    "node": {"type": "object", "required": ["kind", "entity", "location", "method_identity"], "properties": {"kind": {"type": "string"}, "entity": {"type": "string"}, "location": {"$ref": "#/$defs/location"}, "method_identity": {"type": "string"}}}
+  }
+}

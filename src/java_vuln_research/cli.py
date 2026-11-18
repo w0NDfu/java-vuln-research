@@ -12,8 +12,21 @@ from .common.contracts import DetectorManifestError, load_detector_manifest
 from .common.inventory import inventory_codeql_databases, inventory_datasets
 from .common.io import load_yaml
 from .common.run_manifest import RunManifest
+from .discovery import DiscoveryError, run_p0a_discovery
+from .evaluation import (
+    CandidateCoverageError,
+    P0AEvaluationError,
+    RouteBEvaluationError,
+    evaluate_candidate_coverage,
+    evaluate_e0_sanity,
+    evaluate_p0a,
+    evaluate_p0_b_route_b,
+)
+from .frontier import AnalysisAnchorError, CandidatePathRunError, run_w1_e1_paths
+from .native_pool import evaluate_native_pool, run_p0_a1_native_pool
+from .route_b_detector import RouteBError, run_p0_b_route_b
 from .preflight import PreflightError, run_preflight
-from .reporting import generate_e0_report
+from .reporting import generate_e0_report, generate_w1_e1_report
 
 
 def _run_id() -> str:
@@ -74,6 +87,139 @@ def _command_report(args: argparse.Namespace) -> int:
     )
     _json_print(summary)
     return 0
+
+
+def _command_discover_p0a(args: argparse.Namespace) -> int:
+    summary = run_p0a_discovery(
+        detector_manifest=args.detector_manifest,
+        query_root=args.query_root,
+        output_root=args.output_root,
+        threads=args.threads,
+        ram_mb=args.ram_mb,
+        codeql_executable=args.codeql,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_evaluate_p0a(args: argparse.Namespace) -> int:
+    summary = evaluate_p0a(
+        detector_output_dir=args.detector_output,
+        project_info_csv=args.project_info,
+        fix_info_csv=args.fix_info,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_evaluate_w1_e1(args: argparse.Namespace) -> int:
+    summary = evaluate_candidate_coverage(
+        candidate_paths_file=args.candidate_paths,
+        detector_manifest=args.detector_manifest,
+        project_info_csv=args.project_info,
+        fix_info_csv=args.fix_info,
+        baseline_raw_dir=args.baseline_raw_dir,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0
+
+
+def _command_sanity_e0(args: argparse.Namespace) -> int:
+    summary = evaluate_e0_sanity(
+        detector_manifest=args.detector_manifest,
+        project_info_csv=args.project_info,
+        fix_info_csv=args.fix_info,
+        baseline_raw_dir=args.baseline_raw_dir,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_run_w1_e1_paths(args: argparse.Namespace) -> int:
+    summary = run_w1_e1_paths(
+        detector_manifest=args.detector_manifest,
+        endpoint_output_dir=args.endpoint_output_dir,
+        query_root=args.query_root,
+        output_root=args.output_root,
+        threads=args.threads,
+        ram_mb=args.ram_mb,
+        codeql_executable=args.codeql,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_run_p0_a1_native_pool(args: argparse.Namespace) -> int:
+    summary = run_p0_a1_native_pool(
+        detector_manifest=args.detector_manifest,
+        baseline_raw_dir=args.baseline_raw_dir,
+        output_root=args.output_root,
+        project_root=args.project_root,
+        codeql=args.codeql,
+        run_id=args.run_id,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_evaluate_native_pool(args: argparse.Namespace) -> int:
+    summary = evaluate_native_pool(
+        baseline_raw_dir=args.baseline_raw_dir,
+        manifest_path=args.detector_manifest,
+        pool_path=args.pool_path,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0
+
+
+def _command_run_p0_b_route_b(args: argparse.Namespace) -> int:
+    summary = run_p0_b_route_b(
+        detector_manifest=args.detector_manifest,
+        native_pool_path=args.native_pool,
+        query_root=args.query_root,
+        output_root=args.output_root,
+        project_root=args.project_root,
+        run_id=args.run_id,
+        threads=args.threads,
+        ram_mb=args.ram_mb,
+        codeql_executable=args.codeql,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_evaluate_p0_b_route_b(args: argparse.Namespace) -> int:
+    summary = evaluate_p0_b_route_b(
+        native_pool_path=args.native_pool,
+        unified_pool_path=args.unified_pool,
+        detector_manifest=args.detector_manifest,
+        project_info_csv=args.project_info,
+        fix_info_csv=args.fix_info,
+        output_root=args.output_root,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
+
+
+def _command_report_w1_e1(args: argparse.Namespace) -> int:
+    summary = generate_w1_e1_report(
+        run_id=args.run_id,
+        raw_run_dir=args.raw_run_dir,
+        baseline_raw_dir=args.baseline_raw_dir,
+        project_root=args.project_root,
+        dataset_name=args.dataset_name,
+        dataset_revision=args.dataset_revision,
+        detector_manifest=args.detector_manifest,
+        config=args.config,
+        started_at=args.started_at,
+        command=args.command,
+    )
+    _json_print(summary)
+    return 0 if summary["status"] == "SUCCESS" else 2
 
 
 def _command_run_e0(args: argparse.Namespace) -> int:
@@ -175,6 +321,99 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--report-dir", required=True)
     report.set_defaults(func=_command_report)
 
+    discover_p0a = commands.add_parser("discover-p0a")
+    discover_p0a.add_argument("--detector-manifest", required=True)
+    discover_p0a.add_argument("--query-root", required=True)
+    discover_p0a.add_argument("--output-root", required=True)
+    discover_p0a.add_argument("--threads", type=int, default=0)
+    discover_p0a.add_argument("--ram-mb", type=int)
+    discover_p0a.add_argument("--codeql", default="codeql")
+    discover_p0a.set_defaults(func=_command_discover_p0a)
+
+    evaluate = commands.add_parser("evaluate-p0a")
+    evaluate.add_argument("--detector-output", required=True)
+    evaluate.add_argument("--project-info", required=True)
+    evaluate.add_argument("--fix-info", required=True)
+    evaluate.add_argument("--output-root", required=True)
+    evaluate.set_defaults(func=_command_evaluate_p0a)
+
+    evaluate_w1_e1 = commands.add_parser("evaluate-w1-e1")
+    evaluate_w1_e1.add_argument("--candidate-paths", required=True)
+    evaluate_w1_e1.add_argument("--detector-manifest", required=True)
+    evaluate_w1_e1.add_argument("--project-info", required=True)
+    evaluate_w1_e1.add_argument("--fix-info", required=True)
+    evaluate_w1_e1.add_argument("--baseline-raw-dir", required=True)
+    evaluate_w1_e1.add_argument("--output-root", required=True)
+    evaluate_w1_e1.set_defaults(func=_command_evaluate_w1_e1)
+
+    sanity_e0 = commands.add_parser("sanity-e0-evaluator")
+    sanity_e0.add_argument("--detector-manifest", required=True)
+    sanity_e0.add_argument("--project-info", required=True)
+    sanity_e0.add_argument("--fix-info", required=True)
+    sanity_e0.add_argument("--baseline-raw-dir", required=True)
+    sanity_e0.add_argument("--output-root", required=True)
+    sanity_e0.set_defaults(func=_command_sanity_e0)
+
+    candidate_paths = commands.add_parser("run-w1-e1-paths")
+    candidate_paths.add_argument("--detector-manifest", required=True)
+    candidate_paths.add_argument("--endpoint-output-dir", required=True)
+    candidate_paths.add_argument("--query-root", required=True)
+    candidate_paths.add_argument("--output-root", required=True)
+    candidate_paths.add_argument("--threads", type=int, default=0)
+    candidate_paths.add_argument("--ram-mb", type=int)
+    candidate_paths.add_argument("--codeql", default="codeql")
+    candidate_paths.set_defaults(func=_command_run_w1_e1_paths)
+
+    native_pool = commands.add_parser("run-p0-a1-native-pool")
+    native_pool.add_argument("--detector-manifest", required=True)
+    native_pool.add_argument("--baseline-raw-dir", required=True)
+    native_pool.add_argument("--output-root", required=True)
+    native_pool.add_argument("--project-root", required=True)
+    native_pool.add_argument("--run-id", required=True)
+    native_pool.add_argument("--codeql", default="codeql")
+    native_pool.set_defaults(func=_command_run_p0_a1_native_pool)
+
+    native_eval = commands.add_parser("evaluate-native-pool")
+    native_eval.add_argument("--detector-manifest", required=True)
+    native_eval.add_argument("--baseline-raw-dir", required=True)
+    native_eval.add_argument("--pool-path", required=True)
+    native_eval.add_argument("--output-root", required=True)
+    native_eval.set_defaults(func=_command_evaluate_native_pool)
+
+    route_b = commands.add_parser("run-p0-b-route-b")
+    route_b.add_argument("--detector-manifest", required=True)
+    route_b.add_argument("--native-pool", required=True)
+    route_b.add_argument("--query-root", required=True)
+    route_b.add_argument("--output-root", required=True)
+    route_b.add_argument("--project-root", required=True)
+    route_b.add_argument("--run-id", required=True)
+    route_b.add_argument("--threads", type=int, default=0)
+    route_b.add_argument("--ram-mb", type=int)
+    route_b.add_argument("--codeql", default="codeql")
+    route_b.set_defaults(func=_command_run_p0_b_route_b)
+
+    route_b_eval = commands.add_parser("evaluate-p0-b-route-b")
+    route_b_eval.add_argument("--native-pool", required=True)
+    route_b_eval.add_argument("--unified-pool", required=True)
+    route_b_eval.add_argument("--detector-manifest", required=True)
+    route_b_eval.add_argument("--project-info", required=True)
+    route_b_eval.add_argument("--fix-info", required=True)
+    route_b_eval.add_argument("--output-root", required=True)
+    route_b_eval.set_defaults(func=_command_evaluate_p0_b_route_b)
+
+    report_w1_e1 = commands.add_parser("report-w1-e1")
+    report_w1_e1.add_argument("--run-id", required=True)
+    report_w1_e1.add_argument("--raw-run-dir", required=True)
+    report_w1_e1.add_argument("--baseline-raw-dir", required=True)
+    report_w1_e1.add_argument("--project-root", required=True)
+    report_w1_e1.add_argument("--dataset-name", required=True)
+    report_w1_e1.add_argument("--dataset-revision", required=True)
+    report_w1_e1.add_argument("--detector-manifest", required=True)
+    report_w1_e1.add_argument("--config", required=True)
+    report_w1_e1.add_argument("--started-at", required=True)
+    report_w1_e1.add_argument("--command", required=True)
+    report_w1_e1.set_defaults(func=_command_report_w1_e1)
+
     run_e0 = commands.add_parser("run-e0")
     run_e0.add_argument("--project-root", required=True)
     run_e0.add_argument("--paths-config", required=True)
@@ -193,11 +432,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except (DetectorManifestError, PreflightError, KeyError, ValueError) as error:
+    except (
+        DetectorManifestError,
+        CandidateCoverageError,
+        CandidatePathRunError,
+        AnalysisAnchorError,
+        DiscoveryError,
+        P0AEvaluationError,
+        RouteBEvaluationError,
+        RouteBError,
+        PreflightError,
+        KeyError,
+        ValueError,
+    ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

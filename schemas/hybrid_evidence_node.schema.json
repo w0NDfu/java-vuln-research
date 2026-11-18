@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hybrid_evidence_node.schema.json",
+  "title": "Work1 V11 M5 EvidenceNode",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["node_id", "project_id", "node_kind", "entity_id", "role", "role_index", "repository_relative_path", "start_line", "end_line", "program_kind", "anchor_proposal_id", "provenance"],
+  "properties": {
+    "node_id": {"type": "string", "pattern": "^hnode-[0-9a-f]{24}$"},
+    "project_id": {"type": "string", "minLength": 1},
+    "node_kind": {"enum": ["PROGRAM_VALUE", "SECURITY_INPUT_ROOT", "SECURITY_EFFECT_ROOT"]},
+    "entity_id": {"type": ["string", "null"]},
+    "role": {"enum": ["ENTITY", "METHOD", "CONSTRUCTOR", "CALL", "PARAMETER", "ARGUMENT", "RETURN", "CALL_RESULT", "RECEIVER", "FIELD", "FIELD_READ", "FIELD_WRITE"]},
+    "role_index": {"type": ["integer", "null"], "minimum": 0},
+    "repository_relative_path": {"type": ["string", "null"]},
+    "start_line": {"type": ["integer", "null"], "minimum": 1},
+    "end_line": {"type": ["integer", "null"], "minimum": 1},
+    "program_kind": {"type": ["string", "null"]},
+    "anchor_proposal_id": {"type": ["string", "null"]},
+    "provenance": {"type": "object"}
+  }
+}

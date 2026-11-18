@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hybrid_candidate_path.schema.json",
+  "title": "Work1 V11 M5 Hybrid Candidate Path",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_path_id", "project_id", "path_origin", "input_anchor", "effect_anchor", "ordered_nodes", "ordered_edges", "support_summary", "proposal_ids", "unresolved_semantics", "evidence_refs", "provenance", "path_fingerprint", "schema_version"],
+  "properties": {
+    "candidate_path_id": {"type": "string", "pattern": "^hpath-[0-9a-f]{24}$"},
+    "project_id": {"type": "string", "minLength": 1},
+    "path_origin": {"const": "HYBRID"},
+    "input_anchor": {"$ref": "hybrid_evidence_node.schema.json"},
+    "effect_anchor": {"$ref": "hybrid_evidence_node.schema.json"},
+    "ordered_nodes": {"type": "array", "minItems": 2, "items": {"$ref": "hybrid_evidence_node.schema.json"}},
+    "ordered_edges": {"type": "array", "minItems": 2, "items": {"$ref": "hybrid_evidence_edge.schema.json"}},
+    "support_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deterministic_edge_count", "structural_edge_count", "proposal_edge_count", "codeql_edge_count", "repository_only_hybrid", "path_length", "proposal_edges_per_path"],
+      "properties": {
+        "deterministic_edge_count": {"type": "integer", "minimum": 0},
+        "structural_edge_count": {"type": "integer", "minimum": 0},
+        "proposal_edge_count": {"type": "integer", "minimum": 0},
+        "codeql_edge_count": {"type": "integer", "minimum": 0},
+        "repository_only_hybrid": {"type": "boolean"},
+        "path_length": {"type": "integer", "minimum": 1},
+        "proposal_edges_per_path": {"type": "integer", "minimum": 0}
+      }
+    },
+    "proposal_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "unresolved_semantics": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "evidence_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "provenance": {"type": "object", "minProperties": 1},
+    "path_fingerprint": {"type": "string", "pattern": "^pathfp-[0-9a-f]{24}$"},
+    "schema_version": {"const": 1}
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "analysis_policy": "library-v1",
+  "python_tests": {
+    "run": 50,
+    "passed": 50,
+    "skipped": 0
+  },
+  "go_tests": "all packages passed",
+  "race_tests": [
+    "internal/contextaudit",
+    "internal/tools"
+  ],
+  "external_model_requests": 0,
+  "runtime": {
+    "prepared_at": "2026-10-19T06:40:03.750924+00:00",
+    "upstream": "68da10388878f8626f0a1d124e500c979ac1e82d",
+    "artifact": "/home/dcj/java_vuln_work1/vecho-reproduction/experiments/library-repair-20261019/release-runtime/runtime/artifact",
+    "scanner_binary": "/home/dcj/java_vuln_work1/vecho-reproduction/experiments/library-repair-20261019/release-runtime/runtime/vecho-scan",
+    "scanner_sha256": "73b27ce4d5eb9d9422faa14d56f229ae7ee23f6a32455e039130e9b2996f12e9",
+    "source_tree_sha256": "bab84c85958a907016ef6b5da312e49e47647017b85635b4da844cc0724b3592",
+    "judge_final_save_adapter": true,
+    "analysis_policy": "library-v1",
+    "go_version": "go version go1.24.3 linux/amd64",
+    "python_version": "3.11.12 (main, Apr  9 2025, 04:04:00) [Clang 20.1.0 ]",
+    "model_requests_started": false
+  },
+  "historical_outputs_unchanged": true,
+  "offline_reassessment": [
+    {
+      "sample": 32,
+      "strict_path_recall_unchanged": 0,
+      "location_match": {
+        "status": "available",
+        "hit": true,
+        "matches": [
+          {
+            "fingerprint": "acf5de2772517eb10fc728d720a56c3bb25a2c0abe43e12eadab22369c591d84",
+            "file": "src/main/java/io/whitesource/cure/FileSecurityUtils.java",
+            "line": 25,
+            "method": [
+              "src/main/java/io/whitesource/cure/FileSecurityUtils.java",
+              "FileSecurityUtils",
+              "isFileOutsideDir"
+            ]
+          }
+        ],
+        "invalid_nodes": [],
+        "parse_error_files": [],
+        "note": "Affected positions intersect labelled methods; not a vulnerability path or a replacement for path recall."
+      },
+      "original_output_hashes_verified": true
+    },
+    {
+      "sample": 78,
+      "strict_path_recall_unchanged": 0,
+      "location_match": {
+        "status": "available",
+        "hit": false,
+        "matches": [],
+        "invalid_nodes": [],
+        "parse_error_files": [],
+        "note": "Affected positions intersect labelled methods; not a vulnerability path or a replacement for path recall."
+      },
+      "original_output_hashes_verified": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "prepare-final.log",
+      "exit_code": 0
+    },
+    {
+      "name": "go-final-tests.log",
+      "exit_code": 0
+    },
+    {
+      "name": "go-final-race.log",
+      "exit_code": 0
+    },
+    {
+      "name": "python-final-tests.log",
+      "exit_code": 0
+    },
+    {
+      "name": "python-50-tests.log",
+      "exit_code": 0
+    }
+  ],
+  "benchmark_rerun_performed": false,
+  "improved_recall_not_established": true,
+  "blocked_candidates_verified_for_judge": true
+}

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "m5_candidate_path.schema.json",
+  "title": "Work1 V11 M5 candidate path union",
+  "description": "M5 adds hybrid schema v1 while preserving legacy/native CandidatePath schema v2 unchanged.",
+  "oneOf": [
+    {"$ref": "candidate_path.schema.json"},
+    {"$ref": "hybrid_candidate_path.schema.json"}
+  ]
+}

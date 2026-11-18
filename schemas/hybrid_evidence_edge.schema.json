@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hybrid_evidence_edge.schema.json",
+  "title": "Work1 V11 M5 HybridEdge",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["edge_id", "project_id", "source_node_id", "target_node_id", "relation_kind", "support_class", "evidence_refs", "proposal_id", "tool_call_ids", "repository_relation_ids", "confidence", "provenance"],
+  "properties": {
+    "edge_id": {"type": "string", "pattern": "^hedge-[0-9a-f]{24}$"},
+    "project_id": {"type": "string", "minLength": 1},
+    "source_node_id": {"type": "string", "minLength": 1},
+    "target_node_id": {"type": "string", "minLength": 1},
+    "relation_kind": {"enum": ["CODEQL_CALL", "CODEQL_LOCAL_FLOW", "CODEQL_DATAFLOW", "CODEQL_CFG", "LEXICAL_CALL", "DECLARES", "EXTENDS_TEXT", "IMPLEMENTS_TEXT", "OVERRIDE_CANDIDATE", "EXTERNAL_INPUT", "SECURITY_EFFECT", "WRAPPER_FLOW", "LIBRARY_FLOW", "FIELD_STATE", "FRAMEWORK_RELATION", "CALLBACK_RELATION"]},
+    "support_class": {"enum": ["DETERMINISTIC_FACT", "STRUCTURAL_EVIDENCE", "ADMISSIBLE_SEMANTIC_PROPOSAL"]},
+    "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "proposal_id": {"type": ["string", "null"]},
+    "tool_call_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "repository_relation_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "confidence": {"type": ["string", "null"]},
+    "provenance": {"type": "object", "minProperties": 1}
+  }
+}

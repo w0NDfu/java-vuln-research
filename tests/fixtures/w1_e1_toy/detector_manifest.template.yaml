@@ -1,0 +1,6 @@
+schema_version: 1
+projects:
+  - project: TOY
+    revision: __REVISION__
+    source_path: __SOURCE_PATH__
+    codeql_db_path: __DATABASE_PATH__

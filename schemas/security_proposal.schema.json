@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "security_proposal.schema.json",
+  "title": "Work1 V11 M4 SecurityProposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["proposal_id", "proposal_type", "subject", "source", "target", "scope", "semantic_category", "evidence_refs", "reason", "model_confidence", "provenance"],
+  "properties": {
+    "proposal_id": {"type": "string", "pattern": "^proposal-[0-9a-f]{24}$"},
+    "proposal_type": {"enum": ["EXTERNAL_INPUT", "SECURITY_EFFECT", "WRAPPER_FLOW", "LIBRARY_FLOW", "FIELD_STATE", "FRAMEWORK_RELATION", "CALLBACK_RELATION"]},
+    "subject": {"$ref": "#/$defs/role_ref"},
+    "source": {"anyOf": [{"$ref": "#/$defs/role_ref"}, {"type": "null"}]},
+    "target": {"anyOf": [{"$ref": "#/$defs/role_ref"}, {"type": "null"}]},
+    "scope": {"$ref": "#/$defs/scope"},
+    "semantic_category": {"type": ["string", "null"]},
+    "evidence_refs": {"type": "array", "items": {"type": "string", "pattern": "^evidence-[0-9a-f]{24}$"}, "uniqueItems": true},
+    "reason": {"type": "string", "minLength": 1},
+    "model_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "provenance": {"type": "object", "minProperties": 1}
+  },
+  "$defs": {
+    "role_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity_id", "role"],
+      "properties": {
+        "entity_id": {"type": "string", "pattern": "^entity-[0-9a-f]{24}$"},
+        "role": {"enum": ["ENTITY", "PARAMETER", "ARGUMENT", "RETURN", "CALL_RESULT", "RECEIVER", "FIELD", "FIELD_READ", "FIELD_WRITE", "CALL", "METHOD", "CONSTRUCTOR"]},
+        "index": {"type": "integer", "minimum": 0}
+      },
+      "allOf": [
+        {"if": {"properties": {"role": {"enum": ["PARAMETER", "ARGUMENT"]}}}, "then": {"required": ["index"]}},
+        {"if": {"properties": {"role": {"not": {"enum": ["PARAMETER", "ARGUMENT"]}}}}, "then": {"not": {"required": ["index"]}}}
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "entity_ids"],
+      "properties": {
+        "kind": {"enum": ["ENTITY", "CALLABLE", "FIELD", "FRAMEWORK_RELATION", "CALLBACK_RELATION"]},
+        "entity_ids": {"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": {"type": "string", "pattern": "^entity-[0-9a-f]{24}$"}},
+        "project_id": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
